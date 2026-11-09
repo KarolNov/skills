@@ -85,7 +85,7 @@ or just ask Claude to *"keep nudging Dana in this thread until they reply"*.
 
 ### blueprint
 
-A third way to work on larger, architected changes, between [wayfinder](https://github.com/mattpocock/skills)
+My preferred way to work on larger, architected changes, between [wayfinder](https://github.com/mattpocock/skills)
 and [OpenSpec](https://github.com/Fission-AI/OpenSpec). You bring the solution; it grills *that*
 solution (a few short rounds, no hunt for alternatives), writes it up as a spec change in your
 notes tool, builds it, and keeps the specs and the code honest in both directions.

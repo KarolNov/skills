@@ -22,7 +22,7 @@ If `root` is itself a git repository, commit there after each approved write (`b
 
 ## Pages
 
-- **Capability spec**: `specs/<capability>.md`, keeping `/` as subfolders (`specs/auth/session.md`).
+- **Capability spec**: `specs/<capability>.md`, keeping `/` as subfolders (`specs/auth/session.md`). The `ref` in `blueprint.json` is the path relative to `root`.
 - **Blueprint**: two files side by side: the review `blueprints/<change id>.md` and the brief `blueprints/<change id>.brief.md`, linking each other relatively. The brief has a YAML frontmatter block for `status`, `capabilities`, `branch`, `pr`; tasks are Markdown checkboxes in it.
 
 ## Version marker

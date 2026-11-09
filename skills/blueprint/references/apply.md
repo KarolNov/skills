@@ -33,7 +33,7 @@ Fix what is missing or contradicts (or amend the brief, with the user's yes, if 
 
 ## 4. Fold the delta into the specs
 
-For each capability in the delta, produce the spec as it should read now: apply RENAMED, then REMOVED, then MODIFIED (replace the whole block matched by name), then ADDED, raising each block's heading one level as it moves from the brief into the spec. A new capability gets a fresh page from its ADDED requirements and Purpose. Drop any `Not yet built → <this blueprint>` line that `blueprint-drift` left under a requirement.
+For each capability in the delta, produce the spec as it should read now: apply RENAMED, then REMOVED, then MODIFIED (replace the whole block matched by name), then ADDED, raising each block's heading one level as it moves from the brief into the spec. A new capability gets a fresh page from its ADDED requirements and Purpose. A mapped capability with `"ref": null` gets the spec drafted from its code during propose, with the delta applied on top, so the page describes all of its behavior, not only this change. Drop any `Not yet built → <this blueprint>` line that `blueprint-drift` left under a requirement.
 
 Show each merged spec as a diff against the current page and write it after the user approves. Then, for each capability written, set `ref` for new pages and do the spec bookkeeping from [status.md](status.md). Commit the code before stamping, so `syncedCommit` holds it, then commit the `.blueprint/` changes on top; a later code edit to an anchored file reads as drift, which is correct.
 
