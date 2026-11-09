@@ -1,8 +1,8 @@
 # Example: "Before you build a sync engine"
 
-[![Play the video](../../../../docs/media/sync-engine-walkthrough.jpg)](../../../../docs/media/sync-engine-walkthrough.mp4)
+https://github.com/user-attachments/assets/7e029177-7d35-423d-b9bb-923a26d0b341
 
-*Click the image to watch (32 s, captions burned in).*
+*32 s, captions burned in. Also in [`docs/media/sync-engine-walkthrough.mp4`](../../../../docs/media/sync-engine-walkthrough.mp4).*
 
 A 32-second design walkthrough of
 [a blog post with interactive sync playgrounds](https://karolnov.dev/blog/before-you-build-a-sync-engine/).

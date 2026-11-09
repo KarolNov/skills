@@ -1,8 +1,8 @@
 # Example: merge offline edits in a CRDT playground
 
-[![Play the video](../../../../docs/media/crdt-offline-tutorial.jpg)](../../../../docs/media/crdt-offline-tutorial.mp4)
+https://github.com/user-attachments/assets/66856da9-063b-4434-b879-38bbfaeff4e7
 
-*Click the image to watch (26 s, captions burned in).*
+*26 s, captions burned in. Also in [`docs/media/crdt-offline-tutorial.mp4`](../../../../docs/media/crdt-offline-tutorial.mp4).*
 
 A 26-second tutorial that teaches one task on
 [a live blog post](https://karolnov.dev/blog/before-you-build-a-sync-engine/): take one
