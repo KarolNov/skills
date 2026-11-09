@@ -1,0 +1,19 @@
+{
+  "name": "karolnov-skills",
+  "owner": {
+    "name": "Karol Novljaković"
+  },
+  "metadata": {
+    "description": "A collection of Claude Code skills by Karol Novljaković.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "karolnov-skills",
+      "description": "All skills in this repository.",
+      "source": "./",
+      "strict": false,
+      "skills": []
+    }
+  ]
+}
