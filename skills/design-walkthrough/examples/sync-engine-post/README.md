@@ -1,5 +1,9 @@
 # Example: "Before you build a sync engine"
 
+[![Play the video](../../../../docs/media/sync-engine-walkthrough.jpg)](../../../../docs/media/sync-engine-walkthrough.mp4)
+
+*Click the image to watch (32 s, captions burned in).*
+
 A 32-second design walkthrough of
 [a blog post with interactive sync playgrounds](https://karolnov.dev/blog/before-you-build-a-sync-engine/).
 It runs against the live site, so you can try it as soon as `walkthrough-setup` is done:
