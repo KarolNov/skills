@@ -81,7 +81,9 @@ Show the plan to the user before writing the spec.
 
 ## 4. Write the spec
 
-Write `walkthrough-output/<slug>/spec.json` following SPEC.md. Guidance for tutorials:
+Write `walkthrough-output/<slug>/spec.json` following SPEC.md. For a worked example
+(plan, spec and written steps), read `<skill-dir>/examples/crdt-offline/` (`<skill-dir>` is
+this file's directory). Guidance for tutorials:
 
 **Narration** (`say`)
 - Second person, imperative, present tense: "Click **Invite**, then type their email."

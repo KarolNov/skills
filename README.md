@@ -32,11 +32,11 @@ Narrated videos of your real, running web app. Playwright drives the browser, an
 dot plays the cursor, and a voice explains what's happening. No screen-recording tool and
 no hand-built animation needed.
 
-| Skill | What it does |
-| ----- | ------------ |
-| [`walkthrough-setup`](skills/walkthrough-setup) | One-time setup: installs Playwright and a narration voice, and saves a login for each app you want to record. |
-| [`design-walkthrough`](skills/design-walkthrough) | A design review or feature tour: explains *why* the UI is the way it is, pointing and highlighting as it goes. |
-| [`tutorial-walkthrough`](skills/tutorial-walkthrough) | A step-by-step how-to: performs each click and keystroke with step labels and captions, plus a written version. |
+| Skill | What it does | Example |
+| ----- | ------------ | ------- |
+| [`walkthrough-setup`](skills/walkthrough-setup) | One-time setup: installs Playwright and a narration voice, and saves a login for each app you want to record. | |
+| [`design-walkthrough`](skills/design-walkthrough) | A short design review or feature tour: explains *why* the UI is the way it is, letting the page's own motion carry it. | [Sync engine post, 32 s](skills/design-walkthrough/examples/sync-engine-post) |
+| [`tutorial-walkthrough`](skills/tutorial-walkthrough) | A step-by-step how-to: performs each click and keystroke with step labels and captions, plus a written version. | [CRDT offline edits, 26 s](skills/tutorial-walkthrough/examples/crdt-offline) |
 
 **Voices:** [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (free, local, `af_heart` by
 default), [Chatterbox](https://github.com/resemble-ai/chatterbox) (free, local clone of

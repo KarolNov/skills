@@ -167,6 +167,11 @@ class Recorder:
             self.press_visual(False)
             if action.get("clear"):
                 locator.fill("")
+            if action.get("caret") in ("start", "end"):
+                locator.evaluate(
+                    "(el, start) => { const i = start ? 0 : el.value.length; el.setSelectionRange(i, i); }",
+                    action["caret"] == "start",
+                )
             locator.press_sequentially(expand(action["text"]), delay=action.get("delay_ms", 55))
             time.sleep(action.get("pause", 0.2))
 

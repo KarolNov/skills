@@ -82,7 +82,7 @@ The first visible match is used, scrolled into view if needed. Values in `text`,
 | `point` | `target`, `offset?`, `pause?` | Glide the dot to the element (hover effects fire). |
 | `hover` | `target` | Same as `point`. |
 | `click` | `target`, `offset?`, `pause?` | Glide, press with a ripple, release, wait for the page to settle. |
-| `type` | `target`, `text`, `delay_ms?`, `clear?` | Click the field and type character by character (55 ms/char). |
+| `type` | `target`, `text`, `delay_ms?`, `clear?`, `caret?` | Click the field and type character by character (55 ms/char). `caret`: `start` or `end` puts the cursor there first (inputs and textareas). |
 | `fill` | `target`, `text` | Set a field's value at once (use for long text). |
 | `press` | `key` | Keyboard key or chord: `Enter`, `Escape`, `Meta+K`. |
 | `select` | `target`, `value` | Choose an option in a native `<select>`. |

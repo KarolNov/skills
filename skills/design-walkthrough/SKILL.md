@@ -80,8 +80,9 @@ re-recording.
 
 ## 4. Write the spec
 
-Write `walkthrough-output/<slug>/spec.json` following SPEC.md. Guidance for design
-walkthroughs:
+Write `walkthrough-output/<slug>/spec.json` following SPEC.md. For a worked example of
+the target length, density and pacing, read `<skill-dir>/examples/sync-engine-post/`
+(`<skill-dir>` is this file's directory). Guidance for design walkthroughs:
 
 **Narration** (`say`)
 - **Say less than you think.** One short sentence per beat (about 5–15 words), and several
