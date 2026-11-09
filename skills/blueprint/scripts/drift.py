@@ -2,9 +2,9 @@
 """Code-side drift detection for blueprint specs. Git and the standard library only.
 
 Each capability in .blueprint/blueprint.json lists `anchors`: globs for the code that
-implements it. `stamp` records a hash of those files' contents; `check` reports every
-capability whose files no longer match that hash, i.e. code that moved since its spec
-was last synced. It never talks to the spec backend.
+implements it. `stamp` records a hash of each file those anchors match; `check` reports
+every capability whose files were added, removed or edited since, i.e. code that moved
+since its spec was last synced. It never talks to the spec backend.
 
     drift.py check [--json] [CAPABILITY ...]   exit 1 if anything drifted
     drift.py stamp CAPABILITY ... | --all      record the current state as synced
@@ -23,13 +23,22 @@ from pathlib import Path
 
 
 def git(*args, check=True):
-    out = subprocess.run(["git", *args], capture_output=True, text=True)
+    # Always from the top level, so paths are root-relative wherever the script is run.
+    out = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True)
     if check and out.returncode != 0:
         sys.exit(f"git {' '.join(args)} failed: {out.stderr.strip()}")
     return out.stdout
 
 
-ROOT = Path(git("rev-parse", "--show-toplevel").strip())
+def git_paths(*args):
+    """Paths from a git command run with -z, so unusual file names come back unquoted."""
+    return {f for f in git(*args, "-z").split("\0") if f}
+
+
+_top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+if _top.returncode != 0:
+    sys.exit("not inside a git repository")
+ROOT = Path(_top.stdout.strip())
 STATE = ROOT / ".blueprint" / "blueprint.json"
 
 
@@ -40,7 +49,7 @@ def load():
 
 
 def save(state):
-    STATE.write_text(json.dumps(state, indent=2, sort_keys=False) + "\n")
+    STATE.write_text(json.dumps(state, indent=2) + "\n")
 
 
 def glob_re(pattern):
@@ -63,8 +72,8 @@ def glob_re(pattern):
 
 def repo_files():
     """Tracked plus untracked-but-not-ignored files, so uncommitted work counts."""
-    listed = git("ls-files", "-co", "--exclude-standard", "-z")
-    return sorted(f for f in listed.split("\0") if f and (ROOT / f).is_file())
+    listed = git_paths("ls-files", "-co", "--exclude-standard")
+    return sorted(f for f in listed if (ROOT / f).is_file())
 
 
 def matched(spec, files):
@@ -77,22 +86,19 @@ def matched(spec, files):
     ]
 
 
-def content_hash(paths):
-    h = hashlib.sha256()
-    for p in paths:
-        h.update(p.encode() + b"\0")
-        h.update(hashlib.sha256((ROOT / p).read_bytes()).digest())
-    return h.hexdigest()[:16]
+def file_hashes(paths):
+    return {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()[:12] for p in paths}
 
 
-def changed_since(ref, paths):
-    """Files under `paths` that differ between `ref` and the working tree, plus new ones."""
-    if not ref or subprocess.run(["git", "cat-file", "-e", f"{ref}^{{commit}}"],
-                                 capture_output=True).returncode:
-        return ["(synced commit unknown; read the anchored files directly)"]
-    diff = set(git("diff", "--name-only", ref).split("\n"))
-    diff |= set(git("ls-files", "-o", "--exclude-standard").split("\n"))
-    return [f for f in sorted(diff - {""}) if matched({"anchors": paths}, [f])]
+def head_commit():
+    """HEAD's sha, or None before the first commit."""
+    return git("rev-parse", "--verify", "-q", "HEAD", check=False).strip() or None
+
+
+def uncommitted():
+    """Files that differ from HEAD in the working tree, plus untracked ones."""
+    return (git_paths("diff", "--name-only", "--no-renames", "HEAD")
+            | git_paths("ls-files", "-o", "--exclude-standard"))
 
 
 def cmd_check(args):
@@ -105,24 +111,24 @@ def cmd_check(args):
         spec = specs.get(name)
         if spec is None:
             sys.exit(f"unknown capability: {name}")
-        paths = matched(spec, files)
-        now = content_hash(paths)
         if not spec.get("anchors"):
             report.append({"capability": name, "status": "no-anchors"})
-        elif not spec.get("ref") or not spec.get("anchorsHash"):
+        elif not spec.get("ref") or "anchorsFiles" not in spec:
             # Mapped but never written as a spec (lazy setup): nothing to drift from.
             report.append({"capability": name, "status": "no-spec"})
-        elif now != spec.get("anchorsHash"):
-            # Diff against the synced commit over both old and new file sets, so
-            # deletions and renames show up too.
-            report.append({
-                "capability": name,
-                "status": "code-moved",
-                "syncedCommit": spec.get("syncedCommit"),
-                "changed": changed_since(spec.get("syncedCommit"), spec["anchors"]),
-            })
         else:
-            report.append({"capability": name, "status": "in-sync"})
+            # Compare file by file, so additions, deletions and renames all show up.
+            old, now = spec["anchorsFiles"], file_hashes(matched(spec, files))
+            changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
+            if changed:
+                report.append({
+                    "capability": name,
+                    "status": "code-moved",
+                    "syncedCommit": spec.get("syncedCommit"),
+                    "changed": changed,
+                })
+            else:
+                report.append({"capability": name, "status": "in-sync"})
     if as_json:
         print(json.dumps(report, indent=2))
     else:
@@ -141,14 +147,19 @@ def cmd_stamp(args):
     names = list(specs) if "--all" in args else [a for a in args if not a.startswith("--")]
     if not names:
         sys.exit("stamp needs capability names or --all")
-    head = git("rev-parse", "HEAD", check=False).strip() or None
+    head = head_commit()
+    dirty = uncommitted() if head else set(files)
     for name in names:
         if name not in specs:
             sys.exit(f"unknown capability: {name}")
         paths = matched(specs[name], files)
-        specs[name]["anchorsHash"] = content_hash(paths)
+        specs[name]["anchorsFiles"] = file_hashes(paths)
         specs[name]["syncedCommit"] = head
-        print(f"stamped {name}: {len(paths)} files at {(head or 'no commit')[:9]}")
+        print(f"stamped {name}: {len(paths)} files at {(head or 'no commit')[:9]}", flush=True)
+        if pending := dirty.intersection(paths):
+            # syncedCommit is what `git diff <syncedCommit>` reads; it must hold this code.
+            print(f"  warning: {len(pending)} of them uncommitted, so syncedCommit predates "
+                  "them; commit the code, then stamp again", file=sys.stderr)
     save(state)
     return 0
 
@@ -164,17 +175,21 @@ def cmd_files(args):
 
 
 def cmd_unanchored(args):
-    since = args[args.index("--since") + 1] if "--since" in args else None
-    state, files = load(), repo_files()
+    state = load()
+    if "--since" in args:
+        i = args.index("--since")
+        if i + 1 == len(args):
+            sys.exit("--since needs a ref")
+        candidates = (git_paths("diff", "--name-only", "--no-renames", args[i + 1])
+                      | git_paths("ls-files", "-o", "--exclude-standard"))
+    else:
+        candidates = set(repo_files())
+    # Coverage is judged on the candidates themselves, so deleted files count as covered too.
+    candidates = sorted(f for f in candidates if not f.startswith(".blueprint/"))
     covered = set()
     for spec in state.get("specs", {}).values():
-        covered.update(matched(spec, files))
-    if since:
-        candidates = set(git("diff", "--name-only", since).split("\n")) - {""}
-        candidates |= set(git("ls-files", "-o", "--exclude-standard").split("\n")) - {""}
-    else:
-        candidates = set(files)
-    print("\n".join(sorted(f for f in candidates - covered if not f.startswith(".blueprint/"))))
+        covered.update(matched(spec, candidates))
+    print("\n".join(f for f in candidates if f not in covered))
     return 0
 
 

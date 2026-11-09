@@ -20,7 +20,7 @@ Pick by the first word of the arguments, then read that mode's file and follow i
 | a description of a change, or nothing | Grill the solution and write the blueprint | [references/propose.md](references/propose.md) |
 | `apply [change]` | Build a blueprint, then fold it into the capability specs | [references/apply.md](references/apply.md) |
 
-If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then run the `blueprint-setup` skill (with the Skill tool) and come back to the request when it is done.
+If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here (it can't be started with the Skill tool), and come back to the request when it is done.
 
 ## The pieces
 

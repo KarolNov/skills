@@ -6,7 +6,7 @@ Shared by `blueprint-drift` and `blueprint-sync`, and by `blueprint` when it wri
 
 For each capability in scope:
 
-- **Code side**: `python3 .blueprint/drift.py check --json <capabilities>` gives `in-sync`, `code-moved` (with the changed files since `syncedCommit`), `no-spec` or `no-anchors`.
+- **Code side**: `python3 .blueprint/drift.py check --json <capabilities>` gives `in-sync`, `code-moved` (with the files added, removed or edited since the last stamp), `no-spec` or `no-anchors`.
 - **Spec side**: fetch the page's current version marker (see the backend file) and compare it with `specVersion`. Different means the spec moved: someone edited intent outside the code. Diff `baseline/<capability>.md` against the current page, matching requirements by name, to see which requirements changed.
 
 Show one table:
@@ -30,6 +30,6 @@ Every time a capability's spec and code are known to agree (after a spec write, 
 
 1. Save the spec text, normalized as the backend file says, to `.blueprint/baseline/<capability>.md`.
 2. Record the backend's current version marker as `specVersion` in `blueprint.json` (read it after the last write).
-3. Run `python3 .blueprint/drift.py stamp <capability>`.
+3. Run `python3 .blueprint/drift.py stamp <capability>`. Stamp after the code it covers is committed: if stamp warns that anchored files are uncommitted, commit them (with the user's yes) and stamp again, or `syncedCommit` predates that code and the next sync re-reads it as new.
 
 Never do it for a capability that still has a known disagreement; leave that one drifted so the next run finds it.

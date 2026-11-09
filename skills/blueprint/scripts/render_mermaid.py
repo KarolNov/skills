@@ -4,9 +4,10 @@
     render_mermaid.py OUT_DIR FILE ...
 
 Each FILE is a `.mmd` file (one diagram), or a Markdown / HTML file whose ```mermaid fences or
-<pre class="mermaid"> blocks are rendered in order. Writes `<stem>-<n>.svg` per diagram and prints
-the paths. The SVGs have plain text labels (no HTML inside), a fixed size and a white card behind
-the drawing, so they display as <img> and read on dark pages too.
+<pre class="mermaid"> blocks are rendered in order. Writes `<stem>-<n>.svg` per diagram (`<stem>.svg`
+for a .mmd, prefixed with the folder name when two inputs share a stem) and prints the paths. The
+SVGs have plain text labels (no HTML inside), a fixed size and a white card behind the drawing, so
+they display as <img> and read on dark pages too.
 
 Needs Python Playwright with Chromium (`pip install playwright && playwright install chromium`,
 or reuse an existing install such as ~/.walkthrough/venv). Mermaid itself loads from jsDelivr.
@@ -66,17 +67,27 @@ def main():
         return 0
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
-    jobs = [(Path(f), i, code) for f in sys.argv[2:] for i, code in enumerate(diagrams(Path(f)), 1)]
+    srcs = [Path(f) for f in sys.argv[2:]]
+    # Inputs sharing a stem (two review.md files) get their folder's name in front.
+    stems = [s.stem for s in srcs]
+    prefix = {s: f"{s.parent.name}-" if stems.count(s.stem) > 1 else "" for s in srcs}
+    jobs = []
+    for src in srcs:
+        for i, code in enumerate(diagrams(src), 1):
+            stem = prefix[src] + src.stem + ("" if src.suffix == ".mmd" else f"-{i}")
+            jobs.append((out / f"{stem}.svg", code))
     if not jobs:
         sys.exit("no Mermaid diagrams found")
+    names = [name for name, _ in jobs]
+    if clash := sorted({str(n) for n in names if names.count(n) > 1}):
+        sys.exit(f"several diagrams would be written to {', '.join(clash)}; rename an input")
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.set_content(PAGE)
         page.wait_for_function("window.ready === true", timeout=30000)
-        for n, (src, i, code) in enumerate(jobs):
+        for n, (name, code) in enumerate(jobs):
             svg = page.evaluate("([id, c]) => window.render(id, c)", [f"d{n}", code])
-            name = out / (f"{src.stem}.svg" if src.suffix == ".mmd" else f"{src.stem}-{i}.svg")
             name.write_text(svg)
             print(name)
         browser.close()

@@ -148,7 +148,7 @@ Each change has two documents that sit side by side in the backend and link to e
       "ref": "<page URL or path>",
       "specVersion": "<backend version marker as of the last sync>",
       "anchors": ["src/auth/**", "!**/*.test.ts"],
-      "anchorsHash": "<written by drift.py stamp>",
+      "anchorsFiles": { "src/auth/session.ts": "<content hash, written by drift.py stamp>" },
       "syncedCommit": "<written by drift.py stamp>"
     }
   },
@@ -168,4 +168,4 @@ Each change has two documents that sit side by side in the backend and link to e
 
 - **anchors** are git-style globs relative to the repo root. A bare directory covers everything under it; `!` excludes. Leave tests out of anchors unless the tests themselves are the contract.
 - **specVersion** is whatever the backend offers as a cheap "has this page changed" marker (see the backend file). When it differs from the backend's current marker, the spec moved.
-- `anchorsHash` and `syncedCommit` are written only by `drift.py stamp`; never edit them by hand.
+- `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp`; never edit them by hand. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.

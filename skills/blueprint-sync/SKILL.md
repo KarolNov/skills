@@ -11,7 +11,7 @@ Arguments: `$ARGUMENTS`: capability names (default: every capability whose code 
 
 The **code is right**; the question is whether the spec still describes it. You change the spec here, never the code. If a code change looks like a mistake, that row belongs to `blueprint-drift`: say so and leave it.
 
-Shared material lives in the `blueprint` skill next to this one: `../blueprint/references/`. If `.blueprint/blueprint.json` is missing, run `blueprint-setup` first.
+Shared material lives in the `blueprint` skill next to this one: `../blueprint/references/`. If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here before continuing.
 
 ## 1. Status
 
@@ -23,7 +23,7 @@ A capability whose **spec moved** waits: someone edited intent, and syncing woul
 
 For each `code-moved` capability:
 
-1. Read `git diff <syncedCommit> -- <anchors>` and the current code around each hunk. Check whether an applied blueprint explains the change; its delta is then the starting point.
+1. Read `git diff <syncedCommit> -- <the changed files from drift.py check>` and the current code around each hunk. Check whether an applied blueprint explains the change; its delta is then the starting point.
 2. Sort each change into **behavior** (something a caller, user or other system can observe: inputs, outputs, errors, states, limits, timing they rely on) or **internal** (refactors, renames, performance with no contract change). Internal changes never touch the spec.
 3. For each behavior change, find the requirement it touches:
    - **Intended**: a commit message, PR or blueprint says so, or it extends behavior without contradicting the spec. Draft the spec edit.

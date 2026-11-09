@@ -35,7 +35,7 @@ Fetch each database once after creating it and record its `collection://` URL in
 
 ## Version marker
 
-For specs and briefs: the page's last-edited time (the `Last edited` property, or the edit time the fetch result reports). Every write bumps it, including your own, so fetch the page **after the last write** of a sync and record that value as `specVersion`.
+For specs and briefs: the SHA-256 of the page body, normalized as in "Reading back as Markdown" below, first 16 hex characters. Not the last-edited time: Notion rounds it to the minute, so a teammate's edit in the same minute as your write would not show. Fetch the page **after the last write** of a sync and hash that.
 
 ## Reading back as Markdown
 
