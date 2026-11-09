@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "A collection of Claude Code skills by Karol Novljaković.",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {
@@ -17,6 +17,15 @@
         "./skills/walkthrough-setup",
         "./skills/design-walkthrough",
         "./skills/tutorial-walkthrough"
+      ]
+    },
+    {
+      "name": "slack-nag",
+      "description": "Schedule friendly, backing-off \"nagging bot\" follow-ups in a Slack thread until someone answers; each nudge checks the thread first and stays quiet once answered.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/slack-nag"
       ]
     }
   ]

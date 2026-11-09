@@ -12,6 +12,7 @@ In Claude Code:
 ```
 /plugin marketplace add KarolNov/skills
 /plugin install walkthrough@karolnov-skills
+/plugin install slack-nag@karolnov-skills
 ```
 
 ### Manually
@@ -61,6 +62,24 @@ walkthrough of the new settings page"* or *"make a tutorial on inviting a teamma
 
 Inspired by [brag](https://github.com/latent-spaces/brag) by Shunit Haviv Hakimi (MIT).
 brag builds launch videos as HTML compositions; these skills record the real app instead.
+
+### slack-nag
+
+Chase an answer in a Slack thread without doing the chasing yourself. Give it a thread link,
+what you're waiting on, and a backoff (default `1 3 5 14` days); it drafts a schedule of
+light, gently escalating nudges and, after you approve them, schedules one task per nudge.
+Each task reads the thread first and stays quiet once someone has answered, then offers to
+delete the rest.
+
+| Skill | What it does |
+| ----- | ------------ |
+| [`slack-nag`](skills/slack-nag) | Drafts and schedules follow-ups at the recipient's 11:00 on weekdays, minding their timezone and daylight saving. |
+
+**Needs:** the Slack connector and the Claude desktop app's scheduled tasks (they run only while
+the app is open).
+
+Try it: `/slack-nag https://acme.slack.com/archives/C0123/p1792488185023259 "Dana's sign-off on the Q3 budget" 1 3 5 14`,
+or just ask Claude to *"keep nudging Dana in this thread until they reply"*.
 
 ## Repository layout
 
