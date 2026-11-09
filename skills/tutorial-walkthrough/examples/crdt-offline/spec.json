@@ -1,0 +1,72 @@
+{
+  "app": "none",
+  "title": "How to merge offline edits in the CRDT playground",
+  "start_url": "https://karolnov.dev/blog/before-you-build-a-sync-engine/",
+  "setup": [
+    { "do": "eval", "js": "document.querySelectorAll('astro-dev-toolbar').forEach(el => el.remove())" }
+  ],
+  "video": { "width": 1280, "height": 800 },
+  "default_hold": 0.8,
+  "steps": [
+    {
+      "id": "intro",
+      "label": null,
+      "chapter": "Intro",
+      "say": "Let's break a CRDT on purpose, by editing offline.",
+      "actions": [
+        { "do": "scroll", "target": "figure[data-sync=crdt]", "block": "center", "duration": 3.5 }
+      ]
+    },
+    {
+      "id": "offline",
+      "label": "Step 1 · Take Bob offline",
+      "chapter": "Take Bob offline",
+      "say": "Untick online next to Bob.",
+      "actions": [
+        { "do": "click", "target": "figure[data-sync=crdt] [data-peer=bob] .toggle" }
+      ]
+    },
+    {
+      "id": "alice",
+      "label": "Step 2 · Edit as Alice",
+      "chapter": "Edit as Alice",
+      "say": "Add world to the end of Alice's text.",
+      "actions": [
+        { "do": "type", "target": "figure[data-sync=crdt] [data-peer=alice] textarea", "text": " world", "caret": "end", "delay_ms": 90 },
+        { "do": "wait", "seconds": 1.5 }
+      ]
+    },
+    {
+      "id": "bob",
+      "label": "Step 3 · Edit as Bob",
+      "chapter": "Edit as Bob",
+      "say": "Bob types Oh, at the start. His edit waits in a queue.",
+      "actions": [
+        { "do": "type", "target": "figure[data-sync=crdt] [data-peer=bob] textarea", "text": "Oh, ", "caret": "start", "delay_ms": 90 },
+        { "do": "point", "target": "figure[data-sync=crdt] [data-peer=bob] [data-queued]" }
+      ]
+    },
+    {
+      "id": "online",
+      "label": "Step 4 · Reconnect Bob",
+      "chapter": "Reconnect Bob",
+      "say": "Tick online again, and wait for In sync.",
+      "actions": [
+        { "do": "click", "target": "figure[data-sync=crdt] [data-peer=bob] .toggle" },
+        { "do": "wait_for", "target": "figure[data-sync=crdt] [data-status]:has-text('In sync')", "timeout": 20 },
+        { "do": "highlight", "target": "figure[data-sync=crdt] [data-status]", "point": false, "seconds": 1.6 }
+      ]
+    },
+    {
+      "id": "result",
+      "label": null,
+      "chapter": "Result",
+      "poster": true,
+      "say": "Both edits survive, in every copy.",
+      "actions": [
+        { "do": "highlight", "target": "figure[data-sync=crdt] [data-server-text]", "seconds": 2.2 }
+      ],
+      "hold": 1.5
+    }
+  ]
+}

@@ -5,15 +5,19 @@
   },
   "metadata": {
     "description": "A collection of Claude Code skills by Karol Novljaković.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
-      "name": "karolnov-skills",
-      "description": "All skills in this repository.",
+      "name": "walkthrough",
+      "description": "Record narrated design walkthroughs and step-by-step tutorials of a real web app: Playwright drives the UI, an animated pointer guides the eye, and Chatterbox, Kokoro or ElevenLabs narrates.",
       "source": "./",
       "strict": false,
-      "skills": []
+      "skills": [
+        "./skills/walkthrough-setup",
+        "./skills/design-walkthrough",
+        "./skills/tutorial-walkthrough"
+      ]
     }
   ]
 }

@@ -1,0 +1,70 @@
+{
+  "app": "none",
+  "title": "Before you build a sync engine",
+  "start_url": "https://karolnov.dev/blog/before-you-build-a-sync-engine/",
+  "setup": [
+    { "do": "eval", "js": "document.querySelectorAll('astro-dev-toolbar').forEach(el => el.remove())" }
+  ],
+  "video": { "width": 1280, "height": 800 },
+  "default_hold": 0.5,
+  "steps": [
+    {
+      "id": "intro",
+      "chapter": "Intro",
+      "say": "Sync engines, explained with playgrounds you can poke at.",
+      "actions": [
+        { "do": "point", "target": "role=heading[level=1]" }
+      ]
+    },
+    {
+      "id": "naive",
+      "chapter": "Last write wins",
+      "say": "Send the whole text, and someone's edit just vanishes.",
+      "say_offset": 2.8,
+      "actions": [
+        { "do": "scroll", "target": "figure[data-sync=naive]", "block": "center", "duration": 2.5 },
+        { "do": "click", "target": "figure[data-sync=naive] >> role=button[name=/Type at once/]" },
+        { "do": "wait", "seconds": 4.5 }
+      ]
+    },
+    {
+      "id": "ot",
+      "chapter": "Operational transformation",
+      "say": "OT has a server shift each edit around the other, so both survive.",
+      "say_offset": 3.6,
+      "actions": [
+        { "do": "scroll", "target": "figure[data-sync=ot]", "block": "center", "duration": 3 },
+        { "do": "click", "target": "figure[data-sync=ot] >> role=button[name=/Type at once/]" },
+        { "do": "wait", "seconds": 2 },
+        { "do": "wait_for", "target": "figure[data-sync=ot] >> text=In sync", "timeout": 20 },
+        { "do": "wait", "seconds": 1.2 }
+      ]
+    },
+    {
+      "id": "crdt",
+      "chapter": "CRDT",
+      "poster": true,
+      "say": "A CRDT merges both on each device, no server needed.",
+      "say_offset": 3.6,
+      "actions": [
+        { "do": "scroll", "target": "figure[data-sync=crdt]", "block": "center", "duration": 3 },
+        { "do": "click", "target": "figure[data-sync=crdt] >> role=button[name=/Type at once/]" },
+        { "do": "wait", "seconds": 5 }
+      ]
+    },
+    {
+      "id": "picker",
+      "chapter": "Which tool fits",
+      "say": "And four quick questions suggest where to start.",
+      "say_offset": 3.2,
+      "actions": [
+        { "do": "scroll", "target": "figure[data-picker]", "block": "center", "duration": 3 },
+        { "do": "click", "target": "text=A canvas or structured document" },
+        { "do": "click", "target": "text=We do" },
+        { "do": "click", "target": "text=Days, then merge" },
+        { "do": "point", "target": "figure[data-picker] h4" }
+      ],
+      "hold": 1.8
+    }
+  ]
+}
