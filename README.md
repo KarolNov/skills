@@ -38,6 +38,14 @@ no hand-built animation needed.
 | [`design-walkthrough`](skills/design-walkthrough) | A short design review or feature tour: explains *why* the UI is the way it is, letting the page's own motion carry it. | [Sync engine post, 32 s](skills/design-walkthrough/examples/sync-engine-post) |
 | [`tutorial-walkthrough`](skills/tutorial-walkthrough) | A step-by-step how-to: performs each click and keystroke with step labels and captions, plus a written version. | [CRDT offline edits, 26 s](skills/tutorial-walkthrough/examples/crdt-offline) |
 
+**Design walkthrough:** a 32-second tour of [a blog post with sync playgrounds](https://karolnov.dev/blog/before-you-build-a-sync-engine/).
+
+https://github.com/user-attachments/assets/7e029177-7d35-423d-b9bb-923a26d0b341
+
+**Tutorial:** merging offline edits in one of its CRDT playgrounds, in four steps.
+
+https://github.com/user-attachments/assets/66856da9-063b-4434-b879-38bbfaeff4e7
+
 **Voices:** [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (free, local, `af_heart` by
 default), [Chatterbox](https://github.com/resemble-ai/chatterbox) (free, local clone of
 your own voice), or [ElevenLabs](https://elevenlabs.io) (paid API).
