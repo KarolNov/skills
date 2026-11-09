@@ -1,0 +1,852 @@
+<title>fictional-yjs-provider sync review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one reading column (the blueprint), with the playground and diagrams allowed wider.  */
+  :root {
+    --bg: #fbfaf8; --fg: #1c1b19; --muted: #6b6760; --border: #e6e2db; --surface: #ffffff;
+    --accent: #c41e3a; --accent-fg: #ffffff; --danger: #b42318; --success: #067647;
+    --line: #d9d3ca; --tab: #c41e3a; --phone: #2459d6; --server: #6b6760;
+    --doc-board: #b45309; --doc-c12: #7c3aed; --doc-c31: #0e7490;
+    --added: #dcfce7; --changed: #fef3c7;
+    --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --radius: 10px; --max: 44rem; --wide: 56rem;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141112; --fg: #ede8e6; --muted: #9e9693; --border: #2c2526; --surface: #1c1718;
+      --accent: #e06c78; --accent-fg: #f6e9eb; --danger: #f97066; --success: #47cd89;
+      --line: #3a3132; --tab: #e06c78; --phone: #7aa7ff; --server: #9e9693;
+      --doc-board: #f59e0b; --doc-c12: #a78bfa; --doc-c31: #22d3ee;
+      --added: #14532d; --changed: #713f12;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141112; --fg: #ede8e6; --muted: #9e9693; --border: #2c2526; --surface: #1c1718;
+    --accent: #e06c78; --accent-fg: #f6e9eb; --danger: #f97066; --success: #47cd89;
+    --line: #3a3132; --tab: #e06c78; --phone: #7aa7ff; --server: #9e9693;
+    --doc-board: #f59e0b; --doc-c12: #a78bfa; --doc-c31: #22d3ee;
+    --added: #14532d; --changed: #713f12;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 400 15px/1.6 var(--font-sans);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 2.5rem 4rem;
+  }
+  main { max-width: var(--max); margin: 0 auto; display: grid; gap: 2.75rem; }
+  section { display: grid; gap: 0.9rem; min-width: 0; }
+  .wide { width: min(var(--wide), 100%); justify-self: center; }
+  @media (min-width: 60rem) { .wide { width: var(--wide); margin-inline: calc((var(--max) - var(--wide)) / 2); justify-self: start; } }
+
+  h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+  h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.2rem; font-weight: 600; letter-spacing: -0.01em; }
+  h3 { font-size: 0.95rem; font-weight: 600; }
+  p { margin: 0; max-width: 65ch; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .eyebrow { font: 500 0.75rem/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+  header { display: grid; gap: 0.9rem; }
+  .meta { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; font-size: 0.85rem; }
+  .pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.6rem; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); white-space: nowrap; }
+  .pill.status::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 99px; background: var(--doc-board); }
+  .pill .k { color: var(--muted); }
+  .note { font-size: 0.85rem; color: var(--muted); border-left: 2px solid var(--border); padding-left: 0.8rem; }
+  .destination { font-size: 1.08rem; max-width: 60ch; }
+
+  .figure { border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); background: var(--surface); overflow: hidden; min-width: 0; }
+  .figure > figcaption { padding: 0.7rem 1rem; border-top: 1px solid var(--border); font-size: 0.88rem; color: var(--muted); }
+  .figure > figcaption b { color: var(--fg); font-weight: 600; }
+  .diagram { overflow-x: auto; padding: 1rem; display: flex; justify-content: center; }
+  .diagram pre.mermaid { margin: 0; background: transparent; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.8rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .legend i { width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid; }
+
+  /* Playground */
+  .pg { font-size: 0.9rem; }
+  .bar, .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem 1rem; padding: 0.7rem 1rem; }
+  .bar { justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .foot { border-top: 1px solid var(--border); color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  button { font: inherit; font-size: 0.84rem; padding: 0.28rem 0.7rem; border-radius: 99px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); cursor: pointer; transition: transform 120ms var(--ease-out), background-color 120ms; }
+  button:hover { background: var(--border); }
+  button:active { transform: scale(0.96); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.running { border-color: var(--accent); color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; padding: 2px; background: var(--bg); }
+  .seg button { border: 0; background: transparent; padding: 0.24rem 0.75rem; }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+  .stage { position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: "t1 t2" "srv srv" "ph ph"; gap: 3.6rem 1.2rem; padding: 1.6rem 1rem 1.4rem; }
+  .laptop { grid-column: 1 / -1; grid-row: 1; margin: -0.8rem -0.5rem; border: 1px dashed var(--line); border-radius: 14px; pointer-events: none; }
+  .laptop span { position: absolute; translate: 0.7rem -0.65rem; padding: 0 0.4rem; background: var(--surface); font: 500 0.72rem/1.3 var(--font-mono); color: var(--muted); }
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 2; }
+  .wires line { stroke: var(--line); stroke-width: 1.5; }
+  .wires line.local { stroke-dasharray: 4 4; }
+  .wires line.down { stroke-dasharray: 2 6; opacity: 0.6; }
+  .wires .wl { font: 500 10px var(--font-mono); fill: var(--muted); }
+  .node { position: relative; z-index: 1; min-width: 0; padding: 0.6rem 0.7rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); display: grid; gap: 0.45rem; transition: border-color 300ms, box-shadow 300ms; }
+  .node[data-n="t1"] { grid-area: t1; --who: var(--tab); }
+  .node[data-n="t2"] { grid-area: t2; --who: var(--tab); }
+  .node[data-n="srv"] { grid-area: srv; justify-self: center; width: min(100%, 24rem); --who: var(--server); }
+  .node[data-n="ph"] { grid-area: ph; justify-self: center; width: min(100%, 24rem); --who: var(--phone); }
+  .node.offline { border-style: dashed; opacity: 0.85; }
+  .node.flash { box-shadow: 0 0 0 3px color-mix(in srgb, var(--who) 20%, transparent); border-color: color-mix(in srgb, var(--who) 60%, var(--border)); }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .name { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: 0.86rem; }
+  .sw { width: 0.6rem; height: 0.6rem; border-radius: 99px; background: var(--who); }
+  .tp { font: 500 0.72rem/1.4 var(--font-mono); color: var(--muted); padding: 0.05rem 0.45rem; border: 1px solid var(--border); border-radius: 99px; white-space: nowrap; }
+  .tp.warn { color: var(--doc-board); border-color: color-mix(in srgb, var(--doc-board) 50%, var(--border)); }
+  .tp.bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
+  .docs { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .doc { font: 500 0.74rem/1.5 var(--font-mono); padding: 0 0.45rem; border-radius: 5px; background: color-mix(in srgb, var(--c) 12%, var(--surface)); color: var(--fg); border: 1px solid color-mix(in srgb, var(--c) 35%, var(--border)); font-variant-numeric: tabular-nums; }
+  .doc::before { content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; border-radius: 99px; background: var(--c); margin-right: 0.3rem; translate: 0 -1px; }
+  .doc.behind { border-style: dashed; color: var(--muted); }
+  .cur { font-size: 0.76rem; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+
+  .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); border-top: 1px solid var(--border); }
+  .score { padding: 0.6rem 1rem; display: grid; gap: 0.1rem; border-right: 1px solid var(--border); }
+  .score:last-child { border-right: 0; }
+  .score .k { font-size: 0.74rem; color: var(--muted); }
+  .score .v { font: 600 1.05rem/1.3 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .score .cmp { font: 400 0.72rem/1.3 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-top: 1px solid var(--border); }
+  @media (max-width: 40rem) { .lower { grid-template-columns: 1fr; } .lower > * + * { border-top: 1px solid var(--border); } }
+  .log { margin: 0; padding: 0.6rem 1rem; list-style: none; font: 400 0.76rem/1.55 var(--font-mono); color: var(--muted); min-height: 8.2rem; overflow: hidden; }
+  .log li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log li:first-child { color: var(--fg); }
+  .explain { padding: 0.6rem 1rem; font-size: 0.84rem; border-left: 1px solid var(--border); display: grid; gap: 0.4rem; align-content: start; }
+  @media (max-width: 40rem) { .explain { border-left: 0; } }
+  .status { font-weight: 600; color: var(--fg); }
+  .status.ok { color: var(--success); }
+  .status.warn { color: var(--doc-board); }
+  .knob { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; }
+  .knob input[type="range"] { width: 7rem; accent-color: var(--accent); }
+  .knob output { font: 500 0.78rem var(--font-mono); color: var(--fg); min-width: 3.4rem; font-variant-numeric: tabular-nums; }
+  .knob input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
+  .key { display: flex; flex-wrap: wrap; gap: 0.8rem; font-size: 0.76rem; color: var(--muted); }
+  .key span { display: inline-flex; align-items: center; gap: 0.3rem; }
+  .key i { width: 0.6rem; height: 0.6rem; border-radius: 99px; background: var(--c); }
+  .key i.hollow { background: transparent; border: 1.5px solid var(--fg); }
+  .key i.sq { border-radius: 2px; background: var(--muted); }
+
+  /* The written blueprint */
+  .list { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.55rem; }
+  .list li { max-width: 68ch; }
+  .list b { font-weight: 600; }
+  .req { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 0.8rem 1rem; display: grid; gap: 0.5rem; }
+  .req .tag { font: 600 0.68rem/1 var(--font-mono); letter-spacing: 0.06em; padding: 0.2rem 0.4rem; border-radius: 4px; background: var(--added); color: var(--fg); justify-self: start; }
+  .req .tag.mod { background: var(--changed); }
+  .req p { font-size: 0.92rem; }
+  .scn { font-size: 0.86rem; display: grid; gap: 0.1rem; padding-left: 0.8rem; border-left: 2px solid var(--border); }
+  .scn b { font: 600 0.74rem var(--font-mono); letter-spacing: 0.04em; }
+  .tasks { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; counter-reset: t; }
+  .tasks li { display: grid; grid-template-columns: 1.1rem 1.6rem 1fr; gap: 0.3rem; align-items: baseline; font-size: 0.93rem; counter-increment: t; }
+  .tasks li::before { content: "☐"; color: var(--muted); }
+  .tasks li span:first-child::before { content: counter(t) "."; font: 500 0.82rem var(--font-mono); color: var(--muted); }
+  .cap { font-family: var(--font-mono); font-size: 0.85rem; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">fictional-yjs-provider · blueprint · sample</span>
+    <h1>Sync over WebTransport</h1>
+    <div class="meta">
+      <span class="pill status">Draft</span>
+      <span class="pill"><span class="k">new</span> <span class="cap">sync/transport</span></span>
+      <span class="pill"><span class="k">new</span> <span class="cap">sync/awareness</span></span>
+      <span class="pill"><span class="k">modified</span> <span class="cap">persistence/cross-tab</span></span>
+      <span class="pill"><span class="k">package</span> <span class="cap">@fictional-yjs-provider/sync</span></span>
+      <span class="pill"><span class="k">for agents</span> <a href="brief.md">brief.md</a></span>
+      <span class="pill"><span class="k">built from brief</span> <span class="cap">draft 1</span></span>
+    </div>
+    <p class="note">The review half of a sample <code>/blueprint</code> for <code>fictional-yjs-provider</code>: the picture and the change in plain language, for people. The brief beside it holds the full decisions, spec delta and tasks, for agents. The decisions and numbers are illustrative.</p>
+  </header>
+
+  <section>
+    <span class="eyebrow">Destination</span>
+    <p class="destination">Every open document syncs between devices over one connection per browser. Cursors never hold up edits, and when WebTransport is blocked the board still syncs over WebSocket. The local log stays the source of truth.</p>
+  </section>
+
+  <section>
+    <h2>Picture</h2>
+    <div class="legend">
+      <span><i style="background:#dcfce7;border-color:#16a34a"></i>added</span>
+      <span><i style="background:#fef3c7;border-color:#d97706"></i>changed</span>
+      <span><i style="background:#fee2e2;border-color:#dc2626;border-style:dashed"></i>removed</span>
+      <span class="muted">unchanged parts stay plain</span>
+    </div>
+
+    <figure class="figure wide">
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph today["Today"]
+    direction TB
+    a1["Tab 1"] <-->|BroadcastChannel| a2["Tab 2"]
+    a1 --> al[("Local log<br/>OPFS / IndexedDB")]
+    a2 --> al
+  end
+  subgraph after["After"]
+    direction TB
+    b1["Tab 1<br/>holds the connection"] <-->|BroadcastChannel| b2["Tab 2"]
+    b1 --> bl[("Local log<br/>OPFS / IndexedDB")]
+    b2 --> bl
+    b1 ==>|"one WebTransport session<br/>a stream per doc, cursors as datagrams"| s["Sync server"]
+    s --> st[("Durable Object<br/>storage")]
+    ph["Other device"] ==>|same| s
+  end
+  today ~~~ after
+  classDef added fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef changed fill:#fef3c7,stroke:#d97706,color:#78350f
+  class b1 changed
+  class s,st,ph added
+</pre></div>
+      <figcaption><b>Before → after.</b> Tabs keep syncing through the log and BroadcastChannel exactly as today. What's new is one tab per browser holding a single session to the server, which every open doc shares.</figcaption>
+    </figure>
+
+    <figure class="figure wide">
+      <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  participant T as Tab 1 (holds the connection)
+  participant S as Sync server
+  participant O as Other device
+  Note over T: back online
+  T->>S: open WebTransport session (one handshake for all docs)
+  par a stream per open doc
+    T->>S: board: state vector
+    S-->>T: board: only the updates T is missing
+  and
+    T->>S: card 12: state vector
+    S-->>T: card 12: only the updates T is missing
+  end
+  T->>S: edits made offline, read from the local log
+  S-->>O: relayed on O's stream for that doc
+  T-)S: cursor (datagram, may be dropped)
+  S-)O: cursor (datagram)
+</pre></div>
+      <figcaption><b>Reconnect.</b> One handshake covers every doc, and each doc catches up with a diff rather than its whole state. Cursors ride datagrams: losing one is fine because the next one replaces it.</figcaption>
+    </figure>
+
+    <figure class="figure wide">
+      <div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  state "Trying WebTransport" as Trying
+  state "Open" as Open
+  state "WebSocket (fallback)" as WS
+  state "Backing off" as Backoff
+  [*] --> Trying
+  Trying --> Open: session ready
+  Trying --> WS: blocked, or no session in 3 s
+  WS --> Open
+  Open --> Backoff: connection lost
+  Backoff --> Trying: retry after 1, 2, 4 … 30 s
+  Open --> [*]: last doc closed
+  classDef added fill:#dcfce7,stroke:#16a34a,color:#14532d
+  class WS added
+</pre></div>
+      <figcaption><b>Picking a transport.</b> Corporate proxies often block HTTP/3, so the fallback is first-class: one WebSocket carrying every doc, with the same framing as the streams.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Playground</h2>
+    <p class="muted">Run a scenario, switch between <b>y-websocket</b> and <b>Blueprint</b>, and run it again. The same messages are lost in both modes, so the scoreboard compares like with like. A model of the idea, not the real code: time is slowed down while packets are moving and skips ahead while nothing is.</p>
+
+    <figure class="figure wide pg" id="pg">
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Design">
+          <button type="button" id="m-baseline" data-mode="baseline" aria-pressed="false">y-websocket</button>
+          <button type="button" id="m-blueprint" data-mode="blueprint" aria-pressed="true">Blueprint</button>
+        </div>
+        <div class="actions">
+          <button type="button" id="s-edit" data-run="edit">▶ Edit a card</button>
+          <button type="button" id="s-lossy" data-run="lossy">▶ Cursors on a lossy link</button>
+          <button type="button" id="s-offline" data-run="offline">▶ Phone offline, then back</button>
+          <button type="button" id="s-blocked" data-run="blocked">▶ WebTransport blocked</button>
+          <button type="button" id="s-reset" data-reset>Reset</button>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="laptop"><span>laptop · one browser · tabs share a BroadcastChannel</span></div>
+        <svg class="wires" id="wires" aria-hidden="true"></svg>
+        <div class="node" data-n="t1"><div class="head"><span class="name"><span class="sw"></span>Tab 1</span><span class="tp" data-tp></span></div><div class="docs" data-docs></div><div class="cur" data-cur></div></div>
+        <div class="node" data-n="t2"><div class="head"><span class="name"><span class="sw"></span>Tab 2</span><span class="tp" data-tp></span></div><div class="docs" data-docs></div><div class="cur" data-cur></div></div>
+        <div class="node" data-n="srv"><div class="head"><span class="name"><span class="sw"></span>Sync server</span><span class="tp" data-tp></span></div><div class="docs" data-docs></div></div>
+        <div class="node" data-n="ph"><div class="head"><span class="name"><span class="sw"></span>Phone</span><span class="tp" data-tp></span></div><div class="docs" data-docs></div><div class="cur" data-cur></div></div>
+      </div>
+
+      <div class="scoreboard" id="score"></div>
+      <div class="lower">
+        <ol class="log" id="log" aria-live="polite"></ol>
+        <div class="explain">
+          <span class="status" id="status">In sync</span>
+          <span id="explain" class="muted"></span>
+          <div class="key">
+            <span><i style="--c:var(--doc-board)"></i>board</span>
+            <span><i style="--c:var(--doc-c12)"></i>card 12</span>
+            <span><i style="--c:var(--doc-c31)"></i>card 31</span>
+            <span><i class="hollow"></i>cursor</span>
+            <span><i class="sq"></i>handshake / sync</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <label class="knob" for="k-rtt">Round trip <input type="range" id="k-rtt" min="40" max="400" step="10" value="160"><output id="o-rtt">160 ms</output></label>
+        <label class="knob" for="k-loss">Packet loss <input type="range" id="k-loss" min="0" max="25" step="1" value="0"><output id="o-loss">0%</output></label>
+        <label class="knob" for="k-wt"><input type="checkbox" id="k-wt" checked> WebTransport allowed</label>
+        <label class="knob" for="k-ph"><input type="checkbox" id="k-ph" checked> Phone online</label>
+      </div>
+    </figure>
+  </section>
+
+  <section>
+    <h2>What changes</h2>
+    <ul class="list">
+      <li>Boards sync between devices, not just between tabs of one browser.</li>
+      <li>A browser holds one connection however many tabs and documents are open.</li>
+      <li>Cursors of other people appear, and a bad connection drops a few cursor moves instead of slowing down edits.</li>
+      <li>On a network that blocks WebTransport, syncing starts about 3 seconds later, over WebSocket.</li>
+      <li>Coming back online sends only what changed while offline.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Decisions</h2>
+    <ul class="list">
+      <li><b>One connection per browser</b>, held by the tab with the Web Lock; the other tabs already get its updates through the persistence channel.</li>
+      <li><b>A stream per document</b>, so a lost packet only stalls its own document.</li>
+      <li><b>Cursors as datagrams</b>: latest-wins, so lost ones are never resent.</li>
+      <li><b>State vectors on reconnect</b>: each document catches up with a diff.</li>
+      <li><b>WebSocket fallback</b> after 3 s without a session, one socket for everything.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Behavior</h2>
+    <h3 class="cap">sync/transport</h3>
+    <div class="req">
+      <span class="tag">NEW</span>
+      <h3>One connection per browser</h3>
+      <div class="scn"><span><b>WHEN</b> two tabs open three documents</span><span><b>THEN</b> the server sees one session carrying three streams, and closing the connected tab hands the session to the other</span></div>
+    </div>
+    <div class="req">
+      <span class="tag">NEW</span>
+      <h3>Catch-up sends only what is missing</h3>
+      <div class="scn"><span><b>WHEN</b> a device reconnects after editing offline</span><span><b>THEN</b> both sides hold every edit, and neither sent its whole document</span></div>
+    </div>
+    <div class="req">
+      <span class="tag">NEW</span>
+      <h3>WebSocket fallback</h3>
+      <div class="scn"><span><b>WHEN</b> the network drops UDP</span><span><b>THEN</b> documents sync over WebSocket within 3 s plus one handshake</span></div>
+    </div>
+    <h3 class="cap">sync/awareness</h3>
+    <div class="req">
+      <span class="tag">NEW</span>
+      <h3>Cursors never delay edits</h3>
+      <div class="scn"><span><b>WHEN</b> a cursor update is lost on a 10% lossy link</span><span><b>THEN</b> the next one replaces it, and edits arrive as fast as with cursors off</span></div>
+    </div>
+    <div class="req">
+      <span class="tag">NEW</span>
+      <h3>Stale cursors expire</h3>
+      <div class="scn"><span><b>WHEN</b> the last cursor move is lost</span><span><b>THEN</b> others see the right position within 2 s</span></div>
+    </div>
+    <h3 class="cap">persistence/cross-tab</h3>
+    <div class="req">
+      <span class="tag mod">CHANGED</span>
+      <h3>Live sync between tabs</h3>
+      <div class="scn"><span><b>WHEN</b> another device edits a document two tabs have open</span><span><b>THEN</b> both tabs show it, though only one is connected</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Progress</h2>
+    <p class="muted">0 of 8 tasks done. Next: one document, one tab, WebTransport only, relayed by a Durable Object between two browsers. One open question in the brief: whether to remember the fallback across page loads.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  // ---------- Model: plain state + functions, no DOM. Time is simulated in ms. ----------
+  const DOCS = ['board', 'c12', 'c31'];
+  const DOC_LABEL = { board: 'board', c12: 'card 12', c31: 'card 31' };
+  const CLIENTS = ['t1', 't2', 'ph'];
+  const NAME = { t1: 'Tab 1', t2: 'Tab 2', ph: 'Phone', srv: 'server' };
+  const FALLBACK_MS = 3000;
+
+  const knobs = { mode: 'blueprint', rtt: 160, loss: 0, wt: true, phone: true };
+  const results = {}; // results[scenario][mode] = snapshot
+  let S; // simulation state
+
+  // The same logical message gets the same fate in both modes.
+  function lossDraw(key) {
+    let h = 2166136261;
+    for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+    h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
+
+  function fresh() {
+    const base = { board: 4, c12: 7, c31: 2 };
+    const has = () => Object.fromEntries(DOCS.map(d => [d, new Set(Array.from({ length: base[d] }, (_, i) => `${d}#${i}`))]));
+    S = {
+      now: 0, seq: 0, scenario: null, events: [], packets: [], log: [], chans: {},
+      nodes: { t1: { has: has() }, t2: { has: has() }, ph: { has: has() }, srv: { has: has() } },
+      conn: {}, // client -> 'up' | 'down' | 'connecting' | 'trying'
+      transport: {}, // client -> 'ws-per-doc' | 'wt' | 'ws-mux'
+      edits: {}, cursorSeen: {}, flash: {},
+      m: { handshakes: 0, connectedIn: null, slowestEdit: null, editDelaySum: 0, editsMeasured: 0, editsHeld: 0, slowestCursor: null, cursorsLost: 0, cursorsSent: 0, editsDone: 0 },
+      explain: '',
+    };
+    const remembered = knobs.mode === 'blueprint' && !knobs.wt ? 'ws-mux' : (knobs.mode === 'blueprint' ? 'wt' : 'ws-per-doc');
+    for (const c of CLIENTS) { S.conn[c] = 'up'; S.transport[c] = remembered; }
+    if (knobs.mode === 'blueprint') { S.conn.t2 = 'via'; }
+    if (!knobs.phone) S.conn.ph = 'down';
+  }
+
+  const at = (t, fn) => { S.events.push({ t, fn }); S.events.sort((a, b) => a.t - b.t); };
+  const log = (msg) => { S.log.unshift(`${(S.now / 1000).toFixed(2).padStart(5)}s  ${msg}`); S.log.length = Math.min(S.log.length, 7); };
+  const connected = (c) => S.conn[c] === 'up';
+  const endpoints = () => CLIENTS.filter(c => connected(c));
+
+  // Which ordered channel a message travels on, or null for an unreliable datagram.
+  function channel(client, kind, doc) {
+    const t = S.transport[client];
+    if (t === 'ws-per-doc') return `ws:${client}:${kind === 'aw' ? 'c12' : doc}`;
+    if (t === 'ws-mux') return `ws:${client}:all`;
+    return kind === 'aw' ? null : `wt:${client}:${doc}`;
+  }
+
+  // Send one message over the network between a client and the server.
+  function send(from, to, msg, key) {
+    const client = from === 'srv' ? to : from;
+    const d = knobs.rtt / 2;
+    const ch = channel(client, msg.kind, msg.doc);
+    const dir = from === 'srv' ? 'down' : 'up';
+    if (!connected(client)) { S.packets.push({ from, to, t0: S.now, t1: S.now + d, kind: msg.kind, doc: msg.doc, fate: 'cut' }); return; }
+    const lost = lossDraw(key) < knobs.loss / 100;
+    let arrive = S.now + d;
+    if (msg.kind === 'aw') S.m.cursorsSent++;
+    if (lost) {
+      S.packets.push({ from, to, t0: S.now, t1: S.now + d, kind: msg.kind, doc: msg.doc, fate: 'lost' });
+      if (!ch) { S.m.cursorsLost++; return; } // datagram: gone, the next one replaces it
+      arrive = S.now + knobs.rtt + d; // reliable: retransmitted after about one round trip
+      S.packets.push({ from, to, t0: S.now + knobs.rtt, t1: arrive, kind: msg.kind, doc: msg.doc, fate: 'ok', retx: true });
+    }
+    let deliver = arrive;
+    if (ch) {
+      const id = `${ch}:${dir}`;
+      deliver = Math.max(arrive, S.chans[id] || 0);
+      S.chans[id] = deliver;
+      if (msg.kind === 'edit' && deliver > arrive) S.m.editsHeld++;
+    }
+    if (!lost) S.packets.push({ from, to, t0: S.now, t1: arrive, hold: deliver, kind: msg.kind, doc: msg.doc, fate: 'ok' });
+    else if (deliver > arrive) S.packets[S.packets.length - 1].hold = deliver;
+    at(deliver, () => receive(to, from, msg));
+  }
+
+  // BroadcastChannel between the two tabs: fast and never lost.
+  function local(from, to, msg) {
+    S.packets.push({ from, to, t0: S.now, t1: S.now + 18, kind: msg.kind, doc: msg.doc, fate: 'ok', local: true });
+    at(S.now + 18, () => receive(to, from, msg, true));
+  }
+
+  function apply(node, msg) {
+    const set = S.nodes[node].has[msg.doc];
+    if (set.has(msg.id)) return false;
+    set.add(msg.id); S.flash[node] = S.now;
+    checkEditDone(msg.id);
+    return true;
+  }
+
+  function checkEditDone(id) {
+    const e = S.edits[id];
+    if (!e || e.done) return;
+    if (['t1', 't2', 'ph', 'srv'].every(n => S.nodes[n].has[e.doc].has(id))) {
+      e.done = true; S.m.editsDone++;
+      if (e.measure) { S.m.slowestEdit = Math.max(S.m.slowestEdit || 0, S.now - e.t); S.m.editDelaySum += S.now - e.t; S.m.editsMeasured++; }
+    }
+  }
+
+  function receive(node, from, msg, viaLocal) {
+    if (msg.kind === 'edit') {
+      if (!apply(node, msg)) return;
+      if (node === 'srv') {
+        for (const c of endpoints()) if (c !== from) send('srv', c, msg, `${msg.key}:down:${c}`);
+      } else if (knobs.mode === 'blueprint' && node === 't1' && !viaLocal) {
+        local('t1', 't2', msg); // the connected tab passes remote edits to the other tab
+      } else if (knobs.mode === 'blueprint' && node === 't1' && viaLocal && from === 't2') {
+        if (connected('t1')) send('t1', 'srv', msg, `${msg.key}:up`); // forward tab 2's edit
+      }
+    } else if (msg.kind === 'aw') {
+      const delay = S.now - msg.t;
+      S.m.slowestCursor = Math.max(S.m.slowestCursor || 0, delay);
+      if (node === 'srv') { for (const c of endpoints()) if (c !== from) send('srv', c, msg, `${msg.key}:down:${c}`); }
+      else S.cursorSeen[node] = { who: msg.from, t: msg.t };
+    } else if (msg.kind === 'sv') {
+      // Server got a client's state vector: send back what the client lacks, and ask for what it lacks.
+      if (node === 'srv') {
+        const missing = [...S.nodes.srv.has[msg.doc]].filter(id => !msg.ids.has(id));
+        send('srv', from, { kind: 'diff', doc: msg.doc, ids: missing, svFrom: new Set(S.nodes.srv.has[msg.doc]) }, `sync:${msg.doc}:${from}:${S.seq++}:down`);
+      }
+    } else if (msg.kind === 'diff') {
+      for (const id of msg.ids) apply(node, { doc: msg.doc, id });
+      if (node !== 'srv') {
+        const mine = [...S.nodes[node].has[msg.doc]].filter(id => !msg.svFrom.has(id));
+        if (mine.length) send(node, 'srv', { kind: 'diff', doc: msg.doc, ids: mine, svFrom: new Set() }, `sync:${msg.doc}:${node}:${S.seq++}:up`);
+        if (knobs.mode === 'blueprint' && node === 't1') for (const id of msg.ids) local('t1', 't2', { kind: 'edit', doc: msg.doc, id });
+      } else {
+        for (const id of msg.ids) for (const c of endpoints()) if (c !== from) send('srv', c, { kind: 'edit', doc: msg.doc, id, key: `fw:${id}` }, `fw:${id}:${c}`);
+      }
+      if (node !== 'srv' && S.syncing && S.syncing[node]) {
+        S.syncing[node].delete(msg.doc);
+        if (!S.syncing[node].size) { S.m.connectedIn = S.now - S.connectStart[node]; log(`${NAME[node]} caught up on every doc`); }
+      }
+    }
+  }
+
+  // A user edit on a client.
+  function edit(client, doc) {
+    const key = `e${S.seq++}`;
+    const id = `${doc}#${client}${key}`;
+    S.edits[id] = { t: S.now, doc, measure: CLIENTS.every(c => S.conn[c] !== 'down') };
+    const msg = { kind: 'edit', doc, id, key };
+    S.nodes[client].has[doc].add(id); S.flash[client] = S.now;
+    if (client === 't2' && knobs.mode === 'blueprint') { local('t2', 't1', msg); log(`Tab 2 edits ${DOC_LABEL[doc]}, hands it to tab 1`); return; }
+    if (client === 't1' || client === 't2') local(client, client === 't1' ? 't2' : 't1', msg);
+    if (connected(client)) send(client, 'srv', msg, `${key}:up`);
+    log(`${NAME[client]} edits ${DOC_LABEL[doc]}${connected(client) ? '' : ' (offline, kept in the local log)'}`);
+  }
+
+  function cursor(client) {
+    if (!connected(client)) return;
+    const key = `a${S.seq++}`;
+    send(client, 'srv', { kind: 'aw', from: client, t: S.now, key }, `${key}:up`);
+  }
+
+  // Draw a handshake as round trips on the wire; returns when it completes.
+  function handshake(client, rounds, blocked) {
+    for (let i = 0; i < rounds; i++) {
+      const t = i * knobs.rtt;
+      at(S.now + t, () => S.packets.push({ from: client, to: 'srv', t0: S.now, t1: S.now + knobs.rtt / 2, kind: 'hs', fate: blocked ? 'lost' : 'ok' }));
+      if (!blocked) at(S.now + t + knobs.rtt / 2, () => S.packets.push({ from: 'srv', to: client, t0: S.now, t1: S.now + knobs.rtt / 2, kind: 'hs', fate: 'ok' }));
+    }
+    return rounds * knobs.rtt;
+  }
+
+  function connect(client) {
+    S.connectStart = S.connectStart || {}; S.connectStart[client] = S.now;
+    const start = (transport, rounds, label) => {
+      S.conn[client] = 'connecting'; S.transport[client] = transport;
+      const n = transport === 'ws-per-doc' ? DOCS.length : 1;
+      S.m.handshakes += n;
+      log(`${NAME[client]} opens ${label}`);
+      const took = handshake(client, rounds);
+      at(S.now + took, () => {
+        S.conn[client] = 'up';
+        S.syncing = S.syncing || {}; S.syncing[client] = new Set(DOCS);
+        for (const doc of DOCS) send(client, 'srv', { kind: 'sv', doc, ids: new Set(S.nodes[client].has[doc]) }, `sv:${doc}:${client}:${S.seq++}`);
+      });
+    };
+    if (knobs.mode === 'baseline') return start('ws-per-doc', 3, `${DOCS.length} WebSockets (TCP + TLS + upgrade each)`);
+    if (knobs.wt) return start('wt', 2, 'one WebTransport session (QUIC + CONNECT)');
+    S.conn[client] = 'trying'; S.transport[client] = 'wt';
+    S.m.handshakes += 1;
+    log(`${NAME[client]} tries WebTransport…`);
+    handshake(client, 1, true);
+    at(S.now + FALLBACK_MS, () => { log(`${NAME[client]}: no session after 3 s, falls back`); start('ws-mux', 3, 'one WebSocket for every doc'); });
+  }
+
+  function disconnect(client) {
+    S.conn[client] = 'down';
+    for (const k of Object.keys(S.chans)) if (k.includes(`:${client}:`)) delete S.chans[k];
+  }
+
+  const SCENARIOS = {
+    edit: {
+      label: 'Edit a card',
+      explain: 'Tab 1 types in card 12, tab 2 renames the board. Watch how many wires light up for the same edits.',
+      run() {
+        [0, 260, 520].forEach(t => at(t, () => edit('t1', 'c12')));
+        at(900, () => edit('t2', 'board'));
+      },
+    },
+    lossy: {
+      label: 'Cursors on a lossy link',
+      explain: 'Tab 1 and the phone move cursors ten times a second while tab 1 types. With y-websocket a lost cursor is retransmitted and the edits behind it wait; with datagrams it is simply dropped.',
+      setup() { if (knobs.loss === 0) setLoss(10); },
+      run() {
+        for (let t = 0; t <= 3000; t += 100) { at(t, () => cursor('t1')); at(t + 50, () => cursor('ph')); }
+        for (let t = 150; t <= 3000; t += 300) at(t, () => edit('t1', 'c12'));
+        at(1200, () => edit('ph', 'c31'));
+      },
+    },
+    offline: {
+      label: 'Phone offline, then back',
+      explain: 'The phone loses signal, both sides keep editing, then it reconnects. Count the handshakes and the time until every doc has caught up.',
+      run() {
+        at(0, () => { setPhone(false); });
+        [200, 600, 1000].forEach(t => at(t, () => edit('ph', 'c31')));
+        [400, 800].forEach(t => at(t, () => edit('t1', 'board')));
+        at(1700, () => edit('t2', 'c12'));
+        at(2200, () => { setPhone(true); });
+      },
+    },
+    blocked: {
+      label: 'WebTransport blocked',
+      explain: 'A network that drops UDP. y-websocket never notices; the blueprint pays the 3 s timeout once, then runs everything over one WebSocket. With loss on, cursors share the edit stream again, as in y-websocket.',
+      setup() { setWT(false); },
+      run() {
+        at(0, () => { for (const c of ['t1', 'ph']) { disconnect(c); } if (knobs.mode === 'baseline') disconnect('t2'); });
+        at(10, () => connect('t1'));
+        at(60, () => connect('ph'));
+        if (knobs.mode === 'baseline') at(110, () => connect('t2'));
+        at(FALLBACK_MS + 1200, () => edit('t1', 'c12'));
+        at(FALLBACK_MS + 1500, () => edit('ph', 'board'));
+      },
+    },
+  };
+
+  function runScenario(name) {
+    const sc = SCENARIOS[name];
+    sc.setup && sc.setup();
+    fresh();
+    S.scenario = name; S.explain = sc.explain;
+    log(`▶ ${sc.label} · ${knobs.mode === 'baseline' ? 'y-websocket' : 'Blueprint'}`);
+    sc.run();
+    render(true);
+  }
+
+  function step(dt) {
+    const moving = S.packets.some(p => S.now < Math.max(p.t1, p.hold || 0) + 120);
+    const pending = S.events.length > 0;
+    // Slow motion while packets fly, fast-forward through quiet waits (like the 3 s fallback timer).
+    S.now += moving ? dt / 3 : pending ? dt * 2 : dt / 3;
+    while (S.events.length && S.events[0].t <= S.now) S.events.shift().fn();
+    S.packets = S.packets.filter(p => S.now < Math.max(p.t1, p.hold || 0) + 400);
+    if (S.scenario && !pending && !moving && !S.finished) finish();
+  }
+
+  function finish() {
+    S.finished = true;
+    (results[S.scenario] = results[S.scenario] || {})[knobs.mode] = { ...S.m, rtt: knobs.rtt, loss: knobs.loss };
+    log(`done · switch to ${knobs.mode === 'baseline' ? 'Blueprint' : 'y-websocket'} and run it again to compare`);
+  }
+
+  // ---------- Knobs ----------
+  const $ = (s, r = document) => r.querySelector(s);
+  const rtt = $('#k-rtt'), loss = $('#k-loss'), wt = $('#k-wt'), ph = $('#k-ph');
+  function setLoss(v) { knobs.loss = v; loss.value = v; $('#o-loss').textContent = `${v}%`; }
+  function setWT(v) { knobs.wt = v; wt.checked = v; }
+  function setPhone(v) {
+    knobs.phone = v; ph.checked = v;
+    if (!S) return;
+    if (!v && S.conn.ph !== 'down') { disconnect('ph'); log('Phone goes offline'); }
+    if (v && S.conn.ph === 'down') { log('Phone is back online'); connect('ph'); }
+  }
+  rtt.addEventListener('input', () => { knobs.rtt = +rtt.value; $('#o-rtt').textContent = `${rtt.value} ms`; });
+  loss.addEventListener('input', () => setLoss(+loss.value));
+  wt.addEventListener('change', () => { setWT(wt.checked); fresh(); log(wt.checked ? 'WebTransport allowed' : 'WebTransport blocked: next connect will fall back'); });
+  ph.addEventListener('change', () => setPhone(ph.checked));
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    knobs.mode = b.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    const last = S && S.scenario;
+    fresh();
+    log(`Switched to ${b.textContent}${last ? `: run “${SCENARIOS[last].label}” again to compare` : ''}`);
+    S.explain = last ? SCENARIOS[last].explain : '';
+    render(true);
+  }));
+  document.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => runScenario(b.dataset.run)));
+  $('[data-reset]').addEventListener('click', () => { setLoss(0); setWT(true); setPhone(true); fresh(); log('Reset'); render(true); });
+
+  // ---------- View ----------
+  const stage = $('#stage'), svg = $('#wires');
+  const NS = 'http://www.w3.org/2000/svg';
+  const nodeEl = Object.fromEntries(['t1', 't2', 'srv', 'ph'].map(n => [n, stage.querySelector(`[data-n="${n}"]`)]));
+  let geo = {};
+
+  function measure() {
+    const s = stage.getBoundingClientRect();
+    geo = {};
+    for (const [n, el] of Object.entries(nodeEl)) {
+      const r = el.getBoundingClientRect();
+      geo[n] = { x: r.left - s.left + r.width / 2, y: r.top - s.top + r.height / 2, w: r.width / 2 + 3, h: r.height / 2 + 3 };
+    }
+  }
+  // Endpoints of a wire, clipped to the edges of the two boxes.
+  function seg(a, b) {
+    const A = geo[a], B = geo[b];
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const sa = Math.min(A.w / Math.abs(dx || 1e-9), A.h / Math.abs(dy || 1e-9));
+    const sb = Math.min(B.w / Math.abs(dx || 1e-9), B.h / Math.abs(dy || 1e-9));
+    return { x1: A.x + dx * sa, y1: A.y + dy * sa, x2: B.x - dx * sb, y2: B.y - dy * sb };
+  }
+  const wires = () => {
+    const w = [['t1', 't2', 'local']];
+    w.push(['t1', 'srv'], ['ph', 'srv']);
+    if (knobs.mode === 'baseline') w.push(['t2', 'srv']);
+    return w;
+  };
+
+  function el(tag, attrs) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  const color = { board: 'var(--doc-board)', c12: 'var(--doc-c12)', c31: 'var(--doc-c31)' };
+
+  function drawWires() {
+    svg.replaceChildren();
+    for (const [a, b, kind] of wires()) {
+      const s = seg(a, b);
+      const client = a === 'srv' ? b : a;
+      const down = kind !== 'local' && S.conn[client] !== 'up';
+      svg.append(el('line', { ...s, class: [kind || '', down ? 'down' : ''].join(' ') }));
+    }
+    const g = el('g', { id: 'pk' }); svg.append(g);
+  }
+
+  function drawPackets() {
+    const g = svg.querySelector('#pk'); if (!g) return;
+    g.replaceChildren();
+    for (const p of S.packets) {
+      if (S.now < p.t0) continue;
+      const s = seg(p.from, p.to);
+      const span = Math.max(1, p.t1 - p.t0);
+      let f = Math.min(1, (S.now - p.t0) / span);
+      let op = 1;
+      if (p.fate === 'lost' || p.fate === 'cut') { f = Math.min(f, 0.5); if (S.now > p.t0 + span / 2) op = Math.max(0, 1 - (S.now - p.t0 - span / 2) / 350); }
+      else if (S.now > p.t1) { f = 1; if (!(p.hold && S.now < p.hold)) op = Math.max(0, 1 - (S.now - Math.max(p.t1, p.hold || 0)) / 140); }
+      if (op <= 0) continue;
+      const x = s.x1 + (s.x2 - s.x1) * f, y = s.y1 + (s.y2 - s.y1) * f;
+      let shape;
+      if (p.kind === 'aw') shape = el('circle', { cx: x, cy: y, r: 4, fill: 'var(--surface)', stroke: 'var(--fg)', 'stroke-width': 1.5 });
+      else if (p.kind === 'hs' || p.kind === 'sv' || p.kind === 'diff') shape = el('rect', { x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5, fill: 'var(--muted)', transform: p.kind === 'hs' ? '' : `rotate(45 ${x} ${y})` });
+      else shape = el('circle', { cx: x, cy: y, r: 5.5, fill: color[p.doc] || 'var(--muted)' });
+      shape.setAttribute('opacity', op);
+      g.append(shape);
+      if (p.hold && S.now >= p.t1 && S.now < p.hold) {
+        g.append(el('circle', { cx: x, cy: y, r: 9 + 2 * Math.sin(S.now / 40), fill: 'none', stroke: 'var(--danger)', 'stroke-width': 1.2, 'stroke-dasharray': '2 2' }));
+      }
+      if ((p.fate === 'lost' || p.fate === 'cut') && S.now > p.t0 + span / 2) {
+        g.append(el('path', { d: `M${x - 5} ${y - 5} L${x + 5} ${y + 5} M${x + 5} ${y - 5} L${x - 5} ${y + 5}`, stroke: 'var(--danger)', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: op }));
+      }
+    }
+  }
+
+  const avg = (m) => m.editsMeasured ? m.editDelaySum / m.editsMeasured : null;
+  const fmt = (v) => v == null ? '—' : `${Math.round(v)} ms`;
+
+  function transportLabel(n) {
+    const c = S.conn[n], t = S.transport[n];
+    if (n === 'srv') {
+      if (knobs.mode === 'baseline') return [`${endpoints().length * DOCS.length} WebSockets`, ''];
+      const up = endpoints();
+      const wtN = up.filter(c => S.transport[c] === 'wt').length, wsN = up.length - wtN;
+      return [[wtN && `${wtN} WT session${wtN > 1 ? 's' : ''} · ${wtN * DOCS.length} streams`, wsN && `${wsN} WebSocket`].filter(Boolean).join(' + ') || 'no clients', ''];
+    }
+    if (c === 'via') return ['via tab 1 · no connection', ''];
+    if (c === 'down') return ['offline', 'bad'];
+    if (c === 'trying') return ['trying WebTransport…', 'warn'];
+    if (c === 'connecting') return ['connecting…', 'warn'];
+    if (t === 'ws-per-doc') return [`${DOCS.length} WebSockets`, ''];
+    if (t === 'ws-mux') return ['1 WebSocket (fallback)', 'warn'];
+    return [`WebTransport · ${DOCS.length} streams`, ''];
+  }
+
+  function drawNodes() {
+    const max = Object.fromEntries(DOCS.map(d => [d, Math.max(...['t1', 't2', 'ph', 'srv'].map(n => S.nodes[n].has[d].size))]));
+    for (const [n, e] of Object.entries(nodeEl)) {
+      const [label, cls] = transportLabel(n);
+      const tp = e.querySelector('[data-tp]'); tp.textContent = label; tp.className = `tp ${cls}`;
+      e.classList.toggle('offline', S.conn[n] === 'down');
+      e.classList.toggle('flash', S.flash[n] != null && S.now - S.flash[n] < 160);
+      const docs = e.querySelector('[data-docs]');
+      docs.replaceChildren(...DOCS.map(d => {
+        const s = document.createElement('span');
+        const size = S.nodes[n].has[d].size;
+        s.className = `doc${size < max[d] ? ' behind' : ''}`;
+        s.style.setProperty('--c', color[d]);
+        s.textContent = `${DOC_LABEL[d]} · ${size}`;
+        s.title = size < max[d] ? `${max[d] - size} update(s) behind` : 'up to date';
+        return s;
+      }));
+      const cur = e.querySelector('[data-cur]');
+      if (cur) {
+        const seen = S.cursorSeen[n];
+        cur.textContent = seen ? `sees ${NAME[seen.who].toLowerCase()}'s cursor · ${Math.round(S.now - seen.t)} ms old` : '';
+      }
+    }
+  }
+
+  function drawScore() {
+    const r = (S.scenario && results[S.scenario]) || {};
+    const other = knobs.mode === 'baseline' ? 'blueprint' : 'baseline';
+    const otherName = other === 'baseline' ? 'y-websocket' : 'blueprint';
+    const conns = knobs.mode === 'baseline' ? endpoints().length * DOCS.length : endpoints().length;
+    const cells = [
+      ['Connections at the server', `${conns}`, null],
+      ['Handshakes on (re)connect', `${S.m.handshakes}`, r[other] && `${r[other].handshakes}`],
+      ['Average edit, to everyone', fmt(avg(S.m)), r[other] && fmt(avg(r[other]))],
+      ['Edits stuck behind a lost packet', `${S.m.editsHeld}`, r[other] && `${r[other].editsHeld}`],
+      ['Slowest cursor', fmt(S.m.slowestCursor), r[other] && fmt(r[other].slowestCursor)],
+      ['Cursors dropped', `${S.m.cursorsLost} of ${S.m.cursorsSent}`, r[other] && `${r[other].cursorsLost} of ${r[other].cursorsSent}`],
+    ];
+    if (S.m.connectedIn != null || (r[other] && r[other].connectedIn != null)) cells.splice(2, 0, ['Back in sync after reconnect', fmt(S.m.connectedIn), r[other] && fmt(r[other].connectedIn)]);
+    $('#score').replaceChildren(...cells.map(([k, v, cmp]) => {
+      const d = document.createElement('div'); d.className = 'score';
+      d.innerHTML = `<span class="k"></span><span class="v"></span><span class="cmp"></span>`;
+      d.children[0].textContent = k; d.children[1].textContent = v;
+      d.children[2].textContent = cmp ? `${otherName}: ${cmp}` : ' ';
+      return d;
+    }));
+  }
+
+  function drawStatus() {
+    const max = Object.fromEntries(DOCS.map(d => [d, Math.max(...['t1', 't2', 'ph', 'srv'].map(n => S.nodes[n].has[d].size))]));
+    const behind = ['t1', 't2', 'ph'].filter(n => DOCS.some(d => S.nodes[n].has[d].size < max[d]));
+    const flying = S.packets.filter(p => S.now < p.t1 && p.fate === 'ok').length;
+    const st = $('#status');
+    const held = S.packets.filter(p => p.hold && S.now >= p.t1 && S.now < p.hold).length;
+    if (held) { st.textContent = `${held} packet${held > 1 ? 's' : ''} waiting behind a lost one`; st.className = 'status warn'; }
+    else if (behind.length) { st.textContent = `${behind.map(n => NAME[n]).join(', ')} behind`; st.className = 'status warn'; }
+    else if (flying) { st.textContent = `${flying} in flight`; st.className = 'status'; }
+    else { st.textContent = 'In sync'; st.className = 'status ok'; }
+    $('#explain').textContent = S.explain || 'Pick a scenario above. Dashed red rings mark packets that arrived but wait for an earlier lost one: head-of-line blocking.';
+    $('#log').replaceChildren(...S.log.map(l => { const li = document.createElement('li'); li.textContent = l; return li; }));
+    document.querySelectorAll('[data-run]').forEach(b => b.classList.toggle('running', b.dataset.run === S.scenario && !S.finished));
+  }
+
+  function render(full) {
+    if (full) { measure(); drawWires(); }
+    drawPackets(); drawNodes(); drawStatus(); drawScore();
+  }
+
+  let last = performance.now(), wiresKey = '';
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function frame(t) {
+    const dt = Math.min(64, t - last); last = t;
+    step(reduce ? dt * 3 : dt);
+    const key = JSON.stringify([knobs.mode, S.conn]);
+    render(key !== wiresKey); wiresKey = key;
+    requestAnimationFrame(frame);
+  }
+  new ResizeObserver(() => render(true)).observe(stage);
+  fresh();
+  log('Ready: all three devices hold the same docs');
+  render(true);
+  requestAnimationFrame(frame);
+})();
+</script>

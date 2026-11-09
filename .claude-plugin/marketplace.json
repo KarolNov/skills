@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "A collection of Claude Code skills by Karol Novljaković.",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "plugins": [
     {
@@ -26,6 +26,18 @@
       "strict": false,
       "skills": [
         "./skills/slack-nag"
+      ]
+    },
+    {
+      "name": "blueprint",
+      "description": "Architect larger changes from a solution you already have: a short solution-first grilling, a spec change with diagrams and optional interactive playgrounds, stored in Notion, Obsidian, Linear, Jira, GitHub or a notes folder, and two-way sync that keeps specs and code from drifting.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/blueprint-setup",
+        "./skills/blueprint",
+        "./skills/blueprint-drift",
+        "./skills/blueprint-sync"
       ]
     }
   ]
