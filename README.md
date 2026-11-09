@@ -66,10 +66,11 @@ brag builds launch videos as HTML compositions; these skills record the real app
 ### slack-nag
 
 Chase an answer in a Slack thread without doing the chasing yourself. Give it a thread link,
-what you're waiting on, and a backoff (default `1 3 5 14` days); it drafts a schedule of
-light, gently escalating nudges and, after you approve them, schedules one task per nudge.
-Each task reads the thread first and stays quiet once someone has answered, then offers to
-delete the rest.
+what you're waiting on, and a backoff (default `1 3 5 14`: four nudges, the first a day
+from now, each later one that many days after the last); it drafts a schedule of light,
+gently escalating nudges and, after you approve them, schedules one task per nudge.
+Each task reads the thread first and stays quiet once someone has answered, then deletes
+the rest of the series.
 
 | Skill | What it does |
 | ----- | ------------ |
