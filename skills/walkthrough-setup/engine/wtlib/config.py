@@ -4,6 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import urljoin
 
 HOME = Path(os.environ.get("WALKTHROUGH_HOME", "~/.walkthrough")).expanduser()
 ENGINE_DIR = Path(__file__).resolve().parent.parent
@@ -79,21 +80,29 @@ def load_app(name):
     return json.loads(path.read_text())
 
 
-_VAR = re.compile(r"\$\{(\w+)\}|\$(\w+)")
+_VAR = re.compile(r"\$\$|\$\{(\w+)\}|\$(\w+)")
 
 
 def expand(value):
-    """Replace $VAR / ${VAR} with values from the environment (.env included)."""
+    """Replace $VAR / ${VAR} with values from the environment (.env included); $$ is a literal $."""
     if not isinstance(value, str):
         return value
 
     def sub(match):
+        if match.group(0) == "$$":
+            return "$"
         key = match.group(1) or match.group(2)
         if key not in os.environ:
             raise WalkthroughError(f"${key} is not set. Add it to {HOME / '.env'}.")
         return os.environ[key]
 
     return _VAR.sub(sub, value)
+
+
+def resolve_url(base_url, path):
+    """An absolute URL as is, or a path joined onto the app's base URL; $VAR expanded."""
+    path = expand(path)
+    return path if "://" in path else urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
 
 
 def write_private(path, text):

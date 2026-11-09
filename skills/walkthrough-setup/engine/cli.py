@@ -36,6 +36,21 @@ def narration_lines(spec):
     return [(s["id"], s["say"].strip()) for s in spec["steps"] if s.get("say", "").strip()]
 
 
+def cached_durations(spec, manifest_path):
+    """Narration lengths from the last `wt tts`, for lines whose text still matches the spec."""
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    durations, stale = {}, []
+    for step_id, text in narration_lines(spec):
+        entry = manifest.get(step_id)
+        if entry and entry.get("text") == text:
+            durations[step_id] = entry["duration"]
+        else:
+            stale.append(step_id)
+    if stale:
+        print(f"  no current narration for {', '.join(stale)}; recording them silent (run `wt tts` first)")
+    return durations
+
+
 # -- commands ----------------------------------------------------------------
 
 
@@ -177,8 +192,7 @@ def cmd_record(args, durations=None):
     spec = load_spec(args.spec)
     out = Path(args.out) if args.out else default_out(args.spec)
     if durations is None:
-        manifest = out / "narration" / "manifest.json"
-        durations = {k: v["duration"] for k, v in json.loads(manifest.read_text()).items()} if manifest.exists() else {}
+        durations = cached_durations(spec, out / "narration" / "manifest.json")
     timeline = record(spec, spec_app(spec), out, durations, cfgmod.load_config()["video"], headed=args.headed, login_fn=login)
     print(f"Recorded {timeline['end']:.1f}s to {out / 'raw.webm'}")
 
@@ -237,16 +251,19 @@ def main():
     validate.add_argument("spec")
     validate.set_defaults(func=cmd_validate)
 
+    def rendering_options(p):
+        p.add_argument("--music", help="optional background music file")
+        p.add_argument("--music-volume", type=float, default=0.12)
+        p.add_argument("--burn-subtitles", action="store_true")
+        p.add_argument("--poster-at", type=float, help="poster frame time in seconds")
+
     def common(p, recording=False, rendering=False):
         p.add_argument("spec", help="walkthrough spec JSON")
         p.add_argument("--out", help="output directory (default: the spec's directory)")
         if recording:
             p.add_argument("--headed", action="store_true", help="show the browser while recording")
         if rendering:
-            p.add_argument("--music", help="optional background music file")
-            p.add_argument("--music-volume", type=float, default=0.12)
-            p.add_argument("--burn-subtitles", action="store_true")
-            p.add_argument("--poster-at", type=float, help="poster frame time in seconds")
+            rendering_options(p)
 
     tts = sub.add_parser("tts", help="generate narration clips")
     common(tts)
@@ -259,10 +276,7 @@ def main():
 
     ren = sub.add_parser("render", help="mix narration and write walkthrough.mp4")
     ren.add_argument("--out", required=True)
-    ren.add_argument("--music")
-    ren.add_argument("--music-volume", type=float, default=0.12)
-    ren.add_argument("--burn-subtitles", action="store_true")
-    ren.add_argument("--poster-at", type=float)
+    rendering_options(ren)
     ren.set_defaults(func=cmd_render)
 
     run = sub.add_parser("run", help="tts + record + render")

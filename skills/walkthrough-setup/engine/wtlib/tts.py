@@ -9,14 +9,7 @@ import urllib.request
 from pathlib import Path
 
 from .config import WalkthroughError, expand
-
-
-def audio_duration(path):
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, check=True,
-    )
-    return float(out.stdout.strip())
+from .render import media_duration
 
 
 def split_sentences(text, max_chars=280):
@@ -168,7 +161,7 @@ def synthesize_lines(lines, out_dir, tts_cfg, provider=None):
             voice = make_voice(tts_cfg, provider)
         print(f"  narrating {line_id} ({len(text)} chars)")
         voice.render(text, wav)
-        durations[line_id] = audio_duration(wav)
+        durations[line_id] = media_duration(wav)
         manifest[line_id] = {"key": key, "duration": durations[line_id], "text": text}
         manifest_path.write_text(json.dumps(manifest, indent=2))
     return durations

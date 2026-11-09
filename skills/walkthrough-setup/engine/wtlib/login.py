@@ -2,9 +2,7 @@
 
 import json
 import time
-from urllib.parse import urljoin
-
-from .config import WalkthroughError, auth_state_path, expand, write_private
+from .config import WalkthroughError, auth_state_path, expand, resolve_url, write_private
 
 
 def _storage_state(context):
@@ -20,22 +18,37 @@ def _save(app, state):
     print(f"Saved session to {path}")
 
 
+def _logged_in(context, check):
+    return any(page.locator(check).first.is_visible() for page in context.pages)
+
+
 def login_manual(app, channel=None):
-    """Open a real browser window; the user logs in and closes it, and we keep the session."""
+    """Open a real browser window; the user logs in, and we keep the session.
+
+    With a logged_in_check the window closes by itself once it is visible. Without one, the
+    user closes it and the last snapshot taken while it was open is kept.
+    """
     from playwright.sync_api import sync_playwright
 
-    url = urljoin(app["base_url"].rstrip("/") + "/", app.get("login_url", "/").lstrip("/"))
+    check = app.get("logged_in_check")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False, channel=channel or app.get("browser_channel"))
         context = browser.new_context(no_viewport=True)
         page = context.new_page()
-        page.goto(url)
-        print(f"Log in to {app['name']} in the browser window, then close the window.")
+        page.goto(resolve_url(app["base_url"], app.get("login_url", "/")))
+        if check:
+            print(f"Log in to {app['name']} in the browser window; it closes by itself once you're in.")
+        else:
+            print(f"Log in to {app['name']} in the browser window, wait for the app to load, then close the window.")
         state = None
         try:
             while browser.is_connected() and context.pages:
+                if check and _logged_in(context, check):
+                    time.sleep(1.5)  # let post-login requests set their cookies
+                    state = _storage_state(context)
+                    break
                 state = _storage_state(context)
-                time.sleep(1)
+                time.sleep(0.5)
         except KeyboardInterrupt:
             pass
         except Exception:
@@ -49,19 +62,18 @@ def login_manual(app, channel=None):
     _save(app, state)
 
 
-def login_credentials(app, headed=False):
+def login_credentials(app, headed=False, channel=None):
     """Log in headlessly using the app's login steps and credentials from ~/.walkthrough/.env."""
     from playwright.sync_api import sync_playwright
 
     steps = app.get("login_steps")
     if not steps:
         raise WalkthroughError(f"App '{app['name']}' has auth=credentials but no login_steps.")
-    url = urljoin(app["base_url"].rstrip("/") + "/", app.get("login_url", "/").lstrip("/"))
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=not headed, channel=app.get("browser_channel"))
+        browser = p.chromium.launch(headless=not headed, channel=channel or app.get("browser_channel"))
         context = browser.new_context()
         page = context.new_page()
-        page.goto(url, wait_until="domcontentloaded")
+        page.goto(resolve_url(app["base_url"], app.get("login_url", "/")), wait_until="domcontentloaded")
         for step in steps:
             kind = step["do"]
             if kind == "fill":
@@ -75,7 +87,7 @@ def login_credentials(app, headed=False):
             elif kind == "wait_for":
                 page.locator(step["target"]).first.wait_for(state="visible", timeout=30000)
             elif kind == "goto":
-                page.goto(urljoin(app["base_url"].rstrip("/") + "/", step["url"].lstrip("/")))
+                page.goto(resolve_url(app["base_url"], step["url"]))
             else:
                 raise WalkthroughError(f"Unknown login step {kind!r}")
         page.wait_for_load_state("networkidle")
@@ -85,7 +97,7 @@ def login_credentials(app, headed=False):
 
 def login(app, channel=None, headed=False):
     if app.get("auth") == "credentials":
-        login_credentials(app, headed=headed)
+        login_credentials(app, headed=headed, channel=channel)
     elif app.get("auth") == "storage-state":
         login_manual(app, channel=channel)
     else:

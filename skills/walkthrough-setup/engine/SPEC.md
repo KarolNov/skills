@@ -73,6 +73,7 @@ actions shorter than its narration, or the voice falls silent while the screen k
 
 The first visible match is used, scrolled into view if needed. Values in `text`, `url` and
 `target` can use `$VAR` from `~/.walkthrough/.env`, so credentials never live in the spec.
+Write `$$` for a literal dollar sign (`"echo $$HOME"` types `echo $HOME`).
 
 ## Actions
 
@@ -119,7 +120,9 @@ for places with no caption support (Slack, X, LinkedIn autoplay). Burned caption
 by the headless browser, so they work with any ffmpeg build.
 
 Outputs: `walkthrough.mp4`, `walkthrough.srt`, `poster.jpg`, `raw.webm`, `timeline.json`,
-`narration/*.wav`, and `chapters.txt` when steps set `chapter`. On failure, `failure.png` shows the page at the moment it broke.
+`narration/*.wav`, and `chapters.txt` when steps set `chapter`. On failure, `failure.png` shows the page at the moment it broke
+and the partial recording goes to `failed.webm`, leaving the last good `raw.webm` and `timeline.json` in place.
+`wt record` on its own uses narration timings only for lines whose text matches the last `wt tts`.
 
 ## Debugging selectors
 

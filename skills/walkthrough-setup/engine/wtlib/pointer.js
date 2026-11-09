@@ -1,8 +1,9 @@
 // Walkthrough overlay: an animated dot standing in for the cursor, plus click
 // ripples, element highlights and a step label. Injected into every page as an
-// init script; the recorder drives it through window.__wt.
+// init script; the recorder drives it through window.__wt. Init scripts also run in
+// iframes, which would each get a stray dot, so only the top frame mounts it.
 (() => {
-  if (window.__wt) return;
+  if (window.__wt || window !== window.top) return;
   const COLOR = "__WT_COLOR__";
   const KEY = "__wt_pos";
   const pos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };

@@ -108,9 +108,9 @@ automated browsers) are in [references/auth.md](references/auth.md).
 an expired session instead of recording a login page. A good pick is the avatar or
 account menu, e.g. `[data-testid=user-menu]` or `role=button[name='Account']`.
 
-For `storage-state`, `wt login` opens a browser window and waits. Tell the user to log in,
-wait until the app has loaded, then **close the window**. The session is saved when the
-window closes.
+For `storage-state`, `wt login` opens a browser window and waits. Tell the user to log in.
+With `--logged-in-check` the window closes by itself once they're in; without it, they wait
+until the app has loaded, then **close the window**, and the session is saved.
 
 For `credentials`: `wt app add` writes template `login_steps` into
 `~/.walkthrough/apps/<name>.json` and names the `.env` variables. Fix the selectors to match

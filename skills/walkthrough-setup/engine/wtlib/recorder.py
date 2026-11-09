@@ -5,9 +5,7 @@ import math
 import shutil
 import time
 from pathlib import Path
-from urllib.parse import urljoin
-
-from .config import WalkthroughError, auth_state_path, expand
+from .config import WalkthroughError, auth_state_path, expand, resolve_url
 
 POINTER_JS = (Path(__file__).parent / "pointer.js").read_text()
 
@@ -38,6 +36,8 @@ def validate_spec(spec):
     problems = []
     if not spec.get("app"):
         problems.append("missing 'app' (registered app name, or 'none' with an absolute start_url)")
+    if spec.get("app") == "none" and "://" not in str(spec.get("start_url", "")):
+        problems.append("app 'none' needs an absolute 'start_url' (https://...)")
     steps = spec.get("steps")
     if not steps:
         problems.append("missing 'steps'")
@@ -79,8 +79,7 @@ class Recorder:
     # -- helpers -----------------------------------------------------------
 
     def url(self, path):
-        path = expand(path)
-        return path if "://" in path else urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
+        return resolve_url(self.base_url, path)
 
     def locate(self, target, timeout=15000):
         locator = self.page.locator(expand(target)).first
@@ -286,8 +285,36 @@ def check_logged_in(page, app):
         return False
 
 
+class SessionExpired(WalkthroughError):
+    pass
+
+
+def _describe(error):
+    text = str(error).strip()
+    return text.splitlines()[0] if text else type(error).__name__
+
+
 def record(spec, app, out_dir, durations, video_cfg, headed=False, login_fn=None):
-    """Run the spec and write raw.webm + timeline.json into out_dir."""
+    """Run the spec and write raw.webm + timeline.json into out_dir.
+
+    Credential-based apps are logged in again (once) when the saved session is missing or expired.
+    """
+    relogin = bool(app and app.get("auth") == "credentials" and login_fn)
+    if app and app.get("auth", "none") != "none" and not auth_state_path(app["name"]).exists():
+        if not relogin:
+            raise WalkthroughError(f"No saved session for '{app['name']}'. Run `wt login {app['name']}` first.")
+        login_fn(app)
+    try:
+        return _record(spec, app, out_dir, durations, video_cfg, headed)
+    except SessionExpired:
+        if not relogin:
+            raise
+        print(f"  session for '{app['name']}' expired; logging in again")
+        login_fn(app)
+        return _record(spec, app, out_dir, durations, video_cfg, headed)
+
+
+def _record(spec, app, out_dir, durations, video_cfg, headed):
     from playwright.sync_api import sync_playwright
 
     out_dir = Path(out_dir)
@@ -300,13 +327,7 @@ def record(spec, app, out_dir, durations, video_cfg, headed=False, login_fn=None
     base_url = app.get("base_url", "") if app else ""
     storage_state = None
     if app and app.get("auth", "none") != "none":
-        state_path = auth_state_path(app["name"])
-        if not state_path.exists():
-            if app["auth"] == "credentials" and login_fn:
-                login_fn(app)
-            else:
-                raise WalkthroughError(f"No saved session for '{app['name']}'. Run `wt login {app['name']}` first.")
-        storage_state = str(state_path)
+        storage_state = str(auth_state_path(app["name"]))
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not headed, channel=app.get("browser_channel") if app else None)
@@ -322,27 +343,28 @@ def record(spec, app, out_dir, durations, video_cfg, headed=False, login_fn=None
         page = context.new_page()
         page_created = time.monotonic()
         rec = Recorder(page, base_url, video_cfg)
+        timeline = {"steps": []}
+        origin = page_created
+        where, finished = "opening start_url", False
 
-        start_url = spec.get("start_url", "/")
-        page.goto(rec.url(start_url), wait_until="domcontentloaded")
-        rec.settle()
-        if app and not check_logged_in(page, app):
-            context.close()
-            browser.close()
-            raise WalkthroughError(
-                f"Session for '{app['name']}' looks expired (logged_in_check not visible). Run `wt login {app['name']}`."
-            )
-        for action in spec.get("setup", []):
-            rec.run_action(action)
-        page.mouse.move(*rec.pos)
-        rec.restore_overlay()
-        time.sleep(spec.get("lead_in", 0.6))
-
-        origin = time.monotonic()
-        # Playwright starts writing frames some time after the page exists, so the real
-        # offset is computed at render time from the video length and closed_at.
-        timeline = {"video_offset_estimate": origin - page_created, "steps": []}
         try:
+            page.goto(rec.url(spec.get("start_url", "/")), wait_until="domcontentloaded")
+            rec.settle()
+            if app and not check_logged_in(page, app):
+                raise SessionExpired(
+                    f"Session for '{app['name']}' looks expired (logged_in_check not visible). Run `wt login {app['name']}`."
+                )
+            for n, action in enumerate(spec.get("setup", [])):
+                where = f"setup action {n} ({action['do']} {_what(action)})"
+                rec.run_action(action)
+            page.mouse.move(*rec.pos)
+            rec.restore_overlay()
+            time.sleep(spec.get("lead_in", 0.6))
+
+            origin = time.monotonic()
+            # Playwright starts writing frames some time after the page exists, so the real
+            # offset is computed at render time from the video length and closed_at.
+            timeline["video_offset_estimate"] = origin - page_created
             for step in spec["steps"]:
                 start = time.monotonic() - origin
                 print(f"  step {step['id']} @ {start:5.1f}s")
@@ -351,17 +373,8 @@ def record(spec, app, out_dir, durations, video_cfg, headed=False, login_fn=None
                     rec.restore_overlay()
                 time.sleep(step.get("delay", 0))
                 for n, action in enumerate(step.get("actions", [])):
-                    try:
-                        rec.run_action(action)
-                    except WalkthroughError:
-                        raise
-                    except Exception as e:
-                        detail = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
-                        what = action.get("target") or action.get("url") or action.get("key") or ""
-                        raise WalkthroughError(
-                            f"step '{step['id']}' action {n} ({action['do']} {what}) failed: {detail}\n"
-                            f"Page at failure: {out_dir / 'failure.png'}"
-                        ) from e
+                    where = f"step '{step['id']}' action {n} ({action['do']} {_what(action)})"
+                    rec.run_action(action)
                 narration = durations.get(step["id"], 0.0)
                 say_offset = step.get("say_offset", 0.0)
                 floor = say_offset + narration + step.get("hold", default_hold)
@@ -380,21 +393,34 @@ def record(spec, app, out_dir, durations, video_cfg, headed=False, login_fn=None
                 })
             time.sleep(spec.get("tail", 1.0))
             timeline["end"] = time.monotonic() - origin
-        except Exception:
-            page.screenshot(path=str(out_dir / "failure.png"))
-            raise
+            finished = True
+        except Exception as e:
+            try:
+                page.screenshot(path=str(out_dir / "failure.png"))
+            except Exception:
+                pass
+            if isinstance(e, WalkthroughError):
+                raise
+            raise WalkthroughError(
+                f"{where} failed: {_describe(e)}\nPage at failure: {out_dir / 'failure.png'}"
+            ) from e
         finally:
             video = page.video
             timeline["closed_at"] = time.monotonic() - origin
             context.close()
             browser.close()
             if video:
-                raw = out_dir / "raw.webm"
-                shutil.move(video.path(), raw)
+                # A failed run keeps its partial video apart, so the last good raw.webm and
+                # timeline.json still render together.
+                shutil.move(video.path(), out_dir / ("raw.webm" if finished else "failed.webm"))
             shutil.rmtree(tmp_video, ignore_errors=True)
 
     (out_dir / "timeline.json").write_text(json.dumps(timeline, indent=2))
     return timeline
+
+
+def _what(action):
+    return action.get("target") or action.get("url") or action.get("key") or ""
 
 
 def inspect(app, url, out_dir, video_cfg, full_page=False):

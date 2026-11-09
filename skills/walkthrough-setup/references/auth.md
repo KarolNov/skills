@@ -7,9 +7,10 @@ to produce it.
 ## Saved session (`--auth storage-state`)
 
 `wt login <app>` opens a real Chromium window at the login page. The user logs in any way
-they like (SSO, 2FA, magic link), waits for the app to load, and closes the window. The
-session is snapshotted every second while the window is open, so closing the window is
-the "done" signal.
+they like (SSO, 2FA, magic link). With a `logged_in_check`, the window closes by itself
+once that element shows up, and the session is saved then. Without one, the user waits for
+the app to load and closes the window; the session is snapshotted every half second while
+the window is open, so closing it too quickly can save a half-finished login.
 
 - Sessions expire on the app's schedule. Symptom: a recording of the login page, or the
   error "Session ... looks expired" when `logged_in_check` is set. Fix: `wt login <app>`.
