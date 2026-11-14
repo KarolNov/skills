@@ -22,6 +22,8 @@ The location comes from `blueprint-setup`: usually a new subpage of the repo's o
 - **Blueprints** database under the root:
   `CREATE TABLE ("Change" TITLE, "Status" STATUS('Draft':gray:to_do, 'Approved':blue:to_do, 'Building':yellow:in_progress, 'Applied':green:complete, 'Abandoned':red:complete), "Capabilities" RELATION('<specs data source>', DUAL 'Blueprints'), "Brief" URL, "Tickets" URL, "Branch" RICH_TEXT, "PR" URL, "Last edited" LAST_EDITED_TIME)`
 
+If tickets go to a new Notion `Tasks` database, it is created under the same root; its schema is in [../tickets.md](../tickets.md).
+
 Never put them in a private draft or at the workspace root: they belong next to where the team tracks the project. Never add rows or properties to the team's existing databases from here.
 
 Fetch each database once after creating it and record its `collection://` URL in `location`.
@@ -33,13 +35,26 @@ Fetch each database once after creating it and record its `collection://` URL in
 - **Tasks** are Notion to-dos in the brief (`- [ ] 1. …`), each linking its ticket ([../tickets.md](../tickets.md)). Notion escapes the number on save, so the page reads back as `- [ ] 1\. …`: tick a task with `update_content`, replacing `- [ ] <n>\.` with `- [x] <n>\.`, copied from a fresh fetch.
 - **Rewrite a spec**: `update_content` per changed requirement block when the edit is local; `replace_content` for a full merge.
 
+## Writing
+
+The connector rewrites some content on save. Write so the rewrite can't change meaning, and normalize everything you read back:
+
+- **Dotted identifiers** in prose (`Y.Map`, `auth.session`, `package.json`) are auto-linked to `http://Y.Map` and the like. Always wrap them in backticks; code is never linked.
+- **Numbered task lines** come back escaped (`1\.`).
+- **Inline formatting** comes back as HTML: backticks as `<code>`, bold as `<b>`, italics as `<i>`.
+
 ## Version marker
 
-For specs and briefs: the SHA-256 of the page body, normalized as in "Reading back as Markdown" below, first 16 hex characters. Not the last-edited time: Notion rounds it to the minute, so a teammate's edit in the same minute as your write would not show. Fetch the page **after the last write** of a sync and hash that.
+For specs and briefs: the SHA-256 of the page body, normalized as below, first 16 hex characters. Not the last-edited time: Notion rounds it to the minute, so a teammate's edit in the same minute as your write would not show. Fetch the page **after the last write** of a sync and take the marker from that read-back, never from the local draft.
 
 ## Reading back as Markdown
 
-Fetch returns Notion-flavored Markdown. Before saving a baseline or diffing, normalize it: turn `<b>`/`<code>` back into `**`/backticks, unescape `\.`, drop Notion-only wrappers (colors, mention tags rendered as their plain title), and keep the heading structure intact. Baseline and current text must go through the same normalization, so diffs show content changes only.
+Normalize with the skill's script, never by hand, so baselines and markers always match:
+
+1. Save the fetch result to a file: if the tool result was saved to a file because it was large, use that path; otherwise write the fetch output verbatim with the Write tool to the scratchpad.
+2. `python3 <blueprint skill>/scripts/notion_normalize.py <file>` prints the normalized Markdown (save it as the baseline); add `--marker` for the version marker.
+
+It takes the body between `<content>` tags, turns `<b>`/`<code>`/`<i>` back into Markdown, unescapes `\.` and the like, undoes the auto-links above, and drops colors and mention wrappers, leaving code blocks untouched.
 
 ## Comments
 

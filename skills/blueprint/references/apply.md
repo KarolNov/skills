@@ -7,6 +7,7 @@ Build an approved blueprint, then fold its spec delta into the capability specs,
 - **Pick the change**: the one named in the arguments; otherwise the only change in `blueprint.json` with status `approved` or `building`; otherwise list them and ask.
 - Fetch the brief; the review is not needed to build. Read the state of its tickets and tick any task whose ticket was closed by hand, so you resume where the team actually is. Check the review for comments or edits people left since it was built and put each to the user as a proposed change to the brief before building. If the brief has **Open questions**, settle them with the user first (same round format as [propose.md](propose.md)) and update the brief.
 - Run `python3 .blueprint/drift.py check <capabilities it touches>` and compare each touched spec's version marker. If a touched capability has drifted, its MODIFIED blocks may rest on stale text: settle it first with `blueprint-drift` (its spec moved, or its code broke the spec) or `blueprint-sync` (its code moved on purpose), then recheck the delta.
+- If `blueprint.json` has `targetRepo`, the repo doesn't exist yet: the first task creates it. Build that task, then move the pending `.blueprint/` folder into the new repo (copy `drift.py` from this skill's `scripts/` into it), drop `targetRepo`, and commit it with the task. From then on work in the new repo.
 - If the session sits on the default branch, create a branch for the change. Set the brief's status to `building` and record the branch in `blueprint.json` and on the brief.
 
 ## 2. Build, one task at a time
@@ -29,7 +30,7 @@ When every task but the last is ticked, check each requirement and scenario in t
 | --- | --- | --- |
 | `<name>` | `<test name or file:line>` | covered / missing / contradicts |
 
-Fix what is missing or contradicts (or amend the brief, with the user's yes, if the code is right and the delta is not). Also run `python3 .blueprint/drift.py unanchored --since <baseCommit>` and propose anchors for any changed file that implements behavior but belongs to no capability.
+Fix what is missing or contradicts (or amend the brief, with the user's yes, if the code is right and the delta is not). Also run `python3 .blueprint/drift.py unanchored --since <baseCommit>` (when the change has a `baseRepo`, `baseCommit` isn't in this repo and the whole repo is new: run it without `--since`) and propose anchors for any changed file that implements behavior but belongs to no capability.
 
 ## 4. Fold the delta into the specs
 

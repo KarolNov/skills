@@ -36,13 +36,17 @@ Rules for every tracker:
 
 ## `notion`
 
-An existing tasks database the team already uses (found in the survey), not a new one.
+Either an existing tasks database the team already uses (found in the survey), or a new `Tasks` database for blueprints, when the team has none or the user asks for one. Record its `collection://` data source as `tickets.location.tasks`.
 
-**Set up**: read the database's schema: the title property, the status property and its "complete" group, and any project or relation property. A `Blueprint` relation from tasks to the Blueprints database makes each blueprint show its tickets, but adding it changes the team's database: propose it and add it only on a yes. Without it, tasks link the review in their body.
+**Set up, existing database**: read the database's schema: the title property, the status property and its "complete" group, and any project or relation property. A `Blueprint` relation from tasks to the Blueprints database makes each blueprint show its tickets, but adding it changes the team's database: propose it and add it only on a yes. Without it, tasks link the review in their body.
 
-**Create**: one row per task, title = the task, status = the first "to do" option, and the relation or project properties the database uses.
+**Set up, new database**: create it under the `Specs & blueprints` root, beside Specs and Blueprints, after the docs databases exist:
+`CREATE TABLE ("Task" TITLE, "Status" STATUS('To do':gray:to_do, 'In progress':blue:in_progress, 'Done':green:complete), "Blueprint" RELATION('<blueprints data source>', DUAL 'Tasks'), "Order" NUMBER, "PR" URL)`
+Add a board view grouped by Status if the user wants one. Each blueprint row then lists its tasks through the `Tasks` relation, and the docs side's tickets link is the Blueprint row itself.
 
-**Done**: set the status to the first option of its "complete" group.
+**Create**: one row per task, title = the task, status = the first "to do" option, `Order` = the task number (new database), and the relation or project properties the database uses.
+
+**Done**: set the status to the first option of its "complete" group, and fill `PR` when there is one.
 
 ## `none`
 

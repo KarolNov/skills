@@ -45,6 +45,7 @@ Each change has two documents that sit side by side in the backend and link to e
 - Capabilities: <capability names this touches, linked>
 - Review: <link to the review>
 - Branch / PR: <filled in by apply>
+- Target repo: <only when this change creates the repo: its name, and the pending setup folder>
 
 ## Destination
 <one or two lines: what is true when this is done>
@@ -143,6 +144,7 @@ Each change has two documents that sit side by side in the backend and link to e
     "conventions": { "label": "blueprint", "areaLabels": ["transport", "persistence"] }
   },
   "project": "<URL of the existing project page, row or project these specs belong to, if any>",
+  "targetRepo": "<only while this repo doesn't exist yet: its intended name or URL>",
   "specs": {
     "auth/session": {
       "ref": "<page URL or path>",
@@ -160,6 +162,7 @@ Each change has two documents that sit side by side in the backend and link to e
       "tickets": "<link to this change's tickets, e.g. a filtered issue list>",
       "status": "building",
       "baseCommit": "<HEAD when the blueprint was approved>",
+      "baseRepo": "<only when baseCommit is in another repo, e.g. owner/source-repo>",
       "branch": "kn/add-sso-login"
     }
   }
@@ -167,5 +170,7 @@ Each change has two documents that sit side by side in the backend and link to e
 ```
 
 - **anchors** are git-style globs relative to the repo root. A bare directory covers everything under it; `!` excludes. Leave tests out of anchors unless the tests themselves are the contract.
+- **targetRepo** (top level, optional) is set only while the repo this file describes doesn't exist yet: its intended name or URL. The file then lives in the pending folder `blueprint-setup` names, and `apply` moves it into the new repo and drops the key.
+- **baseRepo** is set when `baseCommit` belongs to another repo (a change that creates this repo from another one's code). Without it, `baseCommit` is a commit of this repo.
 - **specVersion** is whatever the backend offers as a cheap "has this page changed" marker (see the backend file). When it differs from the backend's current marker, the spec moved.
 - `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp`; never edit them by hand. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.

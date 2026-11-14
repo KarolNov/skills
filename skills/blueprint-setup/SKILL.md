@@ -17,6 +17,15 @@ Connect this repo to the places its team already works. Setup decides three thin
 
 Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`.
 
+## Target repo doesn't exist yet
+
+Some changes create the repo they target (extracting packages into a new library, a new service). Then there is no repo to write `.blueprint/` into, and this setup runs in pending mode:
+
+- Survey and decide docs, tickets and project as usual (steps 1 to 3), from the repo the code comes from and the user's plans for the new one.
+- Skip the capability map (step 4) and seeding (step 5): the new repo's capabilities are the blueprint's new capabilities, added when it is proposed.
+- Write `blueprint.json` and `baseline/` to the pending folder `~/.blueprint/pending/<new repo name>/`, with `targetRepo` set to the new repo's intended name or URL, and say so in the brief's header (`- Target repo: <name>, created by task 1; setup pending in <folder>`). No `drift.py` and no `README.md` yet.
+- The first task of the blueprint creates the repo; `apply` then moves the pending folder in as `.blueprint/` ([../blueprint/references/apply.md](../blueprint/references/apply.md)).
+
 ## 1. Survey what exists
 
 Read only; create nothing yet. Gather in parallel:
@@ -32,7 +41,7 @@ Summarize in a few lines: where projects are tracked, where tickets are tracked,
 Ask in one round, each with your recommendation drawn from the survey (format as in [../blueprint/references/propose.md](../blueprint/references/propose.md) step 2):
 
 1. **Docs backend and location**. Recommend the tool where projects are already tracked, and a new subpage of this repo's own project page or row there (e.g. a `Specs & blueprints` page under the repo's row), holding the backend's databases or folders. Choose from the backends in [../blueprint/references/backends/](../blueprint/references/backends/notion.md): `notion`, `obsidian`, `markdown`, `linear`, `jira`, `github`.
-2. **Tickets**. Recommend the tracker the repo's tickets already live in, from [../blueprint/references/tickets.md](../blueprint/references/tickets.md): `github`, `linear`, `jira`, `notion` (an existing tasks database), or `none` (tasks stay as checkboxes in the brief). Docs and tickets may live in different tools.
+2. **Tickets**. Recommend the tracker the repo's tickets already live in, from [../blueprint/references/tickets.md](../blueprint/references/tickets.md): `github`, `linear`, `jira`, `notion` (an existing tasks database, or a new `Tasks` database under the specs root when the team has none or the user asks for one), or `none` (tasks stay as checkboxes in the brief). Docs and tickets may live in different tools.
 3. **Project link**. The URL of the existing project page, row or project, recorded so blueprints can point back to it.
 
 Leave what the team already has untouched: existing databases keep their schema, rows and views, and new structure goes beside them, never inside them, unless the user asks for that. If the user names a place in the arguments or their answer, that wins.
