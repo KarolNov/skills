@@ -20,7 +20,9 @@ Pick by the first word of the arguments, then read that mode's file and follow i
 | a description of a change, or nothing | Grill the solution and write the blueprint | [references/propose.md](references/propose.md) |
 | `apply [change]` | Build a blueprint, then fold it into the capability specs | [references/apply.md](references/apply.md) |
 
-If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here (it can't be started with the Skill tool), and come back to the request when it is done.
+If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here (it can't be started with the Skill tool), and come back to the request when it is done. If the change creates a new repo, or one already pending in `~/.blueprint/pending/` matches it, use that folder's `blueprint.json` (setup's "Target repo doesn't exist yet").
+
+When setup and propose run together, don't ask twice: put setup's questions (docs, tickets, project) in the same round as propose's playback, and survey for both at once. Its writes still wait for the user's yes.
 
 ## The pieces
 

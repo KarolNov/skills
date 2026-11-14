@@ -53,7 +53,7 @@ Two escapes from the round, both only when needed:
 
 ## 3. Draft the blueprint
 
-Write the brief in the format from [formats.md](formats.md), in the conversation, not yet in the backend:
+Write the brief in the format from [formats.md](formats.md), not yet in the backend:
 
 - **Spec delta** per capability touched. MODIFIED blocks copy the current requirement from the capability spec whole, then edit it. A new capability gets a full spec (Purpose plus ADDED) and proposed anchors. A mapped capability with `"ref": null` is not new: its code already behaves somehow, so draft its spec from the code first (as `blueprint-sync` does for a capability with no spec), show that draft with the brief, and write the delta against it.
 - **Code map**: the files and modules the build will work in, from the facts you gathered in step 1.
@@ -62,7 +62,12 @@ Write the brief in the format from [formats.md](formats.md), in the conversation
 
 Then draw the review's picture: the diagrams from [visuals.md](visuals.md), chosen by the shape of the change. If the change is about behavior over time, offer a playground in one line ("want a playground where you can run *two writes at once* before and after?") and build it on a yes.
 
-Show the picture first, then the brief, so the user reviews the shape before the details. Iterate until the user approves the brief ("approved", "go", "yes, write it"); changes go into the brief and the picture follows.
+Show the picture first, then the brief, so the user reviews the shape before the details:
+
+- **Short brief** (up to about 6,000 characters): the whole brief in the conversation.
+- **Long brief**: a wall of text in chat goes unread. Write the draft to `<change id>.brief.md` in the session's working folder (or the scratchpad, giving its full path) so the user opens it in an editor, and show inline only the picture, the Decisions, the Tasks, and one line per spec delta block (`auth/session · MODIFIED · Session lookup`). Keep editing that file as the draft; it is what step 4 writes.
+
+Iterate until the user approves the brief ("approved", "go", "yes, write it"); changes go into the brief and the picture follows.
 
 ## 4. Write it
 
@@ -72,7 +77,7 @@ On approval:
 2. Put the playground in the backend if there is one ([visuals.md](visuals.md), "Where it goes"), and render the diagrams to images if the backend needs them.
 3. Build the review from the brief (format in [formats.md](formats.md)) next to it, linking the brief and the playground, and add the review's link to the brief. Read the review back to check the diagrams render.
 4. Create the tickets, one per task, as [tickets.md](tickets.md) says for the configured tracker, after listing them for the user; link each from its task line in the brief and set the docs side's tickets link. Skip this for `none`.
-5. Add the change to `blueprint.json` under `changes` with its `brief`, `review` and `playground` links, `status: approved`, and `baseCommit` set to the current `HEAD`.
+5. Add the change to `blueprint.json` under `changes` with its `brief`, `review` and `playground` links, `status: approved`, and `baseCommit` set to the current `HEAD`. When the change targets a repo that doesn't exist yet (see `blueprint-setup`, "Target repo doesn't exist yet"), `baseCommit` is the source repo's `HEAD` and `baseRepo` names that repo.
 6. For each new capability, add it to `specs` with its anchors and `"ref": null`; its spec page is created when the blueprint is applied.
 
 The capability specs themselves are **not** edited now: the delta lives on the brief until the code exists. That is what keeps specs describing the system as built.
