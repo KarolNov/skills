@@ -36,8 +36,20 @@ export type BlueprintUiBlock =
 
 /** The open page as last read. */
 export type BlueprintUiDoc =
-  | { page: string; status: 'loading' }
-  | { page: string; status: 'ready'; blocks: BlueprintUiBlock[]; readAt: string }
+  | {
+      page: string
+      status: 'loading'
+      /** No Notion server answered yet: the session may still be connecting it, so the read is retried. */
+      isWaiting?: boolean
+    }
+  | {
+      page: string
+      status: 'ready'
+      blocks: BlueprintUiBlock[]
+      readAt: string
+      /** The first block a write changed, highlighted for a moment after the refresh. */
+      changed?: number
+    }
   | { page: string; status: 'error'; message: string; hint?: string }
   | { page: null; status: 'none' }
 
