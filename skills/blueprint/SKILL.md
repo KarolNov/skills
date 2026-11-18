@@ -2,7 +2,7 @@
 name: blueprint
 description: Architect a larger change from a solution you already have in mind. Grills it briefly, writes it as a spec change in Notion, Obsidian, Linear, Jira, GitHub or a notes folder, builds it, and keeps specs and code in sync in either direction.
 disable-model-invocation: true
-argument-hint: <the change you have in mind> | apply [change] | review <file>
+argument-hint: <the change you have in mind> | apply [change] [group] | review <file>
 ---
 
 # Blueprint
@@ -18,7 +18,7 @@ Pick by the first word of the arguments, then read that mode's file and follow i
 | Arguments | Mode | Read |
 | --- | --- | --- |
 | a description of a change, or nothing | Grill the solution and write the blueprint | [references/propose.md](references/propose.md) |
-| `apply [change]` | Build a blueprint, then fold it into the capability specs | [references/apply.md](references/apply.md) |
+| `apply [change] [group]` | Build a blueprint, split into stacked or parallel PRs when it is big, then fold it into the capability specs | [references/apply.md](references/apply.md) |
 | `review <file>.json …`, where that file exists | Apply a review submitted from the `blueprint-ui` pane to the page it was written on | [references/review.md](references/review.md) |
 
 Any other text starting with "review" (such as "review flow should require two approvers") is a change description: propose it.

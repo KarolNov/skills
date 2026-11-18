@@ -91,6 +91,12 @@ Each change has two documents that sit side by side in the backend and link to e
 - [ ] 1. <a vertical slice: one observable step that can be built and checked on its own>
 - [ ] 2. …
 
+## PRs
+<written by apply when it splits the change; absent for a one-PR change>
+- [ ] 1. <group name> · tasks 1, 2 · base main · branch: <branch> · PR: <link>
+- [ ] 2. <group name> · tasks 3, 4 · base group 1 · branch: … · PR: …
+- [ ] Specs · task <last> · after every group merges · branch: … · PR: …
+
 ## Open questions
 <only what grilling could not settle; empty when approved>
 ```
