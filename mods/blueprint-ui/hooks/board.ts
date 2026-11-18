@@ -81,7 +81,8 @@ export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs
     const row = (side: Side, reason: string, step?: Step): CapRow => ({
       name: s.name,
       side,
-      reason,
+      // A spec that couldn't be read says so here too: its spec side may have moved as well.
+      reason: unknown ? `${reason} · spec unknown: ${unknown}` : reason,
       pending,
       ...(page ? { page } : {}),
       ...(step ? { step } : {}),
@@ -125,17 +126,18 @@ export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs
     done,
     quiet,
     uncovered: code.status === 'ready' ? code.uncovered : 0,
-    summary: summaryOf(attention.length, quiet.length, changes, pending, code.status === 'ready'),
+    summary: summaryOf(attention.length, quiet.filter(q => !q.unknown).length, quiet.filter(q => q.unknown).length, changes, pending, code.status === 'ready'),
   }
   if (code.status === 'error') board.codeError = code.message
   return board
 }
 
-/** `2 need attention · 7 in sync · 1 building · 3 pending`, leaving out what is zero. */
-function summaryOf(attention: number, quiet: number, open: ChangeRow[], pending: number, isCodeChecked: boolean): string {
+/** `2 need attention · 7 in sync · 1 spec unknown · 1 building · 3 pending`, leaving out what is zero. */
+function summaryOf(attention: number, quiet: number, unknown: number, open: ChangeRow[], pending: number, isCodeChecked: boolean): string {
   const parts: string[] = []
   if (attention) parts.push(`${attention} need${attention === 1 ? 's' : ''} attention`)
   if (quiet) parts.push(isCodeChecked ? `${quiet} in sync` : `${quiet} not checked`)
+  if (unknown) parts.push(`${unknown} spec unknown`)
   const statuses = [...OPEN, ...new Set(open.map(c => c.status).filter(s => !(OPEN as readonly string[]).includes(s)))]
   for (const s of statuses) {
     const n = open.filter(c => c.status === s).length

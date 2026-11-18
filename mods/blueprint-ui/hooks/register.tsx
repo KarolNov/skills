@@ -5,7 +5,7 @@ import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage
 import { blocksOf } from './blocks'
 import { ago, boardOf, columnsFor, rowsOf } from './board'
 import type { CapRow, ChangeRow, Side } from './board'
-import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckSpec, runStep, wasStopped } from './checks'
+import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckCode, recheckSpec, runStep, wasStopped } from './checks'
 import { candidates, fetchPage } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, parentOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
@@ -38,6 +38,9 @@ const submitting = new Set<string>()
 
 type Loaded = { map: Map } | { error: 'missing' | 'invalid'; detail?: string }
 
+/** Where blueprint.json was found, by the session folder the walk started from. */
+const roots = new Map<string, string>()
+
 /**
  * The nearest folder, from the session's directory up, that holds blueprint.json, with its text;
  * a session started in a subfolder of the repo still finds it.
@@ -49,9 +52,21 @@ async function nearest($: EngineInterface): Promise<{ root: string; text: string
   } catch {
     dir = '.'
   }
+  const start = dir
+  // Where it was found last: one read on each draw, not a walk up the tree.
+  const known = roots.get(start)
+  if (known !== undefined) {
+    try {
+      return { root: known, text: await $.fs.read(`${known.replace(/\/+$/, '')}/${BLUEPRINT_JSON}`) }
+    } catch {
+      roots.delete(start)
+    }
+  }
   for (; dir !== undefined; dir = dir === '.' ? undefined : parentOf(dir)) {
     try {
-      return { root: dir, text: await $.fs.read(`${dir.replace(/\/+$/, '')}/${BLUEPRINT_JSON}`) }
+      const text = await $.fs.read(`${dir.replace(/\/+$/, '')}/${BLUEPRINT_JSON}`)
+      roots.set(start, dir)
+      return { root: dir, text }
     } catch {
       // Not here: one folder up.
     }
@@ -314,6 +329,9 @@ export const register: Register = (on, options) => {
     const tool = String(e.tool)
     if (LOCAL_WRITE.test(tool) && !('deny' in result) && JSON.stringify(e).includes('.blueprint/')) {
       await update($, rev, n => n + 1).catch(() => undefined)
+      // A sync records new anchors and commits: once the board has a code status, check it again.
+      const loaded = await load($).catch(() => undefined)
+      if (loaded && 'map' in loaded) void recheckCode($, loaded.map).catch(() => undefined)
       return result
     }
     if (!tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
@@ -639,7 +657,7 @@ export const register: Register = (on, options) => {
               plain
               label="↻"
               onPress={async () => {
-                const specsToo = sp.checkedAt && !isCheckingSpecs() ? checkSpecs($, loaded.map, configured) : undefined
+                const specsToo = sp.checkedAt && !isCheckingSpecs(loaded.map.root) ? checkSpecs($, loaded.map, configured) : undefined
                 await Promise.all([checkCode($, loaded.map), specsToo])
               }}
             />

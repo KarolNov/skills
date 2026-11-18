@@ -17,17 +17,29 @@ const specs = atom({ plugin: 'blueprint-ui', key: 'specs' } as const, NO_SPECS, 
 /** How many spec pages a check reads at once. */
 const SPEC_READS = 3
 
-let codeRun: Promise<void> | null = null
-let specRun: Promise<void> | null = null
+/** Runs going, by repo root, so a call for another repo starts its own instead of joining this one's. */
+const codeRuns = new globalThis.Map<string, Promise<void>>()
+const specRuns = new globalThis.Map<string, Promise<void>>()
+
+/** `start()`'s run for this root, or the one already going; it forgets itself when done. */
+function joined(runs: typeof codeRuns, root: string, start: () => Promise<void>): Promise<void> {
+  const going = runs.get(root)
+  if (going) return going
+  const run = start()
+    .catch(() => undefined) // The pane or session went away mid-check: nothing to show it on.
+    .finally(() => runs.delete(root))
+  runs.set(root, run)
+  return run
+}
 
 /** Runs `drift.py check --json` and `unanchored --since <oldest sync>`; a run already going is joined, not repeated. */
 export function checkCode($: EngineInterface, map: Map): Promise<void> {
-  codeRun ??= runCode($, map)
-    .catch(() => undefined) // The pane or session went away mid-check: nothing to show it on.
-    .finally(() => {
-    codeRun = null
-  })
-  return codeRun
+  return joined(codeRuns, map.root, () => runCode($, map))
+}
+
+/** After blueprint.json may have changed: checks the code side again, once the board has a code status. */
+export async function recheckCode($: EngineInterface, map: Map): Promise<void> {
+  if ((await read($, code)).status !== 'none') await checkCode($, map)
 }
 
 async function runCode($: EngineInterface, map: Map): Promise<void> {
@@ -36,7 +48,8 @@ async function runCode($: EngineInterface, map: Map): Promise<void> {
   await update($, code, () => next)
 }
 
-const MISSING = /No such file|can't open file/i
+/** Python's own complaint when the script itself isn't there, not a message drift.py prints. */
+const MISSING = /can't open file .*drift\.py/i
 
 async function codeStatus($: EngineInterface, map: Map): Promise<BlueprintUiCode> {
   let run
@@ -45,13 +58,13 @@ async function codeStatus($: EngineInterface, map: Map): Promise<BlueprintUiCode
   } catch (err) {
     return { status: 'error', message: `${DRIFT} couldn't run (${String(err)}).` }
   }
-  if (MISSING.test(run.stderr)) return { status: 'error', message: `${DRIFT} is missing.` }
   let report: BlueprintUiDriftRow[]
   try {
     // check exits 1 when some code moved: the report is the answer either way.
     report = JSON.parse(run.stdout) as BlueprintUiDriftRow[]
     if (!Array.isArray(report)) throw new Error('not a list')
   } catch {
+    if (MISSING.test(run.stderr)) return { status: 'error', message: `${DRIFT} is missing.` }
     return { status: 'error', message: `${DRIFT} check failed: ${run.stderr.trim().slice(0, 200) || `exit ${run.exitCode}`}` }
   }
   return { status: 'ready', report, uncovered: await uncovered($, map), checkedAt: new Date().toISOString() }
@@ -63,7 +76,8 @@ async function uncovered($: EngineInterface, map: Map): Promise<number> {
   if (!shas.length) return 0
   try {
     // Newest first, by commit date: the last one is where "since the last sync" starts.
-    const log = await $.process.run(['git', 'log', '--no-walk=sorted', '--format=%H', ...shas], { timeoutMs: 15000, cwd: map.root })
+    // A sync commit this clone lacks (squash-merged, gc'd) is skipped rather than failing the whole count.
+    const log = await $.process.run(['git', 'log', '--ignore-missing', '--no-walk=sorted', '--format=%H', ...shas], { timeoutMs: 15000, cwd: map.root })
     const oldest = log.stdout.trim().split('\n').filter(Boolean).pop()
     if (log.exitCode !== 0 || !oldest) return 0
     const run = await $.process.run(['python3', DRIFT, 'unanchored', '--since', oldest], { timeoutMs: 30000, cwd: map.root })
@@ -75,32 +89,27 @@ async function uncovered($: EngineInterface, map: Map): Promise<number> {
 
 /** Reads every spec page's marker, a few at a time, showing progress; pressing again while it runs does nothing. */
 export function checkSpecs($: EngineInterface, map: Map, configured: string): Promise<void> {
-  specRun ??= runSpecs($, map, configured)
-    .catch(() => undefined)
-    .finally(() => {
-    specRun = null
-  })
-  return specRun
+  return joined(specRuns, map.root, () => runSpecs($, map, configured))
 }
 
-export const isCheckingSpecs = () => specRun !== null
+export const isCheckingSpecs = (root: string) => specRuns.has(root)
 
 async function runSpecs($: EngineInterface, map: Map, configured: string): Promise<void> {
   const todo = map.specs.filter(s => !!s.ref)
   const total = todo.length
   let done = 0
-  await update($, specs, s => ({ ...s, progress: { done, total } }))
-  const names = await candidates($, configured)
   const queue = [...todo]
-  const worker = async () => {
-    for (let s = queue.shift(); s; s = queue.shift()) {
-      const got = await markerOf($, s, names, map.root)
-      done += 1
-      const name = s.name
-      await update($, specs, cur => ({ ...cur, markers: { ...cur.markers, [name]: got }, progress: { done, total } }))
-    }
-  }
   try {
+    await update($, specs, s => ({ ...s, progress: { done, total } }))
+    const names = await candidates($, configured)
+    const worker = async () => {
+      for (let s = queue.shift(); s; s = queue.shift()) {
+        const got = await markerOf($, s, names, map.root)
+        done += 1
+        const name = s.name
+        await update($, specs, cur => ({ ...cur, markers: { ...cur.markers, [name]: got }, progress: { done, total } }))
+      }
+    }
     await Promise.all(Array.from({ length: Math.min(SPEC_READS, total) }, worker))
   } finally {
     await update($, specs, ({ progress: _, ...cur }) => ({ ...cur, checkedAt: new Date().toISOString() }))
@@ -138,4 +147,4 @@ export async function runStep($: EngineInterface, step: Step): Promise<void> {
 }
 
 /** Whether `$.command.run` rejected because the session stopped the run, not because the command failed to start. */
-export const wasStopped = (err: unknown) => /\bwas stopped\b|\binterrupted\b|\baborted\b/i.test(String(err))
+export const wasStopped = (err: unknown) => /\bwas stopped\b/i.test(String(err))
