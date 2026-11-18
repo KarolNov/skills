@@ -11,8 +11,16 @@ export type BlueprintUiPage = {
 /** The inline editor under a block: GitHub's comment box, with Suggest as its other tab. */
 export type BlueprintUiEditor = { page: string; block: number; quote: string; mode: 'comment' | 'suggest' }
 
-/** What the pane shows now; `isDoneOpen` unfolds the board's finished changes, for this session. */
-export type BlueprintUiView = { page: string | null; editor?: BlueprintUiEditor | null; isDoneOpen?: boolean }
+/** The board's folding sections, by whether each is open; unset is the section's default. */
+export type BlueprintUiSections = { attention?: boolean; changes?: boolean; sync?: boolean }
+
+/** What the pane shows now; `isDoneOpen` and `sections` are the board's folds, for this session. */
+export type BlueprintUiView = {
+  page: string | null
+  editor?: BlueprintUiEditor | null
+  isDoneOpen?: boolean
+  sections?: BlueprintUiSections
+}
 
 /** One capability in `drift.py check --json`. */
 export type BlueprintUiDriftRow = {

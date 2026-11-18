@@ -159,3 +159,17 @@ export function ago(iso: string, now: number): string {
 export function commandNamed(all: { name: string }[], name: string): string | undefined {
   return (all.find(c => c.name === name) ?? all.find(c => c.name.endsWith(`:${name}`)))?.name
 }
+
+/** How many columns the In sync grid takes: as many cells of the longest name as fit across, 1 to 4. */
+export function columnsFor(quiet: QuietRow[], bodyColumns: number): number {
+  // A cell: the mark, a space, the name, " · n pending" when there is one, and a gap.
+  const widest = Math.max(1, ...quiet.map(q => 2 + q.name.length + (q.pending ? ` · ${q.pending} pending`.length : 0) + 3))
+  return Math.min(4, Math.max(1, Math.floor(bodyColumns / widest)))
+}
+
+/** `items` in rows of `cols`, read across, so the grid's columns line up. */
+export function rowsOf<T>(items: T[], cols: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += cols) out.push(items.slice(i, i + cols))
+  return out
+}

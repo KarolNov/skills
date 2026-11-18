@@ -13,10 +13,11 @@ export type SpecEntry = { name: string; ref: string | null; specVersion?: string
 /** A change and its status (`draft`, `approved`, `building`, `applied`, `abandoned`). */
 export type ChangeEntry = { name: string; status: string; review?: string; brief?: string }
 
-export type Map = { backend: string; pages: BlueprintUiPage[]; specs: SpecEntry[]; changes: ChangeEntry[] }
+/** `root` is the folder holding `.blueprint/`: blueprint's scripts run from there. */
+export type Map = { backend: string; root: string; pages: BlueprintUiPage[]; specs: SpecEntry[]; changes: ChangeEntry[] }
 
 /** The pages blueprint.json maps (each change's review and brief, then each spec that has a page), and its records. */
-export function pagesOf(text: string): Map {
+export function pagesOf(text: string, root = '.'): Map {
   const json = JSON.parse(text) as BlueprintJson
   const pages: BlueprintUiPage[] = []
   const specs: SpecEntry[] = []
@@ -35,7 +36,13 @@ export function pagesOf(text: string): Map {
       ...(s.syncedCommit ? { syncedCommit: s.syncedCommit } : {}),
     })
   }
-  return { backend: json.docs?.backend ?? 'unknown', pages, specs, changes }
+  return { backend: json.docs?.backend ?? 'unknown', root, pages, specs, changes }
+}
+
+/** `dir`'s parent, or `undefined` at the top. */
+export function parentOf(dir: string): string | undefined {
+  const up = dir.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/'
+  return up === dir ? undefined : up
 }
 
 /** `/blueprint-ui <change or capability> [review|brief]`: the page it names, if any. */

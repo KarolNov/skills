@@ -3,11 +3,11 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage } from '../types'
 import { blocksOf } from './blocks'
-import { ago, boardOf } from './board'
+import { ago, boardOf, columnsFor, rowsOf } from './board'
 import type { CapRow, ChangeRow, Side } from './board'
 import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckSpec, runStep } from './checks'
 import { candidates, fetchPage } from './notion'
-import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, targetsOf } from './pages'
+import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, parentOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
 import type { Map } from './pages'
 import { TABS, accentOf } from './tabs'
@@ -38,16 +38,33 @@ const submitting = new Set<string>()
 
 type Loaded = { map: Map } | { error: 'missing' | 'invalid'; detail?: string }
 
+/**
+ * The nearest folder, from the session's directory up, that holds blueprint.json, with its text;
+ * a session started in a subfolder of the repo still finds it.
+ */
+async function nearest($: EngineInterface): Promise<{ root: string; text: string } | undefined> {
+  let dir: string | undefined
+  try {
+    dir = await $.session.cwd()
+  } catch {
+    dir = '.'
+  }
+  for (; dir !== undefined; dir = dir === '.' ? undefined : parentOf(dir)) {
+    try {
+      return { root: dir, text: await $.fs.read(`${dir.replace(/\/+$/, '')}/${BLUEPRINT_JSON}`) }
+    } catch {
+      // Not here: one folder up.
+    }
+  }
+  return undefined
+}
+
 // blueprint.json is read on every draw: it is small, and a write from blueprint shows at once.
 async function load($: EngineInterface): Promise<Loaded> {
-  let text: string
+  const found = await nearest($)
+  if (!found) return { error: 'missing' }
   try {
-    text = await $.fs.read(BLUEPRINT_JSON)
-  } catch {
-    return { error: 'missing' }
-  }
-  try {
-    return { map: pagesOf(text) }
+    return { map: pagesOf(found.text, found.root) }
   } catch (err) {
     return { error: 'invalid', detail: String(err) }
   }
@@ -77,10 +94,11 @@ const scrollToBlock = ($: EngineInterface, block: number) =>
 async function openPage(
   $: EngineInterface,
   page: BlueprintUiPage,
-  backend: string,
+  map: Map,
   configured: string,
   mark = false,
 ): Promise<void> {
+  const { backend, root } = map
   const before = await read($, doc)
   const was = mark && before.page === page.id && before.status === 'ready' ? before.blocks : null
   if (before.page !== page.id) drafts.clear()
@@ -96,7 +114,7 @@ async function openPage(
   }
   const ticket = ++lastRead
   await update($, doc, (): BlueprintUiDoc => ({ page: page.id, status: 'loading' }))
-  let got = await fetchPage($, page.url, await candidates($, configured))
+  let got = await fetchPage($, page.url, await candidates($, configured), root)
   // At the start of a session the Notion connection may not be up yet: retry for a while before saying so.
   // `waited` counts each attempt's own time as well as the sleeps, so the wait stays near its bound.
   for (let waited = 0; 'error' in got && got.error === 'no-server' && waited < NOTION_WAIT_MS && ticket === lastRead; ) {
@@ -107,7 +125,7 @@ async function openPage(
       break
     }
     const started = Date.now()
-    got = await fetchPage($, page.url, await candidates($, configured))
+    got = await fetchPage($, page.url, await candidates($, configured), root)
     waited += NOTION_RETRY_MS + (Date.now() - started)
   }
   const next: BlueprintUiDoc =
@@ -235,13 +253,19 @@ async function followWrite($: EngineInterface, args: string, configured: string)
   const v = await read($, view)
   const target = named.find(p => p.id === v.page) ?? named[named.length - 1]!
   await $.ui.open({ id: PANE, title: TITLE })
-  await openPage($, target, loaded.map.backend, configured, true)
+  await openPage($, target, loaded.map, configured, true)
   // A spec blueprint just wrote: its marker is re-read, so the board doesn't show it as moved.
   for (const p of named.filter(p => p.kind === 'spec')) {
     const s = loaded.map.specs.find(x => x.name === p.name)
-    if (s) void recheckSpec($, s, configured).catch(() => undefined)
+    if (s) void recheckSpec($, s, loaded.map.root, configured).catch(() => undefined)
   }
 }
+
+/** A section's list under its header: a line of space, then indented, so it reads as that header's own. */
+const LIST = { flexDirection: 'column', marginTop: 1, paddingLeft: 2 } as const
+
+/** A change's status in its state's color; draft, abandoned and anything unknown stay dim. */
+const STATUS_COLOR: Record<string, 'warning' | 'suggestion' | 'success'> = { building: 'warning', approved: 'suggestion', applied: 'success' }
 
 /** Tools that may rewrite blueprint.json or its baselines outside MCP: the board redraws after them. */
 const LOCAL_WRITE = /^(?:Edit|MultiEdit|Write|Bash|NotebookEdit)$/
@@ -272,7 +296,7 @@ export const register: Register = (on, options) => {
       if (!toOpen) await update($, view, v => ({ ...v, page: null }))
     }
     await $.ui.open({ id: PANE, title: TITLE })
-    if (toOpen && 'map' in loaded) void openPage($, toOpen, loaded.map.backend, configured)
+    if (toOpen && 'map' in loaded) void openPage($, toOpen, loaded.map, configured)
     // The pane is open, showing "Checking code…": the check is local and quick, so the command waits for it.
     else if ('map' in loaded) await checkCode($, loaded.map)
     return { text: note }
@@ -320,7 +344,7 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column">
           {loaded.error === 'missing' ? (
-            <Text>This repo isn't set up for blueprint: there is no {BLUEPRINT_JSON}.</Text>
+            <Text>This repo isn't set up for blueprint: there is no {BLUEPRINT_JSON} here or in any folder above.</Text>
           ) : (
             <Text color="error">
               {BLUEPRINT_JSON} could not be read: {loaded.detail}
@@ -455,7 +479,7 @@ export const register: Register = (on, options) => {
                 await checkCode($, loaded.map)
               }}
             />
-            <Button key="refresh" plain label="↻ Refresh" onPress={() => void openPage($, open, backend, configured)} />
+            <Button key="refresh" plain label="↻ Refresh" onPress={() => void openPage($, open, loaded.map, configured)} />
             <Link href={open.url} label="Open in Notion" />
           </Box>
           <Text bold size="heading">{labelOf(open)}</Text>
@@ -529,7 +553,7 @@ export const register: Register = (on, options) => {
     const byId = (id: string | undefined) => (id ? pages.find(p => p.id === id) : undefined)
     const openId = (id: string | undefined) => {
       const p = byId(id)
-      return p ? () => void openPage($, p, backend, configured) : undefined
+      return p ? () => void openPage($, p, loaded.map, configured) : undefined
     }
     const now = Date.now()
 
@@ -540,7 +564,7 @@ export const register: Register = (on, options) => {
     }
 
     const capRow = (r: CapRow) => (
-      <Box key={`att-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap">
+      <Box key={`att-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
         <Text color={glyphColor(r.side)} dimColor={r.side === 'none' ? true : undefined}>{r.side === 'none' ? '○' : '◐'}</Text>
         {name(r.name, r.page, `cap-${r.name}`)}
         <Text dimColor>{r.reason}</Text>
@@ -551,12 +575,19 @@ export const register: Register = (on, options) => {
 
     const changeRow = (r: ChangeRow) => {
       const isActive = r.status === 'building' || r.status === 'approved'
+      // Dots throughout: accent while it moves, green once applied, dim otherwise; a draft is an open ring.
+      const dot = isActive ? 'suggestion' : r.status === 'applied' ? 'success' : undefined
       return (
-        <Box key={`chg-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap">
-          <Text color={isActive ? 'suggestion' : undefined} dimColor={isActive ? undefined : true}>{isActive ? '●' : r.status === 'draft' ? '○' : '✓'}</Text>
-          {name(r.name, r.review, `chg-name-${r.name}`)}
-          <Text dimColor>{r.status}</Text>
+        <Box key={`chg-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+          <Text color={dot} dimColor={dot ? undefined : true}>{r.status === 'draft' ? '○' : '●'}</Text>
+          <Text key={`chg-name-${r.name}`}>{r.name}</Text>
+          {/* A status, not a control: italic, smaller and in its state's color, unlike the dim links beside it. */}
+          <Text key={`chg-status-${r.name}`} italic size="footnote" color={STATUS_COLOR[r.status]} dimColor={STATUS_COLOR[r.status] ? undefined : true}>
+            {r.status}
+          </Text>
           {r.pending ? <Text color="suggestion">· {r.pending} pending</Text> : null}
+          {/* A change has two pages: each gets its own link, named for what it opens. */}
+          {byId(r.review) ? <Button key={r.review!} plain dimColor label="review" onPress={openId(r.review)!} /> : null}
           {byId(r.brief) ? <Button key={r.brief!} plain dimColor label="brief" onPress={openId(r.brief)!} /> : null}
           {r.step ? <Button key={`step-change-${r.name}`} plain label={r.step.label} onPress={() => void runStep($, r.step!)} /> : null}
         </Box>
@@ -569,6 +600,29 @@ export const register: Register = (on, options) => {
         ? `spec side checked ${ago(sp.checkedAt, now)}`
         : 'spec side not checked'
     const unknown = board.quiet.filter(q => q.unknown)
+    // Each section folds like Done. What needs a step and open changes start open; In sync starts
+    // folded, except when the code couldn't be checked: then the list is the only way to its specs.
+    const isOpen = {
+      attention: v.sections?.attention ?? true,
+      changes: v.sections?.changes ?? true,
+      sync: v.sections?.sync ?? !board.isCodeChecked,
+    }
+    const head = (key: keyof typeof isOpen, title: string, count: number, open: boolean, note?: string) => (
+      <Box key={`head-${key}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
+        <Button
+          key={`fold-${key}`}
+          plain
+          onPress={() => update($, view, s => ({ ...s, sections: { ...s.sections, [key]: !open } }))}
+        >
+          <Text bold>
+            {open ? '▼' : '▶'} {title} ({count})
+          </Text>
+        </Button>
+        {note ? <Text dimColor>· {note}</Text> : null}
+      </Box>
+    )
+    const quiet = [...board.quiet].sort((a, b) => a.name.localeCompare(b.name))
+    const cols = columnsFor(quiet, e.props.bodyColumns ?? 60)
 
     return (
       <Box flexDirection="column" gap={1}>
@@ -595,53 +649,72 @@ export const register: Register = (on, options) => {
         ) : null}
         {board.attention.length ? (
           <Box flexDirection="column">
-            <Text bold>Needs attention</Text>
-            {board.attention.map(capRow)}
+            {head('attention', 'Needs attention', board.attention.length, isOpen.attention)}
+            {isOpen.attention ? <Box key="list-attention" {...LIST}>{board.attention.map(capRow)}</Box> : null}
           </Box>
         ) : null}
         {board.changes.length || board.done.length ? (
           <Box flexDirection="column">
-            <Text bold>Changes</Text>
-            {board.changes.map(changeRow)}
-            {board.done.length ? (
-              <Button
-                key="done-fold"
-                plain
-                dimColor
-                label={`${v.isDoneOpen ? '▾' : '▸'} Done (${board.done.length})`}
-                onPress={() => update($, view, s => ({ ...s, isDoneOpen: !s.isDoneOpen }))}
-              />
+            {head('changes', 'Changes', board.changes.length + board.done.length, isOpen.changes)}
+            {isOpen.changes ? (
+              <Box key="list-changes" {...LIST}>
+                {board.changes.map(changeRow)}
+                {board.done.length ? (
+                  // The arrow sits inside the button, on its text's baseline; the row starts at the left edge.
+                  <Box key="done-row" flexDirection="row" marginTop={board.changes.length ? 1 : 0}>
+                    <Button
+                      key="done-fold"
+                      plain
+                      dimColor
+                      label={`${v.isDoneOpen ? '▼' : '▶'} Done (${board.done.length})`}
+                      onPress={() => update($, view, s => ({ ...s, isDoneOpen: !s.isDoneOpen }))}
+                    />
+                  </Box>
+                ) : null}
+                {/* Nested under the fold, as every section's list is under its header. */}
+                {v.isDoneOpen && board.done.length ? (
+                  <Box key="done-list" {...LIST}>
+                    {board.done.map(changeRow)}
+                  </Box>
+                ) : null}
+              </Box>
             ) : null}
-            {v.isDoneOpen ? board.done.map(changeRow) : null}
           </Box>
         ) : null}
         {board.quiet.length ? (
           <Box flexDirection="column">
-            <Text>
-              <Text bold>{board.isCodeChecked ? 'In sync' : 'Capabilities'}</Text>
-              <Text dimColor> · {specNote}</Text>
-            </Text>
-            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-              {board.quiet.map(q => {
-                const go = openId(q.page)
-                const mark = q.unknown ? <Text color="warning">?</Text> : board.isCodeChecked ? <Text color="success">✓</Text> : <Text dimColor>·</Text>
-                return go ? (
-                  <Button key={q.page!} plain onPress={go}>
-                    {mark} {q.name}
-                    {q.pending ? <Text color="suggestion"> · {q.pending} pending</Text> : ''}
-                  </Button>
-                ) : (
-                  <Text key={`quiet-${q.name}`}>
-                    {mark} {q.name}
-                  </Text>
-                )
-              })}
+            {head('sync', board.isCodeChecked ? 'In sync' : 'Capabilities', board.quiet.length, isOpen.sync, specNote)}
+            <Box key="list-sync" {...LIST} marginTop={isOpen.sync || unknown.length ? 1 : 0}>
+              {/* A grid: a fixed number of equal columns, names in order, so it reads as a table. */}
+              {(isOpen.sync ? rowsOf(quiet, cols) : []).map((row, i) => (
+                <Box key={`quiet-row-${i}`} flexDirection="row">
+                  {row.map(q => {
+                    const go = openId(q.page)
+                    const mark = q.unknown ? <Text color="warning">?</Text> : board.isCodeChecked ? <Text color="success">✓</Text> : <Text dimColor>·</Text>
+                    return (
+                      <Box key={`cell-${q.name}`} width={`${Math.floor(100 / cols)}%`} flexShrink={0}>
+                        {go ? (
+                          <Button key={q.page!} plain onPress={go}>
+                            {mark} {q.name}
+                            {q.pending ? <Text color="suggestion"> · {q.pending} pending</Text> : ''}
+                          </Button>
+                        ) : (
+                          <Text key={`quiet-${q.name}`}>
+                            {mark} {q.name}
+                          </Text>
+                        )}
+                      </Box>
+                    )
+                  })}
+                </Box>
+              ))}
+              {/* A spec that couldn't be read is an error, shown even while the list is folded. */}
+              {unknown.map(q => (
+                <Text key={`unknown-${q.name}`} dimColor>
+                  ? {q.name}: {q.unknown}
+                </Text>
+              ))}
             </Box>
-            {unknown.map(q => (
-              <Text key={`unknown-${q.name}`} dimColor>
-                ? {q.name}: {q.unknown}
-              </Text>
-            ))}
           </Box>
         ) : board.attention.length ? (
           <Text dimColor>{specNote}</Text>

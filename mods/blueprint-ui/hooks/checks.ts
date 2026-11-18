@@ -41,7 +41,7 @@ const MISSING = /No such file|can't open file/i
 async function codeStatus($: EngineInterface, map: Map): Promise<BlueprintUiCode> {
   let run
   try {
-    run = await $.process.run(['python3', DRIFT, 'check', '--json'], { timeoutMs: 30000 })
+    run = await $.process.run(['python3', DRIFT, 'check', '--json'], { timeoutMs: 30000, cwd: map.root })
   } catch (err) {
     return { status: 'error', message: `${DRIFT} couldn't run (${String(err)}).` }
   }
@@ -63,10 +63,10 @@ async function uncovered($: EngineInterface, map: Map): Promise<number> {
   if (!shas.length) return 0
   try {
     // Newest first, by commit date: the last one is where "since the last sync" starts.
-    const log = await $.process.run(['git', 'log', '--no-walk=sorted', '--format=%H', ...shas], { timeoutMs: 15000 })
+    const log = await $.process.run(['git', 'log', '--no-walk=sorted', '--format=%H', ...shas], { timeoutMs: 15000, cwd: map.root })
     const oldest = log.stdout.trim().split('\n').filter(Boolean).pop()
     if (log.exitCode !== 0 || !oldest) return 0
-    const run = await $.process.run(['python3', DRIFT, 'unanchored', '--since', oldest], { timeoutMs: 30000 })
+    const run = await $.process.run(['python3', DRIFT, 'unanchored', '--since', oldest], { timeoutMs: 30000, cwd: map.root })
     return run.exitCode === 0 ? run.stdout.split('\n').filter(l => l.trim()).length : 0
   } catch {
     return 0
@@ -94,7 +94,7 @@ async function runSpecs($: EngineInterface, map: Map, configured: string): Promi
   const queue = [...todo]
   const worker = async () => {
     for (let s = queue.shift(); s; s = queue.shift()) {
-      const got = await markerOf($, s, names)
+      const got = await markerOf($, s, names, map.root)
       done += 1
       const name = s.name
       await update($, specs, cur => ({ ...cur, markers: { ...cur.markers, [name]: got }, progress: { done, total } }))
@@ -107,18 +107,18 @@ async function runSpecs($: EngineInterface, map: Map, configured: string): Promi
   }
 }
 
-async function markerOf($: EngineInterface, s: SpecEntry, names: string[]): Promise<{ marker: string } | { error: string }> {
+async function markerOf($: EngineInterface, s: SpecEntry, names: string[], root: string): Promise<{ marker: string } | { error: string }> {
   try {
-    return await fetchMarker($, s.ref!, names)
+    return await fetchMarker($, s.ref!, names, root)
   } catch (err) {
     return { error: String(err).slice(0, 200) }
   }
 }
 
 /** After a followed write to a spec: re-reads that one marker, once the spec side has been checked this session. */
-export async function recheckSpec($: EngineInterface, s: SpecEntry, configured: string): Promise<void> {
+export async function recheckSpec($: EngineInterface, s: SpecEntry, root: string, configured: string): Promise<void> {
   if (!s.ref || !(await read($, specs)).checkedAt) return
-  const got = await markerOf($, s, await candidates($, configured))
+  const got = await markerOf($, s, await candidates($, configured), root)
   await update($, specs, cur => ({ ...cur, markers: { ...cur.markers, [s.name]: got } }))
 }
 

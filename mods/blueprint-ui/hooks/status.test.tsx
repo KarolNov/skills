@@ -49,8 +49,15 @@ type Repo = ReturnType<typeof repo>
 
 const ok = (stdout: string, exitCode = 0, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
 
-function world(on: On, r: Repo) {
-  on('fs.read', () => ({ value: JSON.stringify(r.json) }))
+type Read = (path: string) => string | undefined
+type Run = (argv: readonly string[], cwd: string | undefined) => ReturnType<typeof ok> | undefined
+
+/** The test's engine; `read` and `run` replace the file and process answers when a test needs its own. */
+function world(on: On, r: Repo, own: { read?: Read; run?: Run } = {}) {
+  on('fs.read', (_, e) => {
+    const text = own.read ? own.read(e.path) : JSON.stringify(r.json)
+    return text === undefined ? { deny: `ENOENT: ${e.path}` } : { value: text }
+  })
   on('tool.list', () => ({ value: [] }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.toast', (_, e) => {
@@ -66,6 +73,8 @@ function world(on: On, r: Repo) {
   // The page's text is its URL, so the normalizer below can tell pages apart.
   on('mcp.call', (_, e) => ({ value: { content: [{ type: 'text', text: String(e.args.id) }], isError: false } }))
   on('process.run', (_, e) => {
+    const mine = own.run?.(e.argv, e.init?.cwd)
+    if (mine) return mine
     const [cmd, script, sub] = e.argv
     if (cmd === 'git') return ok('c2\nc1\n')
     if (script === '.blueprint/drift.py' && sub === 'check') {
@@ -102,9 +111,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ type: 'Text', text: /^2 changed files no capability covers$/ })).toBeDefined()
 
     // Changes: the open one with ▶ apply, the applied one folded under Done.
-    expect(await ui.find({ key: 'change:board:review' })).toBeDefined()
+    expect((await ui.find({ key: 'change:board:review' }))?.props?.label).toBe('review')
+    expect((await ui.find({ key: 'change:board:brief' }))?.props?.label).toBe('brief')
+    expect((await ui.find({ type: 'Text', text: /^building$/ }))?.props).toMatchObject({ italic: true, color: 'warning' })
     expect(await ui.find({ key: 'change:shipped:review' })).toBeUndefined()
-    expect((await ui.find({ key: 'done-fold' }))?.props?.label).toBe('▸ Done (1)')
+    expect((await ui.find({ key: 'done-fold' }))?.props?.label).toBe('▶ Done (1)')
     await ui.press({ key: 'done-fold' })
     expect(await ui.find({ key: 'change:shipped:review' })).toBeDefined()
 
@@ -112,6 +123,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'step-blueprint/ui' })
     await ui.press({ key: 'step-change-board' })
     expect(r.ran).toEqual(['/blueprint:blueprint-sync blueprint/ui', '/blueprint:blueprint apply board'])
+
+    // Sections fold: what needs a step and the changes start open, In sync starts folded.
+    expect(await ui.find({ type: 'Text', text: '▼ Needs attention (2)' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '▶ In sync (2)' })).toBeDefined()
+    expect(await ui.find({ key: 'spec:blueprint/propose' })).toBeUndefined()
+    await ui.press({ key: 'fold-attention' })
+    expect(await ui.find({ type: 'Text', text: 'code moved (3 files)' })).toBeUndefined()
+    await ui.press({ key: 'fold-sync' })
 
     // A name opens its page.
     await ui.press({ key: 'spec:blueprint/propose' })
@@ -175,5 +194,23 @@ test('without drift.py the board says code status is unavailable and suggests /b
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /^Code status unavailable: .blueprint\/drift.py is missing/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /\/blueprint-setup/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a session in a subfolder finds the nearest .blueprint/ and runs drift.py from there', async ($, on) => {
+  const r = repo()
+  const cwds: string[] = []
+  world(on, r, {
+    read: path => {
+      return path === '/repo/.blueprint/blueprint.json' ? JSON.stringify(r.json) : undefined
+    },
+    run: (_, cwd) => (cwds.push(String(cwd)), undefined),
+  })
+  on('session.cwd', () => ({ value: '/repo/mods/blueprint-ui' }))
+  await $.session.start({ cwd: '/repo/mods/blueprint-ui', surface: 'terminal', isInteractive: true })
+  await $.command.run(typed())
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'code moved (3 files)' })).toBeDefined()
+  expect(cwds.length > 0 && cwds.every(c => c === '/repo')).toBe(true)
   await ui.unmount()
 })

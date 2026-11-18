@@ -172,8 +172,9 @@
       "brief": "https://app.notion.com/p/41c43cce21f281e29297f0e5a3f95df2",
       "review": "https://app.notion.com/p/41c43cce21f2813c9da1df66003ccfc0",
       "tickets": "https://app.notion.com/p/41c43cce21f2813c9da1df66003ccfc0",
-      "status": "approved",
-      "baseCommit": "3cfbf251b7740661fb06e12b9c1b4ba2f8b37108"
+      "status": "building",
+      "baseCommit": "3cfbf251b7740661fb06e12b9c1b4ba2f8b37108",
+      "branch": "kn/blueprint-pane-status-board-514df1"
     }
   }
 }

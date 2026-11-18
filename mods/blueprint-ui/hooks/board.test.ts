@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { BlueprintUiCode, BlueprintUiDriftRow, BlueprintUiSpecs } from '../types'
-import { ago, boardOf, commandNamed } from './board'
+import { ago, boardOf, columnsFor, commandNamed, rowsOf } from './board'
 import { pagesOf } from './pages'
 
 const MAP = pagesOf(
@@ -110,4 +110,14 @@ test('command names and times', () => {
   const now = Date.parse('2026-01-01T00:10:00Z')
   expect(ago('2026-01-01T00:09:50Z', now)).toBe('just now')
   expect(ago('2026-01-01T00:08:00Z', now)).toBe('2 min ago')
+})
+
+test('the In sync grid: columns that fit the widest name, rows read across', () => {
+  const q = (name: string, pending = 0) => ({ name, pending })
+  const names = ['blueprint/propose', 'blueprint/apply', 'distribution'].map(n => q(n))
+  expect(columnsFor(names, 60)).toBe(2) // 22 wide each
+  expect(columnsFor(names, 120)).toBe(4)
+  expect(columnsFor(names, 20)).toBe(1)
+  expect(columnsFor([q('a', 12)], 40)).toBe(2)
+  expect(rowsOf([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
 })

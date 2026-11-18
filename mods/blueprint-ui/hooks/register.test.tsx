@@ -45,9 +45,9 @@ test('the board lists mapped changes and specs, and opens one, on every surface'
 })
 
 test('without blueprint.json the pane suggests /blueprint-setup', async ($, on) => {
-  on('fs.read', () => {
-    throw new Error('ENOENT')
-  })
+  // Nothing in the session's folder or any above it.
+  on('session.cwd', () => ({ value: '/home/me/project/sub' }))
+  on('fs.read', (_, e) => ({ deny: `ENOENT: ${e.path}` }))
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     expect(await ui.find({ type: 'Text', text: /\/blueprint-setup/ })).toBeDefined()
