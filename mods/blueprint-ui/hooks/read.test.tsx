@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const PANE = {
   plugin: 'blueprint-ui',
@@ -37,7 +37,8 @@ test('a Notion page is fetched, normalized and drawn block by block', async ($, 
   expect(calls.slice(0, 2)).toEqual(['claude.ai Notion', '3c44'])
 })
 
-test('no Notion server: the pane names what it tried and the setting', async ($, on) => {
+test('no Notion server: the pane waits for it, then names what it tried and the setting', async ($, on) => {
+  const clock = mock.clock(on)
   on('fs.read', () => ({ value: map('notion') }))
   on('tool.list', () => ({ value: [] }))
   on('mcp.call', () => {
@@ -45,6 +46,9 @@ test('no Notion server: the pane names what it tried and the setting', async ($,
   })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'spec:auth/session' })
+  expect(await ui.find({ type: 'Text', text: /Waiting for the Notion connection/ })).toBeDefined()
+  // Each retry sleeps anew once the last one woke: move the clock past every one.
+  for (let i = 0; i < 16; i++) await clock.advance(1000)
   expect(await ui.find({ type: 'Text', text: /"claude.ai Notion" or "Notion"/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Last error: .+Notion server/ })).toBeDefined()
   await ui.unmount()
@@ -55,5 +59,25 @@ test('another backend: not supported yet, with the link', async ($, on) => {
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'spec:auth/session' })
   expect(await ui.find({ type: 'Text', text: /doesn't read the obsidian backend yet/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a Notion connection that comes up within the wait is read', async ($, on) => {
+  const clock = mock.clock(on)
+  let isUp = false
+  on('fs.read', () => ({ value: map('notion') }))
+  on('tool.list', () => ({ value: [] }))
+  on('mcp.call', () => {
+    if (!isUp) throw new Error('no such server')
+    return { value: { content: [{ type: 'text', text: 'page' }], isError: false } }
+  })
+  on('process.run', () => ({ value: { exitCode: 0, stdout: SPEC, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'spec:auth/session' })
+  expect(await ui.find({ type: 'Text', text: /Waiting for the Notion connection/ })).toBeDefined()
+  isUp = true
+  await clock.advance(1000)
+  expect(await ui.find({ key: 'b0' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /No Notion connection/ })).toBeUndefined()
   await ui.unmount()
 })

@@ -46,6 +46,10 @@ async function load($: EngineInterface): Promise<Loaded> {
   }
 }
 
+/** How long a read waits for a Notion connection that isn't up yet, and how often it tries. */
+const NOTION_WAIT_MS = 15000
+const NOTION_RETRY_MS = 1000
+
 /** How long the block a write changed stays highlighted. */
 const HIGHLIGHT_MS = 2500
 
@@ -80,7 +84,17 @@ async function openPage(
   }
   const ticket = ++lastRead
   await update($, doc, (): BlueprintUiDoc => ({ page: page.id, status: 'loading' }))
-  const got = await fetchPage($, page.url, await candidates($, configured))
+  let got = await fetchPage($, page.url, await candidates($, configured))
+  // At the start of a session the Notion connection may not be up yet: retry for a while before saying so.
+  for (let waited = 0; 'error' in got && got.error === 'no-server' && waited < NOTION_WAIT_MS && ticket === lastRead; waited += NOTION_RETRY_MS) {
+    if (!waited) await update($, doc, cur => (cur.page === page.id && cur.status === 'loading' ? { ...cur, isWaiting: true } : cur))
+    try {
+      await $.clock.sleep(NOTION_RETRY_MS)
+    } catch {
+      break
+    }
+    got = await fetchPage($, page.url, await candidates($, configured))
+  }
   const next: BlueprintUiDoc =
     'markdown' in got
       ? { page: page.id, status: 'ready', blocks: blocksOf(got.markdown, page.url), readAt: new Date().toISOString() }
@@ -428,7 +442,7 @@ export const register: Register = (on, options) => {
           )}
           {elsewhere > 0 ? <Text dimColor>{elsewhere} more pending on other pages: ← All pages shows where.</Text> : null}
           {!mine || mine.status === 'loading' ? (
-            <Text dimColor>Reading the page…</Text>
+            <Text dimColor>{mine?.status === 'loading' && mine.isWaiting ? 'Waiting for the Notion connection…' : 'Reading the page…'}</Text>
           ) : mine.status === 'error' ? (
             <Box flexDirection="column">
               <Text color="error">{mine.message}</Text>
