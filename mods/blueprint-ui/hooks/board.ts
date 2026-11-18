@@ -46,6 +46,8 @@ export type Board = {
 const OPEN = ['building', 'approved', 'draft'] as const
 const FINISHED = new Set(['applied', 'abandoned'])
 
+/** Bare `/blueprint-sync`: every capability whose code moved, as the skill defaults to. */
+export const syncAll = (n: number): Step => ({ command: 'blueprint-sync', args: '', label: `▶ sync all (${n})` })
 const sync = (cap: string): Step => ({ command: 'blueprint-sync', args: cap, label: '▶ sync' })
 const drift = (cap: string, both: boolean): Step => ({ command: 'blueprint-drift', args: cap, label: both ? '▶ drift → sync' : '▶ drift' })
 const apply = (change: string): Step => ({ command: 'blueprint', args: `apply ${change}`, label: '▶ apply' })

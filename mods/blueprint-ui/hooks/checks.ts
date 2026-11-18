@@ -13,6 +13,9 @@ export const NO_CODE: BlueprintUiCode = { status: 'none' }
 const code = atom({ plugin: 'blueprint-ui', key: 'code' } as const, NO_CODE, { shape: 'code-1' })
 export const NO_SPECS: BlueprintUiSpecs = { markers: {} }
 const specs = atom({ plugin: 'blueprint-ui', key: 'specs' } as const, NO_SPECS, { shape: 'specs-1' })
+export const NO_STEPS: string[] = []
+/** ▶ steps waiting for the session to go idle, by `stepKey`, so their buttons show them as queued. */
+const queued = atom({ plugin: 'blueprint-ui', key: 'queued' } as const, NO_STEPS, { shape: 'queued-1' })
 
 /** How many spec pages a check reads at once. */
 const SPEC_READS = 3
@@ -131,18 +134,36 @@ export async function recheckSpec($: EngineInterface, s: SpecEntry, root: string
   await update($, specs, cur => ({ ...cur, markers: { ...cur.markers, [s.name]: got } }))
 }
 
-/** Runs a ▶ step's command as if typed; a command the session lacks gets a toast and nothing runs. */
+/** Names a step in the queued list: its command and arguments. */
+export const stepKey = (step: Pick<Step, 'command' | 'args'>) => `${step.command} ${step.args}`.trim()
+
+/**
+ * Runs a ▶ step's command as if typed; a command the session lacks gets a toast and nothing runs.
+ * The engine holds the run until the session is idle: until then the step is listed as queued,
+ * and pressing it again queues nothing more.
+ */
 export async function runStep($: EngineInterface, step: Step): Promise<void> {
   const command = commandNamed(await $.command.list(), step.command)
   if (!command) {
     await $.ui.toast(`No /${step.command} command in this session: install the blueprint plugin to run it.`)
     return
   }
+  const key = stepKey(step)
+  let isNew = false
+  await update($, queued, list => {
+    if (list.includes(key)) return list
+    isNew = true
+    return [...list, key]
+  })
+  if (!isNew) return
   try {
     await $.command.run({ command, args: step.args })
   } catch (err) {
     // Stopping the session (Ctrl+C, Esc) rejects a run that is queued or running: say that, not "didn't start".
-    await $.ui.toast(wasStopped(err) ? `/${command} ${step.args} was stopped.` : `/${command} didn't start (${String(err)}).`)
+    const line = `/${command}${step.args ? ` ${step.args}` : ''}`
+    await $.ui.toast(wasStopped(err) ? `${line} was stopped.` : `/${command} didn't start (${String(err)}).`)
+  } finally {
+    await update($, queued, list => list.filter(k => k !== key)).catch(() => undefined)
   }
 }
 
