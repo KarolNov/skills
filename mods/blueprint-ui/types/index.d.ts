@@ -11,8 +11,45 @@ export type BlueprintUiPage = {
 /** The inline editor under a block: GitHub's comment box, with Suggest as its other tab. */
 export type BlueprintUiEditor = { page: string; block: number; quote: string; mode: 'comment' | 'suggest' }
 
-/** What the pane shows now. */
-export type BlueprintUiView = { page: string | null; editor?: BlueprintUiEditor | null }
+/** The board's folding sections, by whether each is open; unset is the section's default. */
+export type BlueprintUiSections = { attention?: boolean; changes?: boolean; sync?: boolean }
+
+/** What the pane shows now; `isDoneOpen` and `sections` are the board's folds, for this session. */
+export type BlueprintUiView = {
+  page: string | null
+  editor?: BlueprintUiEditor | null
+  isDoneOpen?: boolean
+  sections?: BlueprintUiSections
+}
+
+/** One capability in `drift.py check --json`. */
+export type BlueprintUiDriftRow = {
+  capability: string
+  status: 'in-sync' | 'code-moved' | 'no-spec' | 'no-anchors'
+  changed?: string[]
+}
+
+/** The code side as last checked by `drift.py`, on every board open and ↻. */
+export type BlueprintUiCode =
+  | { status: 'none' }
+  | { status: 'checking' }
+  | {
+      status: 'ready'
+      report: BlueprintUiDriftRow[]
+      /** Changed files since the oldest sync that no capability's anchors cover. */
+      uncovered: number
+      checkedAt: string
+    }
+  | { status: 'error'; message: string }
+
+/** The spec side, checked on Check specs and kept for the session: each spec's marker, or why it couldn't be read. */
+export type BlueprintUiSpecs = {
+  markers: Record<string, { marker: string } | { error: string }>
+  /** When the last full check finished; unset until one has. */
+  checkedAt?: string
+  /** A check running: how many specs are read of how many. */
+  progress?: { done: number; total: number }
+}
 
 /** One pending comment or suggestion, anchored by heading and quote (never an offset). */
 export type BlueprintUiItem = {
@@ -59,6 +96,10 @@ declare module 'claude-code' {
       view: Shaped<BlueprintUiView>
       doc: Shaped<BlueprintUiDoc>
       pending: Shaped<BlueprintUiItem[]>
+      code: Shaped<BlueprintUiCode>
+      specs: Shaped<BlueprintUiSpecs>
+      /** Bumped when blueprint.json may have changed, so a board showing it redraws. */
+      rev: Shaped<number>
     }
   }
 }

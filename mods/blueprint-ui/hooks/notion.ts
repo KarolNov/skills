@@ -30,8 +30,10 @@ export async function candidates($: EngineInterface, configured: string): Promis
 
 export type Fetched = { markdown: string; server: string } | { error: 'no-server'; tried: string[]; detail: string } | { error: 'fetch' | 'normalize'; detail: string }
 
-/** Fetches a Notion page through the session's own connection and normalizes it as blueprint's baselines are. */
-export async function fetchPage($: EngineInterface, url: string, names: string[]): Promise<Fetched> {
+type Raw = { raw: string; server: string } | Extract<Fetched, { error: string }>
+
+/** Fetches a Notion page through the session's own connection, as the connector returns it. */
+async function fetchRaw($: EngineInterface, url: string, names: string[]): Promise<Raw> {
   let raw: string | undefined
   let server = ''
   let lastError = ''
@@ -48,8 +50,12 @@ export async function fetchPage($: EngineInterface, url: string, names: string[]
     }
   }
   if (raw === undefined) return { error: 'no-server', tried: names, detail: lastError.slice(0, 300) }
+  return { raw, server }
+}
 
-  const run = await $.process.run(['python3', NORMALIZER, '-'], { stdin: raw, timeoutMs: 15000 })
+/** Runs the normalizer on a fetch result: the page's Markdown, or with `--marker` its version marker. */
+async function normalize($: EngineInterface, raw: string, flags: string[], cwd: string): Promise<{ text: string } | { error: 'normalize'; detail: string }> {
+  const run = await $.process.run(['python3', NORMALIZER, ...flags, '-'], { stdin: raw, timeoutMs: 15000, cwd })
   if (run.exitCode !== 0) {
     const missing = /No such file|can't open file/i.test(run.stderr)
     return {
@@ -57,5 +63,25 @@ export async function fetchPage($: EngineInterface, url: string, names: string[]
       detail: missing ? `${NORMALIZER} is missing. Run /blueprint-setup again to copy it.` : run.stderr.slice(0, 300) || `exit ${run.exitCode}`,
     }
   }
-  return { markdown: run.stdout, server }
+  return { text: run.stdout }
+}
+
+/** Fetches a Notion page through the session's own connection and normalizes it as blueprint's baselines are; `root` holds `.blueprint/`. */
+export async function fetchPage($: EngineInterface, url: string, names: string[], root: string): Promise<Fetched> {
+  const got = await fetchRaw($, url, names)
+  if ('error' in got) return got
+  const out = await normalize($, got.raw, [], root)
+  return 'error' in out ? out : { markdown: out.text, server: got.server }
+}
+
+/** A page's version marker, computed as blueprint computes it for `specVersion`; or why it couldn't be. */
+export async function fetchMarker($: EngineInterface, url: string, names: string[], root: string): Promise<{ marker: string } | { error: string }> {
+  const got = await fetchRaw($, url, names)
+  if ('error' in got) {
+    return { error: got.error === 'no-server' ? `no Notion connection answered (${got.tried.join(', ')})` : got.detail }
+  }
+  const out = await normalize($, got.raw, ['--marker'], root)
+  if ('error' in out) return { error: out.detail }
+  const marker = out.text.trim()
+  return /^[0-9a-f]{16}$/.test(marker) ? { marker } : { error: `the normalizer printed no marker (${marker.slice(0, 60)})` }
 }

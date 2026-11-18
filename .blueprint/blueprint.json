@@ -125,27 +125,31 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "8ae33b44f6c0aa9e",
+      "specVersion": "2bf37a1602b96ab3",
       "anchorsFiles": {
         "mods/blueprint-ui/.claude-plugin/plugin.json": "d9f39772b4b1",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6d96c4a97249",
         "mods/blueprint-ui/hooks/blocks.ts": "d35643e36713",
+        "mods/blueprint-ui/hooks/board.test.ts": "4e8cf28f8bb6",
+        "mods/blueprint-ui/hooks/board.ts": "6e3ec5a5b505",
+        "mods/blueprint-ui/hooks/checks.ts": "f80c3f21e59f",
         "mods/blueprint-ui/hooks/comment.test.tsx": "325fb554a04a",
         "mods/blueprint-ui/hooks/follow.test.tsx": "f6e1fb556628",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
-        "mods/blueprint-ui/hooks/notion.ts": "83ca6621dbda",
-        "mods/blueprint-ui/hooks/pages.ts": "2ba37edd4591",
+        "mods/blueprint-ui/hooks/notion.ts": "0ee24b338ff3",
+        "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
         "mods/blueprint-ui/hooks/read.test.tsx": "55cfaf16693a",
-        "mods/blueprint-ui/hooks/register.test.tsx": "fd954dbdd35f",
-        "mods/blueprint-ui/hooks/register.tsx": "d8d53f6af09e",
+        "mods/blueprint-ui/hooks/register.test.tsx": "fe974e8c0b62",
+        "mods/blueprint-ui/hooks/register.tsx": "15b348750d62",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
+        "mods/blueprint-ui/hooks/status.test.tsx": "1011159e7c88",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "2b139a3519cc"
+        "mods/blueprint-ui/types/index.d.ts": "0f244d855455"
       },
-      "syncedCommit": "2b603ea614524a3ad60694871f631cff0aea4e05"
+      "syncedCommit": "d54ded80efa2d6e60ab893e65a69a10aac5afebd"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
@@ -172,8 +176,10 @@
       "brief": "https://app.notion.com/p/41c43cce21f281e29297f0e5a3f95df2",
       "review": "https://app.notion.com/p/41c43cce21f2813c9da1df66003ccfc0",
       "tickets": "https://app.notion.com/p/41c43cce21f2813c9da1df66003ccfc0",
-      "status": "approved",
-      "baseCommit": "3cfbf251b7740661fb06e12b9c1b4ba2f8b37108"
+      "status": "applied",
+      "baseCommit": "3cfbf251b7740661fb06e12b9c1b4ba2f8b37108",
+      "branch": "kn/blueprint-pane-status-board-514df1",
+      "pr": "https://github.com/KarolNov/skills/pull/11"
     }
   }
 }

@@ -4,24 +4,45 @@ export const BLUEPRINT_JSON = '.blueprint/blueprint.json'
 
 type BlueprintJson = {
   docs?: { backend?: string }
-  specs?: Record<string, { ref?: string | null }>
+  specs?: Record<string, { ref?: string | null; specVersion?: string; syncedCommit?: string | null }>
   changes?: Record<string, { brief?: string; review?: string; status?: string }>
 }
 
-export type Map = { backend: string; pages: BlueprintUiPage[] }
+/** A capability as blueprint.json records it: its page, if any, and where it last agreed with its code. */
+export type SpecEntry = { name: string; ref: string | null; specVersion?: string; syncedCommit?: string }
+/** A change and its status (`draft`, `approved`, `building`, `applied`, `abandoned`). */
+export type ChangeEntry = { name: string; status: string; review?: string; brief?: string }
 
-/** The pages blueprint.json maps: each change's review and brief, then each spec that has a page. */
-export function pagesOf(text: string): Map {
+/** `root` is the folder holding `.blueprint/`: blueprint's scripts run from there. */
+export type Map = { backend: string; root: string; pages: BlueprintUiPage[]; specs: SpecEntry[]; changes: ChangeEntry[] }
+
+/** The pages blueprint.json maps (each change's review and brief, then each spec that has a page), and its records. */
+export function pagesOf(text: string, root = '.'): Map {
   const json = JSON.parse(text) as BlueprintJson
   const pages: BlueprintUiPage[] = []
+  const specs: SpecEntry[] = []
+  const changes: ChangeEntry[] = []
   for (const [name, c] of Object.entries(json.changes ?? {})) {
     if (c.review) pages.push({ id: `change:${name}:review`, kind: 'review', name, url: c.review })
     if (c.brief) pages.push({ id: `change:${name}:brief`, kind: 'brief', name, url: c.brief })
+    changes.push({ name, status: (c.status ?? 'draft').toLowerCase(), ...(c.review ? { review: c.review } : {}), ...(c.brief ? { brief: c.brief } : {}) })
   }
   for (const [name, s] of Object.entries(json.specs ?? {})) {
     if (s.ref) pages.push({ id: `spec:${name}`, kind: 'spec', name, url: s.ref })
+    specs.push({
+      name,
+      ref: s.ref ?? null,
+      ...(s.specVersion ? { specVersion: s.specVersion } : {}),
+      ...(s.syncedCommit ? { syncedCommit: s.syncedCommit } : {}),
+    })
   }
-  return { backend: json.docs?.backend ?? 'unknown', pages }
+  return { backend: json.docs?.backend ?? 'unknown', root, pages, specs, changes }
+}
+
+/** `dir`'s parent, or `undefined` at the top. */
+export function parentOf(dir: string): string | undefined {
+  const up = dir.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/'
+  return up === dir ? undefined : up
 }
 
 /** `/blueprint-ui <change or capability> [review|brief]`: the page it names, if any. */

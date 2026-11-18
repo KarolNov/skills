@@ -6,16 +6,89 @@ A pane beside the chat that shows blueprint pages read-only and lets the user re
 
 ### Requirement: Open the pane
 
-`/blueprint-ui` SHALL open the pane, listing the changes (review and brief) and specs that `.blueprint/blueprint.json` maps. `/blueprint-ui <change or capability>` SHALL open that page directly.
+`/blueprint-ui` SHALL open the pane on the status board. `/blueprint-ui <change or capability>` SHALL open that page directly. The pane SHALL use the nearest `.blueprint/blueprint.json` in the session's folder or any folder above it, and run blueprint's scripts from that folder.
 
-- **Scenario: Picker**
+- **Scenario: Board**
   - **GIVEN** `blueprint.json` maps two changes and six specs
   - **WHEN** the user runs `/blueprint-ui`
-  - **THEN** the pane lists them, and choosing one shows its page
+  - **THEN** the pane shows the status board, and choosing a capability, or a change's review or brief link, shows that page
+- **Scenario: Session in a subfolder**
+  - **GIVEN** the session runs in a subfolder of a repo set up for blueprint
+  - **WHEN** the user runs `/blueprint-ui`
+  - **THEN** the board shows that repo's capabilities and changes
 - **Scenario: Repo not set up**
-  - **GIVEN** the session's repo has no `.blueprint/blueprint.json`
+  - **GIVEN** neither the session's folder nor any folder above it has `.blueprint/blueprint.json`
   - **WHEN** the user runs `/blueprint-ui`
   - **THEN** the pane says so and suggests `/blueprint-setup`
+
+### Requirement: Status board
+
+The board SHALL show a summary line (how many capabilities need attention, how many are in sync, open changes by status, pending comments), then three sections in this order:
+
+- Needs attention: capabilities whose code or spec moved, or that have no spec, each with its reason.
+- Changes: draft, approved and building changes, each with its status, pending count, and a link to its review and to its brief. Applied and abandoned changes are folded under Done (n).
+- In sync: every other capability, as a grid of names in order with a fixed number of columns that fits the pane.
+
+Each section SHALL fold under its header, which shows its count. Needs attention and Changes SHALL start open, and In sync folded, except when the code side couldn't be checked: then that list starts open. A capability with comments pending on its spec page SHALL show that count too, in whichever section it sits. A section with nothing in it SHALL be left out. A footer SHALL count changed files that no capability covers since the last sync, only when there are any.
+
+- **Scenario: Everything in sync**
+  - **GIVEN** every capability's code and spec agree and the only change is applied
+  - **WHEN** the board is shown
+  - **THEN** there is no Needs attention section, a folded In sync holds every capability, and the change sits under a folded Done (1)
+- **Scenario: Code moved**
+  - **GIVEN** three files under `blueprint/ui`'s anchors changed since its last sync
+  - **WHEN** the board is shown
+  - **THEN** `blueprint/ui` is under Needs attention as "code moved (3 files)", and the summary counts it
+- **Scenario: Uncovered files**
+  - **GIVEN** two files changed since the last sync that no capability's anchors cover
+  - **WHEN** the board is shown
+  - **THEN** the footer reads "2 changed files no capability covers"
+
+### Requirement: Checking code and specs
+
+The code side SHALL be checked each time the board opens and on ↻. The spec side SHALL be checked only when the user presses Check specs: the pane reads each spec page, computes its version marker the way blueprint does, and compares it with the one `blueprint.json` records. Results SHALL be kept for the session, and the board SHALL say when the spec side was last checked, or that it wasn't. ↻ SHALL re-check the spec side too once it has been checked. After the pane follows a write to a spec, it SHALL re-check that spec's marker. A spec that can't be read SHALL show as unknown with the reason, even while In sync is folded, without stopping the others.
+
+- **Scenario: Specs not checked yet**
+  - **WHEN** the board opens for the first time in a session
+  - **THEN** code status is shown, spec status is not, and the board says "spec side not checked"
+- **Scenario: Teammate edited a spec**
+  - **GIVEN** someone edited `blueprint/propose` in Notion after its last sync
+  - **WHEN** the user presses Check specs
+  - **THEN** `blueprint/propose` moves to Needs attention as "spec moved"
+- **Scenario: Blueprint wrote a spec**
+  - **GIVEN** the spec side was checked and `blueprint/ui` showed "spec moved"
+  - **WHEN** blueprint writes that spec and records its new marker
+  - **THEN** the board re-checks `blueprint/ui` and shows it in sync
+- **Scenario: Drift tool missing**
+  - **GIVEN** `.blueprint/drift.py` is missing
+  - **WHEN** the board opens
+  - **THEN** it says code status is unavailable and suggests `/blueprint-setup`
+
+### Requirement: Run the next step from the board
+
+Each row that has a next step SHALL offer a ▶ button labeled with it. The button runs that step's command for the row's capability or change, as if typed. The steps SHALL be:
+
+- spec moved → drift, labeled "drift → sync" when the code also moved;
+- code moved, or no spec → sync;
+- approved or building change → apply.
+
+A capability with no anchors SHALL get no button.
+
+- **Scenario: Sync a capability**
+  - **GIVEN** `blueprint/ui` shows "code moved (3 files)"
+  - **WHEN** the user presses ▶ sync on its row
+  - **THEN** `/blueprint-sync blueprint/ui` runs in the session
+- **Scenario: Both sides moved**
+  - **GIVEN** `blueprint/propose` shows "code and spec moved"
+  - **WHEN** the user presses ▶ drift → sync
+  - **THEN** `/blueprint-drift blueprint/propose` runs
+- **Scenario: Apply a change**
+  - **GIVEN** a change in status building
+  - **WHEN** the user presses ▶ apply on its row
+  - **THEN** `/blueprint apply <change>` runs
+- **Scenario: Command missing**
+  - **WHEN** the command a button needs isn't in the session
+  - **THEN** a toast says which plugin to install, and nothing runs
 
 ### Requirement: Opens after a blueprint write
 
