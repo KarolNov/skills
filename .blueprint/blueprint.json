@@ -125,14 +125,14 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "2bf37a1602b96ab3",
+      "specVersion": "d82b594b5750f199",
       "anchorsFiles": {
         "mods/blueprint-ui/.claude-plugin/plugin.json": "d9f39772b4b1",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6d96c4a97249",
         "mods/blueprint-ui/hooks/blocks.ts": "d35643e36713",
         "mods/blueprint-ui/hooks/board.test.ts": "4e8cf28f8bb6",
-        "mods/blueprint-ui/hooks/board.ts": "6e3ec5a5b505",
-        "mods/blueprint-ui/hooks/checks.ts": "f80c3f21e59f",
+        "mods/blueprint-ui/hooks/board.ts": "458d09dba972",
+        "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
         "mods/blueprint-ui/hooks/comment.test.tsx": "325fb554a04a",
         "mods/blueprint-ui/hooks/follow.test.tsx": "f6e1fb556628",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
@@ -140,16 +140,16 @@
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
         "mods/blueprint-ui/hooks/read.test.tsx": "55cfaf16693a",
         "mods/blueprint-ui/hooks/register.test.tsx": "fe974e8c0b62",
-        "mods/blueprint-ui/hooks/register.tsx": "15b348750d62",
+        "mods/blueprint-ui/hooks/register.tsx": "bde2f85c701f",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
-        "mods/blueprint-ui/hooks/status.test.tsx": "1011159e7c88",
+        "mods/blueprint-ui/hooks/status.test.tsx": "896b369c577f",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
         "mods/blueprint-ui/types/index.d.ts": "0f244d855455"
       },
-      "syncedCommit": "d54ded80efa2d6e60ab893e65a69a10aac5afebd"
+      "syncedCommit": "13d6a9ecb0aaba92ca4b5bff14682638494f80b3"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",

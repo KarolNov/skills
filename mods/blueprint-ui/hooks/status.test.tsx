@@ -45,6 +45,8 @@ function repo() {
     ran: [] as string[],
     /** Set, command runs reject. */
     stop: false,
+    /** Set, command runs wait for it: the session is busy, so the run is queued. */
+    hold: undefined as Promise<void> | undefined,
     toasts: [] as string[],
     commands: [{ name: 'blueprint:blueprint' }, { name: 'blueprint:blueprint-sync' }, { name: 'blueprint:blueprint-drift' }],
   }
@@ -70,7 +72,8 @@ function world(on: On, r: Repo, own: { read?: Read; run?: Run } = {}) {
   })
   on('command.register', () => ({ value: { command: 'blueprint-ui' } }))
   on('command.list', () => ({ value: r.commands.map(c => ({ ...c, description: '', source: 'plugin' as const })) }))
-  on('command.run', (_, e) => {
+  on('command.run', async (_, e) => {
+    if (r.hold) await r.hold
     if (r.stop) throw new Error('no answer') // Skipped: nothing beneath answers, so the run rejects.
     r.ran.push(`/${e.command} ${e.args}`)
     return { text: '' }
@@ -233,5 +236,43 @@ test('a run that rejects: stopped by the session, or never started, each says so
   r.stop = true
   await ui.press({ key: 'step-change-board' })
   expect(r.toasts[0]).toStartWith("/blueprint:blueprint didn't start")
+  await ui.unmount()
+})
+
+test('while Claude works a ▶ step shows as queued, once; sync all sends bare /blueprint-sync', async ($, on) => {
+  const r = repo()
+  r.drift = r.drift!.map(d => ((d as { capability: string }).capability === 'blueprint/propose' ? { capability: 'blueprint/propose', status: 'code-moved', changed: ['p'] } : d))
+  let release = () => {}
+  world(on, r)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(typed())
+  r.hold = new Promise(res => (release = res))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  // Claude's turn starts: the board says a step waits, and the ▶ buttons draw dim.
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  expect(await ui.find({ type: 'Text', text: /^Claude is working/ })).toBeDefined()
+  expect((await ui.find({ key: 'step-blueprint/ui' }))?.props).toMatchObject({ label: '▶ sync', dimColor: true })
+
+  // Two capabilities' code moved: sync all is offered; pressed, it is queued, and so is each row it covers.
+  expect((await ui.find({ key: 'sync-all' }))?.props?.label).toBe('▶ sync all (2)')
+  await ui.press({ key: 'sync-all' })
+  expect(await ui.find({ type: 'Text', text: '◷ sync all (2) queued' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '◷ sync queued' })).toBeDefined()
+  // A no-spec row isn't in bare sync's scope: it keeps its own button.
+  expect((await ui.find({ key: 'step-blueprint/new' }))?.props?.label).toBe('▶ sync')
+  await ui.press({ key: 'step-blueprint/new' })
+  // Queued: no button left to press twice.
+  expect(await ui.find({ key: 'step-blueprint/new', type: 'Button' })).toBeUndefined()
+  expect(await ui.findAll({ type: 'Text', text: '◷ sync queued' })).toHaveLength(3)
+
+  release()
+  await $.turn.complete({ text: '', turnId: 't1', reason: 'completed' } as never)
+  await new Promise(res => setTimeout(res, 0))
+  expect(r.ran).toEqual(['/blueprint:blueprint-sync ', '/blueprint:blueprint-sync blueprint/new'])
+  expect(await ui.find({ type: 'Text', text: /^Claude is working/ })).toBeUndefined()
+  expect(await ui.find({ key: 'sync-all' })).toBeDefined()
   await ui.unmount()
 })

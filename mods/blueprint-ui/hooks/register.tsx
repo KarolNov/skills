@@ -3,9 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage } from '../types'
 import { blocksOf } from './blocks'
-import { ago, boardOf, columnsFor, rowsOf } from './board'
-import type { CapRow, ChangeRow, Side } from './board'
-import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckCode, recheckSpec, runStep, wasStopped } from './checks'
+import { ago, boardOf, columnsFor, rowsOf, syncAll } from './board'
+import type { CapRow, ChangeRow, Side, Step } from './board'
+import { NO_CODE, NO_SPECS, NO_STEPS, checkCode, checkSpecs, isCheckingSpecs, recheckCode, recheckSpec, runStep, stepKey, wasStopped } from './checks'
 import { candidates, fetchPage } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, parentOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
@@ -25,6 +25,9 @@ const pending = atom({ plugin: 'blueprint-ui', key: 'pending' } as const, NO_ITE
 const code = atom({ plugin: 'blueprint-ui', key: 'code' } as const, NO_CODE, { shape: 'code-1' })
 const specs = atom({ plugin: 'blueprint-ui', key: 'specs' } as const, NO_SPECS, { shape: 'specs-1' })
 const rev = atom({ plugin: 'blueprint-ui', key: 'rev' } as const, 0, { shape: 'rev-1' })
+const queued = atom({ plugin: 'blueprint-ui', key: 'queued' } as const, NO_STEPS, { shape: 'queued-1' })
+/** Whether the main loop is mid-turn: a ▶ step then waits for it, and the board says so. */
+const working = atom({ plugin: 'blueprint-ui', key: 'working' } as const, false, { shape: 'working-1' })
 
 /** What each open field holds, by its key, so "Add" can submit it like Enter does. */
 const drafts = new Map<string, string>()
@@ -302,6 +305,16 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // The main loop's turns, so the board can say a ▶ step will wait; a subagent's turn is not the session's.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) await update($, working, () => true).catch(() => undefined)
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) await update($, working, () => false).catch(() => undefined)
+    return next(e)
+  })
+
   on('command.run', { command: 'blueprint-ui' }, async ($, e) => {
     const loaded = await load($)
     let note = 'Blueprint pane opened.'
@@ -572,6 +585,8 @@ export const register: Register = (on, options) => {
     const c = await read($, code)
     const sp = await read($, specs)
     const items = await read($, pending)
+    const waiting = new Set(await read($, queued))
+    const isWorking = await read($, working)
     const board = boardOf(loaded.map, c, sp, page => items.filter(i => i.page === page).length)
     const byId = (id: string | undefined) => (id ? pages.find(p => p.id === id) : undefined)
     const openId = (id: string | undefined) => {
@@ -586,13 +601,29 @@ export const register: Register = (on, options) => {
       return go ? <Button key={page!} plain label={label} onPress={go} /> : <Text key={key}>{label}</Text>
     }
 
+    // Bare /blueprint-sync takes every capability whose code moved; offered once two or more did.
+    const codeMoved = board.attention.filter(r => r.side === 'code' && r.step?.command === 'blueprint-sync').length
+    const allSync = syncAll(codeMoved)
+    /**
+     * A ▶ step: queued once pressed, until the session runs it (`covered`: a queued sync all takes
+     * this row too); while Claude works it is drawn dim, since pressing it only queues it.
+     */
+    const stepButton = (key: string, step: Step, covered = false) =>
+      waiting.has(stepKey(step)) || covered ? (
+        <Text key={key} color="warning">
+          ◷ {step.label.replace(/^▶ /, '')} queued
+        </Text>
+      ) : (
+        <Button key={key} plain dimColor={isWorking || undefined} label={step.label} onPress={() => void runStep($, step)} />
+      )
+
     const capRow = (r: CapRow) => (
       <Box key={`att-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
         <Text color={glyphColor(r.side)} dimColor={r.side === 'none' ? true : undefined}>{r.side === 'none' ? '○' : '◐'}</Text>
         {name(r.name, r.page, `cap-${r.name}`)}
         <Text dimColor>{r.reason}</Text>
         {r.pending ? <Text color="suggestion">· {r.pending} pending</Text> : null}
-        {r.step ? <Button key={`step-${r.name}`} plain label={r.step.label} onPress={() => void runStep($, r.step!)} /> : null}
+        {r.step ? stepButton(`step-${r.name}`, r.step, r.side === 'code' && waiting.has(stepKey(allSync))) : null}
       </Box>
     )
 
@@ -612,7 +643,7 @@ export const register: Register = (on, options) => {
           {/* A change has two pages: each gets its own link, named for what it opens. */}
           {byId(r.review) ? <Button key={r.review!} plain dimColor label="review" onPress={openId(r.review)!} /> : null}
           {byId(r.brief) ? <Button key={r.brief!} plain dimColor label="brief" onPress={openId(r.brief)!} /> : null}
-          {r.step ? <Button key={`step-change-${r.name}`} plain label={r.step.label} onPress={() => void runStep($, r.step!)} /> : null}
+          {r.step ? stepButton(`step-change-${r.name}`, r.step) : null}
         </Box>
       )
     }
@@ -664,6 +695,11 @@ export const register: Register = (on, options) => {
             <Button key="check-specs" plain label="Check specs" onPress={() => checkSpecs($, loaded.map, configured)} />
           </Box>
         </Box>
+        {isWorking || waiting.size ? (
+          <Text key="working-note" dimColor>
+            {isWorking ? 'Claude is working: a ▶ step waits until the turn ends.' : 'A ▶ step is queued: it runs next.'}
+          </Text>
+        ) : null}
         {board.codeError ? (
           <Box flexDirection="column">
             <Text color="error">Code status unavailable: {board.codeError}</Text>
@@ -672,7 +708,10 @@ export const register: Register = (on, options) => {
         ) : null}
         {board.attention.length ? (
           <Box flexDirection="column">
-            {head('attention', 'Needs attention', board.attention.length, isOpen.attention)}
+            <Box flexDirection="row" justifyContent="space-between" flexWrap="wrap" columnGap={2}>
+              {head('attention', 'Needs attention', board.attention.length, isOpen.attention)}
+              {codeMoved > 1 ? stepButton('sync-all', allSync) : null}
+            </Box>
             {isOpen.attention ? <Box key="list-attention" {...LIST}>{board.attention.map(capRow)}</Box> : null}
           </Box>
         ) : null}

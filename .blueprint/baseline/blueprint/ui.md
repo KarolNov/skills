@@ -74,6 +74,10 @@ Each row that has a next step SHALL offer a ▶ button labeled with it. The butt
 
 A capability with no anchors SHALL get no button.
 
+When the code of two or more capabilities moved, the Needs attention header SHALL offer ▶ sync all (n), which runs `/blueprint-sync` with no capability, so it takes every capability whose code moved. A capability with no spec is not in that and keeps its own button.
+
+A step runs once the session is idle. While Claude is working, the board SHALL say that a step waits until the turn ends, and draw the ▶ buttons dim. A pressed step SHALL show as queued until it runs and SHALL NOT queue a second time; while sync all is queued, so are the rows it covers.
+
 - **Scenario: Sync a capability**
   - **GIVEN** `blueprint/ui` shows "code moved (3 files)"
   - **WHEN** the user presses ▶ sync on its row
@@ -89,6 +93,14 @@ A capability with no anchors SHALL get no button.
 - **Scenario: Command missing**
   - **WHEN** the command a button needs isn't in the session
   - **THEN** a toast says which plugin to install, and nothing runs
+- **Scenario: Sync all**
+  - **GIVEN** `blueprint/ui` and `blueprint/propose` both show "code moved"
+  - **WHEN** the user presses ▶ sync all (2)
+  - **THEN** `/blueprint-sync` runs once, with no capability named
+- **Scenario: Step while Claude works**
+  - **GIVEN** Claude is mid-turn
+  - **WHEN** the user presses ▶ sync on `blueprint/ui`
+  - **THEN** the row shows "◷ sync queued" until the turn ends, then `/blueprint-sync blueprint/ui` runs once
 
 ### Requirement: Opens after a blueprint write
 
