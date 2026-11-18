@@ -15,7 +15,7 @@ Connect this repo to the places its team already works. Setup decides three thin
 - **Tickets**: where a blueprint's tasks become tickets: the tracker the repo already uses, or none.
 - **Project**: the existing page, row or project the specs belong to, if the team tracks projects somewhere.
 
-Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`.
+Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and, for Notion, `notion_normalize.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`.
 
 ## Target repo doesn't exist yet
 
@@ -72,6 +72,7 @@ Ask whether to write the capability specs now or lazily:
 
 - `blueprint.json` in the shape from [../blueprint/references/formats.md](../blueprint/references/formats.md), with the `docs`, `tickets` and `project` choices.
 - `drift.py`: copy `../blueprint/scripts/drift.py` (overwrite an older copy).
+- `notion_normalize.py`, when the backend is Notion: copy `../blueprint/scripts/notion_normalize.py` (overwrite an older copy). The `blueprint-ui` review pane runs this copy to clean the pages it shows, so they read as the baselines do.
 - `baseline/`: create it, with a baseline for every spec that exists.
 - `README.md`: three lines saying where the specs live and where tickets go (with links), that `blueprint.json` and `baseline/` are maintained by `/blueprint`, and that `python3 .blueprint/drift.py check` lists capabilities whose code moved since their spec was synced.
 

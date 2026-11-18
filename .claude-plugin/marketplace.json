@@ -4,8 +4,8 @@
     "name": "Karol Novljaković"
   },
   "metadata": {
-    "description": "A collection of Claude Code skills by Karol Novljaković.",
-    "version": "0.4.0"
+    "description": "A collection of Claude Code skills and mods by Karol Novljaković.",
+    "version": "0.5.0"
   },
   "plugins": [
     {
@@ -39,6 +39,11 @@
         "./skills/blueprint-drift",
         "./skills/blueprint-sync"
       ]
+    },
+    {
+      "name": "blueprint-ui",
+      "description": "A pane beside the chat that shows blueprint reviews, briefs and specs read-only, batches comments and suggested wording like a pending GitHub review, and hands the batch to /blueprint review. A mod; install it next to blueprint.",
+      "source": "./mods/blueprint-ui"
     }
   ]
 }

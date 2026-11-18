@@ -1,0 +1,16 @@
+{
+  "name": "blueprint-ui",
+  "version": "0.1.0",
+  "description": "A pane beside the chat that shows blueprint reviews, briefs and specs, and batches comments into a review that /blueprint review applies.",
+  "author": { "name": "Karol Novljaković" },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "notionServer": {
+      "type": "string",
+      "title": "Notion server",
+      "description": "The name of the Notion MCP server as /mcp lists it.",
+      "default": "claude.ai Notion"
+    }
+  }
+}
