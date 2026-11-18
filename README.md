@@ -116,6 +116,12 @@ spec text as of the last sync (the merge base), and `drift.py`, which tells from
 capabilities' code moved since their spec was synced. `python3 .blueprint/drift.py check` can run
 as a pre-push hook or in CI.
 
+**Dogfooding:** this repo runs blueprint on itself. [`.blueprint/`](.blueprint) maps six
+`blueprint/*` capabilities (propose, apply, backends, setup, sync, drift) to the skill files that
+define them, with each spec's last-synced text in [`.blueprint/baseline/`](.blueprint/baseline). Changes
+to blueprint, starting with a review pane that shows specs inside Claude Code, are planned as
+blueprints against those specs. The specs themselves live in a private Notion workspace.
+
 **Needs:** Python 3, git, and the connector for your backend (Notion, Linear, Atlassian) or `gh`. Rendering diagrams to images (Notion) needs Python Playwright with Chromium, the same one `walkthrough-setup` installs.
 
 Try it: `/blueprint-setup`, then *"/blueprint move session storage from cookies to Redis, keyed by
