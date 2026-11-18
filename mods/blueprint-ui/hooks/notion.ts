@@ -49,12 +49,13 @@ export async function fetchPage($: EngineInterface, url: string, names: string[]
   }
   if (raw === undefined) return { error: 'no-server', tried: names, detail: lastError.slice(0, 300) }
 
-  try {
-    await $.fs.read(NORMALIZER)
-  } catch {
-    return { error: 'normalize', detail: `${NORMALIZER} is missing. Run /blueprint-setup again to copy it.` }
-  }
   const run = await $.process.run(['python3', NORMALIZER, '-'], { stdin: raw, timeoutMs: 15000 })
-  if (run.exitCode !== 0) return { error: 'normalize', detail: run.stderr.slice(0, 300) || `exit ${run.exitCode}` }
+  if (run.exitCode !== 0) {
+    const missing = /No such file|can't open file/i.test(run.stderr)
+    return {
+      error: 'normalize',
+      detail: missing ? `${NORMALIZER} is missing. Run /blueprint-setup again to copy it.` : run.stderr.slice(0, 300) || `exit ${run.exitCode}`,
+    }
+  }
   return { markdown: run.stdout, server }
 }

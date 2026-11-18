@@ -1,7 +1,7 @@
 import type { BlueprintUiBlock, BlueprintUiItem, BlueprintUiPage } from '../types'
 
-/** The text an item quotes: the block as it reads. */
-export const quoteOf = (b: BlueprintUiBlock) => (b.kind === 'md' ? b.text : b.label)
+/** The text an item quotes: the block's own lines on the page, so /blueprint review can find them. */
+export const quoteOf = (b: BlueprintUiBlock) => b.source
 
 /** A new pending item on block `b` of `page`. */
 export function itemFor(

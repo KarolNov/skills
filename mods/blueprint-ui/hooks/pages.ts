@@ -55,5 +55,26 @@ export function pagesNamed(pages: BlueprintUiPage[], args: string): BlueprintUiP
   return out
 }
 
+const TARGET_KEY = /^(?:id|ids|url|urls|parent|parent_id|page_id|page_ids|page_url|database_id|data_source_id|block_id)$/i
+
+/**
+ * The strings in a tool call's arguments that name what it writes to: values under id-like keys
+ * (`page_id`, `parent`, `id`, …) at any depth, never page content, which may link other pages.
+ */
+export function targetsOf(args: unknown): string {
+  const out: string[] = []
+  const walk = (v: unknown, targeted: boolean) => {
+    if (typeof v === 'string') {
+      if (targeted) out.push(v)
+    } else if (Array.isArray(v)) {
+      for (const x of v) walk(x, targeted)
+    } else if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) walk(x, targeted || TARGET_KEY.test(k))
+    }
+  }
+  walk(args, false)
+  return out.join(' ')
+}
+
 /** Tools that only read, by name, for servers that don't declare it: `notion-fetch`, `get_issue`, `list_pages`. */
 export const READ_TOOL = /(?:^|__|[-_])(?:fetch|get|query|search|list|read|view|download)(?:$|[-_])/i

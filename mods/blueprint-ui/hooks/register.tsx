@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage } from '../types'
 import { blocksOf } from './blocks'
 import { candidates, fetchPage } from './notion'
-import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf } from './pages'
+import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, targetsOf } from './pages'
 import { countOf, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
 import type { Map } from './pages'
 
@@ -18,6 +18,11 @@ const NO_ITEMS: BlueprintUiItem[] = []
 const pending = atom({ plugin: 'blueprint-ui', key: 'pending' } as const, NO_ITEMS, { shape: 'pending-1' })
 
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+
+// The latest page read: an older read that finishes later is dropped.
+let lastRead = 0
+// Pages whose review is being submitted: a second press waits for the first.
+const submitting = new Set<string>()
 
 type Loaded = { map: Map } | { error: 'missing' | 'invalid'; detail?: string }
 
@@ -48,6 +53,7 @@ async function openPage($: EngineInterface, page: BlueprintUiPage, backend: stri
     }))
     return
   }
+  const ticket = ++lastRead
   await update($, doc, (): BlueprintUiDoc => ({ page: page.id, status: 'loading' }))
   const got = await fetchPage($, page.url, await candidates($, configured))
   const next: BlueprintUiDoc =
@@ -61,6 +67,7 @@ async function openPage($: EngineInterface, page: BlueprintUiPage, backend: stri
             hint: `Last error: ${got.detail || 'none'}. Set the server's name as /mcp lists it: /config, then blueprint-ui, then "Notion server".`,
           }
         : { page: page.id, status: 'error', message: `Couldn't read the page: ${got.detail}` }
+  if (ticket !== lastRead) return
   await update($, doc, cur => (cur.page === page.id ? next : cur))
 }
 
@@ -75,12 +82,22 @@ async function blueprintCommand($: EngineInterface): Promise<string | undefined>
  * as if the person typed it; clears the batch once the command is queued.
  */
 async function submit($: EngineInterface, page: BlueprintUiPage, items: BlueprintUiItem[]): Promise<void> {
+  if (submitting.has(page.id)) return
+  submitting.add(page.id)
+  try {
+    await submitOnce($, page, items)
+  } finally {
+    submitting.delete(page.id)
+  }
+}
+
+async function submitOnce($: EngineInterface, page: BlueprintUiPage, items: BlueprintUiItem[]): Promise<void> {
   const command = await blueprintCommand($)
   if (!command) {
     await $.ui.toast('Submit failed: no /blueprint command in this session. Install the blueprint plugin.')
     return
   }
-  const tmp = await $.process.run(['mktemp', '-d', '-t', 'blueprint-review'])
+  const tmp = await $.process.run(['mktemp', '-d', '-t', 'blueprint-review.XXXXXX'])
   const dir = tmp.stdout.trim()
   if (tmp.exitCode !== 0 || !dir) {
     await $.ui.toast(`Submit failed: couldn't make a folder for the review file (${tmp.stderr.trim() || tmp.exitCode}).`)
@@ -93,9 +110,14 @@ async function submit($: EngineInterface, page: BlueprintUiPage, items: Blueprin
     items: items.map(({ id, heading, quote, kind, text }) => ({ id, heading, quote, kind, text })),
   }
   await $.fs.write(file, JSON.stringify(payload, null, 2) + '\n')
+  try {
+    await $.command.run({ command, args: `review ${file} — ${countOf(items)} on ${labelOf(page)}` })
+  } catch (err) {
+    await $.ui.toast(`Submit failed: /${command} didn't start (${String(err)}). The review is still pending.`)
+    return
+  }
   const sent = new Set(items.map(i => i.id))
   await update($, pending, list => list.filter(i => !sent.has(i.id)))
-  void $.command.run({ command, args: `review ${file} — ${countOf(items)} on ${labelOf(page)}` })
   await $.ui.toast(`Review submitted: ${countOf(items)} on ${labelOf(page)}.`)
 }
 
@@ -156,9 +178,13 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     const tool = String(e.tool)
     if (!tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
-    await followWrite($, JSON.stringify(e), configured)
+    try {
+      await followWrite($, targetsOf(e), configured)
+    } catch {
+      // Never in a tool call's way: the call already ran, so its result stands.
+    }
     return result
-  }).catch(($, e, next) => next(e)) // never in a tool call's way: a failure here passes the call through
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Input, Link, Markdown } = $.ui.resolve(e)
@@ -188,6 +214,8 @@ export const register: Register = (on, options) => {
       const here = items.filter(i => i.page === open.id)
       const elsewhere = items.length - here.length
       const editor = v.editor && v.editor.page === open.id ? v.editor : null
+      // The editor stays on its block only while that block reads as it did when opened.
+      const editing = (b: BlueprintUiBlock) => editor?.block === b.id && sameText(editor.quote, quoteOf(b))
 
       const setEditor = (next: typeof editor) => update($, view, s => ({ ...s, editor: next }))
       const add = (b: BlueprintUiBlock, kind: BlueprintUiItem['kind'], text: string) => {
@@ -221,8 +249,8 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" borderStyle="round" paddingX={1} gap={1}>
             <Box flexDirection="row" gap={1}>
-              <Button key={`tab-c-${b.id}`} plain={mode !== 'comment' ? true : undefined} variant={mode === 'comment' ? 'primary' : undefined} label="Comment" onPress={() => setEditor({ page: open.id, block: b.id, mode: 'comment' })} />
-              <Button key={`tab-s-${b.id}`} plain={mode !== 'suggest' ? true : undefined} variant={mode === 'suggest' ? 'primary' : undefined} label="Suggest change" onPress={() => setEditor({ page: open.id, block: b.id, mode: 'suggest' })} />
+              <Button key={`tab-c-${b.id}`} plain={mode !== 'comment' ? true : undefined} variant={mode === 'comment' ? 'primary' : undefined} label="Comment" onPress={() => setEditor({ page: open.id, block: b.id, quote, mode: 'comment' })} />
+              <Button key={`tab-s-${b.id}`} plain={mode !== 'suggest' ? true : undefined} variant={mode === 'suggest' ? 'primary' : undefined} label="Suggest change" onPress={() => setEditor({ page: open.id, block: b.id, quote, mode: 'suggest' })} />
               <Button key={`cancel-${b.id}`} plain dimColor label="Cancel" onPress={() => setEditor(null)} />
             </Box>
             {mode === 'comment' ? (
@@ -269,13 +297,13 @@ export const register: Register = (on, options) => {
                 return (
                   <Box key={`block-${b.id}`} flexDirection="column">
                     <Box flexDirection="row" gap={1}>
-                      <Button key={`plus-${b.id}`} plain dimColor label="+" onPress={() => setEditor(editor?.block === b.id ? null : { page: open.id, block: b.id, mode: 'comment' })} />
+                      <Button key={`plus-${b.id}`} plain dimColor label="+" onPress={() => setEditor(editing(b) ? null : { page: open.id, block: b.id, quote: quoteOf(b), mode: 'comment' })} />
                       <Box flexDirection="column" flexGrow={1}>
                         {b.kind === 'link' ? <Link href={b.href} label={`↗ ${b.label} (open in Notion)`} /> : <Markdown key={`b${b.id}`} text={b.text} />}
                       </Box>
                     </Box>
                     {onBlock.length > 0 ? <Box flexDirection="column" paddingLeft={2}>{onBlock.map(i => itemLine(i, false))}</Box> : null}
-                    {editor?.block === b.id ? editorBox(b, editor.mode) : null}
+                    {editor && editing(b) ? editorBox(b, editor.mode) : null}
                   </Box>
                 )
               })}

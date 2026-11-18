@@ -9,7 +9,7 @@ export type BlueprintUiPage = {
 }
 
 /** The inline editor under a block: GitHub's comment box, with Suggest as its other tab. */
-export type BlueprintUiEditor = { page: string; block: number; mode: 'comment' | 'suggest' }
+export type BlueprintUiEditor = { page: string; block: number; quote: string; mode: 'comment' | 'suggest' }
 
 /** What the pane shows now. */
 export type BlueprintUiView = { page: string | null; editor?: BlueprintUiEditor | null }
@@ -31,8 +31,8 @@ export type BlueprintUiItem = {
 
 /** One block of the open page: Markdown text, or a link in place of what the pane can't draw. */
 export type BlueprintUiBlock =
-  | { id: number; kind: 'md'; heading: string; text: string }
-  | { id: number; kind: 'link'; heading: string; label: string; href: string }
+  | { id: number; kind: 'md'; heading: string; text: string; source: string }
+  | { id: number; kind: 'link'; heading: string; label: string; href: string; source: string }
 
 /** The open page as last read. */
 export type BlueprintUiDoc =

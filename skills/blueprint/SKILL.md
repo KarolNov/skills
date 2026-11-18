@@ -19,7 +19,9 @@ Pick by the first word of the arguments, then read that mode's file and follow i
 | --- | --- | --- |
 | a description of a change, or nothing | Grill the solution and write the blueprint | [references/propose.md](references/propose.md) |
 | `apply [change]` | Build a blueprint, then fold it into the capability specs | [references/apply.md](references/apply.md) |
-| `review <file> …` | Apply a review submitted from the `blueprint-ui` pane to the page it was written on | [references/review.md](references/review.md) |
+| `review <file>.json …`, where that file exists | Apply a review submitted from the `blueprint-ui` pane to the page it was written on | [references/review.md](references/review.md) |
+
+Any other text starting with "review" (such as "review flow should require two approvers") is a change description: propose it.
 
 If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here (it can't be started with the Skill tool), and come back to the request when it is done. If the change creates a new repo, or one already pending in `~/.blueprint/pending/` matches it, use that folder's `blueprint.json` (setup's "Target repo doesn't exist yet").
 

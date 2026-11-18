@@ -39,8 +39,9 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
   const out: Block[] = []
   let heading = ''
   let i = 0
-  const push = (b: { kind: 'md'; text: string } | { kind: 'link'; label: string; href: string }) =>
-    out.push({ ...b, id: out.length, heading })
+  // `source` is the block's lines as the page has them: the quote /blueprint review searches for.
+  const push = (b: { kind: 'md'; text: string } | { kind: 'link'; label: string; href: string }, from: number, to: number) =>
+    out.push({ ...b, id: out.length, heading, source: lines.slice(from, to).join('\n').trim() })
 
   while (i < lines.length) {
     const line = lines[i]!
@@ -55,7 +56,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       const close = fence[1]!
       let j = i + 1
       while (j < lines.length && !lines[j]!.trim().startsWith(close)) j++
-      push({ kind: 'md', text: lines.slice(i, Math.min(j + 1, lines.length)).join('\n') })
+      push({ kind: 'md', text: lines.slice(i, Math.min(j + 1, lines.length)).join('\n') }, i, j + 1)
       i = j + 1
       continue
     }
@@ -65,7 +66,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       let j = i + 1
       let depth = 1
       while (j < lines.length && depth > 0) {
-        if (lines[j]!.startsWith('<toggle')) depth++
+        if (lines[j]!.trim().startsWith('<toggle')) depth++
         if (lines[j]!.trim() === '</toggle>') depth--
         j++
       }
@@ -73,7 +74,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       if (!inner.some(l => /^\s*```mermaid/.test(l))) {
         const [title = '', ...rest] = inner.filter((l, k) => k > 0 || l.trim())
         const text = [`**▸ ${inline(title.replace(/<[^>]+>/g, '').trim())}**`, ...rest.map(inline)].join('\n').trim()
-        push({ kind: 'md', text })
+        push({ kind: 'md', text }, i, j)
       }
       i = j
       continue
@@ -88,7 +89,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       const kind = m?.[1] ?? 'embed'
       const caption = (m?.[3] ?? '').replace(/<[^>]+>/g, '').trim()
       const what = MEDIA_LABEL[kind] ?? 'Embed'
-      push({ kind: 'link', label: caption ? `${what}: ${caption}` : what, href: pageUrl })
+      push({ kind: 'link', label: caption ? `${what}: ${caption}` : what, href: pageUrl }, i, j + 1)
       i = j + 1
       continue
     }
@@ -99,7 +100,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       while (!PAGE.test(chunk) && j + 1 < lines.length) chunk += '\n' + lines[++j]
       const page = PAGE.exec(chunk)
       if (page) {
-        push({ kind: 'link', label: page[2]!.replace(/<[^>]+>/g, '').trim() || 'Subpage', href: page[1]! })
+        push({ kind: 'link', label: page[2]!.replace(/<[^>]+>/g, '').trim() || 'Subpage', href: page[1]! }, i, j + 1)
         i = j + 1
         continue
       }
@@ -108,7 +109,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
     const h = HEADING.exec(line)
     if (h) {
       heading = h[1]!.replace(/[*`]/g, '').trim()
-      push({ kind: 'md', text: inline(line) })
+      push({ kind: 'md', text: inline(line) }, i, i + 1)
       i++
       continue
     }
@@ -117,7 +118,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
     if (line.trimStart().startsWith('|')) {
       let j = i
       while (j < lines.length && lines[j]!.trimStart().startsWith('|')) j++
-      push({ kind: 'md', text: lines.slice(i, j).map(inline).join('\n') })
+      push({ kind: 'md', text: lines.slice(i, j).map(inline).join('\n') }, i, j)
       i = j
       continue
     }
@@ -126,7 +127,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
     if (TOP_ITEM.test(line)) {
       let j = i + 1
       while (j < lines.length && lines[j]!.trim() && /^\s+/.test(lines[j]!)) j++
-      push({ kind: 'md', text: lines.slice(i, j).map(inline).join('\n') })
+      push({ kind: 'md', text: lines.slice(i, j).map(inline).join('\n') }, i, j)
       i = j
       continue
     }
@@ -142,7 +143,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       !lines[j]!.startsWith('<')
     )
       j++
-    push({ kind: 'md', text: lines.slice(i, j).map(inline).join('\n') })
+    push({ kind: 'md', text: lines.slice(i, j).map(inline).join('\n') }, i, j)
     i = j
   }
   return out
