@@ -3,6 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage } from '../types'
 import { blocksOf } from './blocks'
+import { ago, boardOf } from './board'
+import type { CapRow, ChangeRow, Side } from './board'
+import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckSpec, runStep } from './checks'
 import { candidates, fetchPage } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
@@ -18,6 +21,10 @@ const NO_DOC: BlueprintUiDoc = { page: null, status: 'none' }
 const doc = atom({ plugin: 'blueprint-ui', key: 'doc' } as const, NO_DOC, { shape: 'doc-1' })
 const NO_ITEMS: BlueprintUiItem[] = []
 const pending = atom({ plugin: 'blueprint-ui', key: 'pending' } as const, NO_ITEMS, { shape: 'pending-1' })
+// The checks' state, written by checks.ts; the engine's scan wants each file's own atoms, so they are named here too.
+const code = atom({ plugin: 'blueprint-ui', key: 'code' } as const, NO_CODE, { shape: 'code-1' })
+const specs = atom({ plugin: 'blueprint-ui', key: 'specs' } as const, NO_SPECS, { shape: 'specs-1' })
+const rev = atom({ plugin: 'blueprint-ui', key: 'rev' } as const, 0, { shape: 'rev-1' })
 
 /** What each open field holds, by its key, so "Add" can submit it like Enter does. */
 const drafts = new Map<string, string>()
@@ -229,7 +236,15 @@ async function followWrite($: EngineInterface, args: string, configured: string)
   const target = named.find(p => p.id === v.page) ?? named[named.length - 1]!
   await $.ui.open({ id: PANE, title: TITLE })
   await openPage($, target, loaded.map.backend, configured, true)
+  // A spec blueprint just wrote: its marker is re-read, so the board doesn't show it as moved.
+  for (const p of named.filter(p => p.kind === 'spec')) {
+    const s = loaded.map.specs.find(x => x.name === p.name)
+    if (s) void recheckSpec($, s, configured).catch(() => undefined)
+  }
 }
+
+/** Tools that may rewrite blueprint.json or its baselines outside MCP: the board redraws after them. */
+const LOCAL_WRITE = /^(?:Edit|MultiEdit|Write|Bash|NotebookEdit)$/
 
 export const register: Register = (on, options) => {
   const configured = String(options.notionServer ?? 'claude.ai Notion')
@@ -258,6 +273,8 @@ export const register: Register = (on, options) => {
     }
     await $.ui.open({ id: PANE, title: TITLE })
     if (toOpen && 'map' in loaded) void openPage($, toOpen, loaded.map.backend, configured)
+    // The pane is open, showing "Checking code…": the check is local and quick, so the command waits for it.
+    else if ('map' in loaded) await checkCode($, loaded.map)
     return { text: note }
   })
 
@@ -266,6 +283,10 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
     const tool = String(e.tool)
+    if (LOCAL_WRITE.test(tool) && !('deny' in result) && JSON.stringify(e).includes('.blueprint/')) {
+      await update($, rev, n => n + 1).catch(() => undefined)
+      return result
+    }
     if (!tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
     try {
       await followWrite($, targetsOf(e), configured)
@@ -425,7 +446,15 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column" gap={1}>
           <Box flexDirection="row" gap={2}>
-            <Button key="back" plain label="← All pages" onPress={() => update($, view, s => ({ ...s, page: null, editor: null }))} />
+            <Button
+              key="back"
+              plain
+              label="← All pages"
+              onPress={async () => {
+                await update($, view, s => ({ ...s, page: null, editor: null }))
+                await checkCode($, loaded.map)
+              }}
+            />
             <Button key="refresh" plain label="↻ Refresh" onPress={() => void openPage($, open, backend, configured)} />
             <Link href={open.url} label="Open in Notion" />
           </Box>
@@ -491,28 +520,137 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const changes = pages.filter(p => p.kind !== 'spec')
-    const specs = pages.filter(p => p.kind === 'spec')
+    // The status board: what needs a step first, then open changes, then everything quiet.
+    await read($, rev) // A write to blueprint.json bumps it, so the board redraws from the new file.
+    const c = await read($, code)
+    const sp = await read($, specs)
     const items = await read($, pending)
-    const row = (p: BlueprintUiPage) => {
-      const n = items.filter(i => i.page === p.id).length
+    const board = boardOf(loaded.map, c, sp, page => items.filter(i => i.page === page).length)
+    const byId = (id: string | undefined) => (id ? pages.find(p => p.id === id) : undefined)
+    const openId = (id: string | undefined) => {
+      const p = byId(id)
+      return p ? () => void openPage($, p, backend, configured) : undefined
+    }
+    const now = Date.now()
+
+    const glyphColor = (side: Side) => (side === 'code' ? 'warning' : side === 'none' ? undefined : 'error')
+    const name = (label: string, page: string | undefined, key: string) => {
+      const go = openId(page)
+      return go ? <Button key={page!} plain label={label} onPress={go} /> : <Text key={key}>{label}</Text>
+    }
+
+    const capRow = (r: CapRow) => (
+      <Box key={`att-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap">
+        <Text color={glyphColor(r.side)} dimColor={r.side === 'none' ? true : undefined}>{r.side === 'none' ? '○' : '◐'}</Text>
+        {name(r.name, r.page, `cap-${r.name}`)}
+        <Text dimColor>{r.reason}</Text>
+        {r.pending ? <Text color="suggestion">· {r.pending} pending</Text> : null}
+        {r.step ? <Button key={`step-${r.name}`} plain label={r.step.label} onPress={() => void runStep($, r.step!)} /> : null}
+      </Box>
+    )
+
+    const changeRow = (r: ChangeRow) => {
+      const isActive = r.status === 'building' || r.status === 'approved'
       return (
-        <Button key={p.id} plain onPress={() => void openPage($, p, backend, configured)}>
-          {labelOf(p)}
-          {n ? <Text color="suggestion"> · {n} pending</Text> : ''}
-        </Button>
+        <Box key={`chg-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap">
+          <Text color={isActive ? 'suggestion' : undefined} dimColor={isActive ? undefined : true}>{isActive ? '●' : r.status === 'draft' ? '○' : '✓'}</Text>
+          {name(r.name, r.review, `chg-name-${r.name}`)}
+          <Text dimColor>{r.status}</Text>
+          {r.pending ? <Text color="suggestion">· {r.pending} pending</Text> : null}
+          {byId(r.brief) ? <Button key={r.brief!} plain dimColor label="brief" onPress={openId(r.brief)!} /> : null}
+          {r.step ? <Button key={`step-change-${r.name}`} plain label={r.step.label} onPress={() => void runStep($, r.step!)} /> : null}
+        </Box>
       )
     }
+
+    const specNote = sp.progress
+      ? `Checking specs… ${sp.progress.done}/${sp.progress.total}`
+      : sp.checkedAt
+        ? `spec side checked ${ago(sp.checkedAt, now)}`
+        : 'spec side not checked'
+    const unknown = board.quiet.filter(q => q.unknown)
+
     return (
       <Box flexDirection="column" gap={1}>
-        <Box flexDirection="column">
-          <Text bold>Changes</Text>
-          {changes.length ? changes.map(row) : <Text dimColor>No changes yet.</Text>}
+        <Box flexDirection="row" justifyContent="space-between" flexWrap="wrap" columnGap={2}>
+          <Text bold>{c.status === 'checking' ? 'Checking code…' : c.status === 'none' ? 'Code not checked yet: press ↻.' : board.summary}</Text>
+          <Box flexDirection="row" gap={2}>
+            <Button
+              key="refresh-board"
+              plain
+              label="↻"
+              onPress={async () => {
+                const specsToo = sp.checkedAt && !isCheckingSpecs() ? checkSpecs($, loaded.map, configured) : undefined
+                await Promise.all([checkCode($, loaded.map), specsToo])
+              }}
+            />
+            <Button key="check-specs" plain label="Check specs" onPress={() => checkSpecs($, loaded.map, configured)} />
+          </Box>
         </Box>
-        <Box flexDirection="column">
-          <Text bold>Specs</Text>
-          {specs.length ? specs.map(row) : <Text dimColor>No specs with pages yet.</Text>}
-        </Box>
+        {board.codeError ? (
+          <Box flexDirection="column">
+            <Text color="error">Code status unavailable: {board.codeError}</Text>
+            <Text dimColor>Run /blueprint-setup to copy drift.py into .blueprint/.</Text>
+          </Box>
+        ) : null}
+        {board.attention.length ? (
+          <Box flexDirection="column">
+            <Text bold>Needs attention</Text>
+            {board.attention.map(capRow)}
+          </Box>
+        ) : null}
+        {board.changes.length || board.done.length ? (
+          <Box flexDirection="column">
+            <Text bold>Changes</Text>
+            {board.changes.map(changeRow)}
+            {board.done.length ? (
+              <Button
+                key="done-fold"
+                plain
+                dimColor
+                label={`${v.isDoneOpen ? '▾' : '▸'} Done (${board.done.length})`}
+                onPress={() => update($, view, s => ({ ...s, isDoneOpen: !s.isDoneOpen }))}
+              />
+            ) : null}
+            {v.isDoneOpen ? board.done.map(changeRow) : null}
+          </Box>
+        ) : null}
+        {board.quiet.length ? (
+          <Box flexDirection="column">
+            <Text>
+              <Text bold>{board.isCodeChecked ? 'In sync' : 'Capabilities'}</Text>
+              <Text dimColor> · {specNote}</Text>
+            </Text>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+              {board.quiet.map(q => {
+                const go = openId(q.page)
+                const mark = q.unknown ? <Text color="warning">?</Text> : board.isCodeChecked ? <Text color="success">✓</Text> : <Text dimColor>·</Text>
+                return go ? (
+                  <Button key={q.page!} plain onPress={go}>
+                    {mark} {q.name}
+                    {q.pending ? <Text color="suggestion"> · {q.pending} pending</Text> : ''}
+                  </Button>
+                ) : (
+                  <Text key={`quiet-${q.name}`}>
+                    {mark} {q.name}
+                  </Text>
+                )
+              })}
+            </Box>
+            {unknown.map(q => (
+              <Text key={`unknown-${q.name}`} dimColor>
+                ? {q.name}: {q.unknown}
+              </Text>
+            ))}
+          </Box>
+        ) : board.attention.length ? (
+          <Text dimColor>{specNote}</Text>
+        ) : null}
+        {board.uncovered > 0 ? (
+          <Text dimColor>
+            {board.uncovered} changed file{board.uncovered === 1 ? '' : 's'} no capability covers
+          </Text>
+        ) : null}
       </Box>
     )
   })

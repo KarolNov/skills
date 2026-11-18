@@ -27,7 +27,7 @@ const MAP = JSON.stringify({
   changes: { 'add-sso': { brief: 'https://notion.so/brief', review: 'https://notion.so/review' } },
 })
 
-test('the picker lists mapped changes and specs, and opens one, on every surface', async ($, on) => {
+test('the board lists mapped changes and specs, and opens one, on every surface', async ($, on) => {
   on('fs.read', () => ({ value: MAP }))
   notion(on)
   for (const surface of ['terminal', 'desktop'] as const) {
