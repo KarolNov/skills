@@ -26,9 +26,9 @@
         "skills/blueprint/scripts/render_mermaid.py",
         "skills/blueprint/examples/**"
       ],
-      "specVersion": "18e9f4791a1ece86",
+      "specVersion": "6b5f55138f03b6e0",
       "anchorsFiles": {
-        "skills/blueprint/SKILL.md": "2c3c1dd57988",
+        "skills/blueprint/SKILL.md": "d3a5ca7c1aba",
         "skills/blueprint/examples/fictional-yjs-provider/brief.md": "9ec2d1b8408a",
         "skills/blueprint/examples/fictional-yjs-provider/playground.html": "4c2bf54894f3",
         "skills/blueprint/examples/fictional-yjs-provider/review.html": "de95a652c7ee",
@@ -37,7 +37,7 @@
         "skills/blueprint/references/visuals.md": "01cf484a99af",
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1"
       },
-      "syncedCommit": "42124d1738ba0e04f21fa864993b82e9c5b2b5e8"
+      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
     },
     "blueprint/apply": {
       "ref": "https://app.notion.com/p/41c43cce21f281bbb3fef91cff515a26",
@@ -75,11 +75,11 @@
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "3195e6de059b1f96",
+      "specVersion": "039b1473a9433606",
       "anchorsFiles": {
-        "skills/blueprint-setup/SKILL.md": "5c4cc0c60ce4"
+        "skills/blueprint-setup/SKILL.md": "9eefd817fd15"
       },
-      "syncedCommit": "42124d1738ba0e04f21fa864993b82e9c5b2b5e8"
+      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
     },
     "blueprint/sync": {
       "ref": "https://app.notion.com/p/41c43cce21f281ef9bfcf823c8b351e2",
@@ -108,12 +108,62 @@
       "syncedCommit": "42124d1738ba0e04f21fa864993b82e9c5b2b5e8"
     },
     "distribution": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/41c43cce21f281658fd1d742b8e50a7a",
       "anchors": [
         ".claude-plugin/**",
         "README.md"
-      ]
+      ],
+      "specVersion": "55e8a9909b5ffe16",
+      "anchorsFiles": {
+        ".claude-plugin/marketplace.json": "810d58f41fb1",
+        "README.md": "8e282796224d"
+      },
+      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
+    },
+    "blueprint/ui": {
+      "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
+      "anchors": [
+        "mods/blueprint-ui/**"
+      ],
+      "specVersion": "c5c5df4688ee7108",
+      "anchorsFiles": {
+        "mods/blueprint-ui/.claude-plugin/plugin.json": "d9f39772b4b1",
+        "mods/blueprint-ui/hooks/blocks.test.ts": "6d96c4a97249",
+        "mods/blueprint-ui/hooks/blocks.ts": "f4af06ef19bc",
+        "mods/blueprint-ui/hooks/comment.test.tsx": "57f5a30b506d",
+        "mods/blueprint-ui/hooks/follow.test.tsx": "78dcab9a7cd5",
+        "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
+        "mods/blueprint-ui/hooks/notion.ts": "91115c81fde2",
+        "mods/blueprint-ui/hooks/pages.ts": "f2245c60c502",
+        "mods/blueprint-ui/hooks/read.test.tsx": "9020caecebb3",
+        "mods/blueprint-ui/hooks/register.test.tsx": "8f9cf81006c3",
+        "mods/blueprint-ui/hooks/register.tsx": "bd6418ba93b7",
+        "mods/blueprint-ui/hooks/review.ts": "213f34129847",
+        "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
+        "mods/blueprint-ui/types/index.d.ts": "1a014a7179ff"
+      },
+      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
+    },
+    "blueprint/review": {
+      "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
+      "anchors": [
+        "skills/blueprint/references/review.md"
+      ],
+      "specVersion": "ca6abbdbbc25bec4",
+      "anchorsFiles": {
+        "skills/blueprint/references/review.md": "38642acdc737"
+      },
+      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
     }
   },
-  "changes": {}
+  "changes": {
+    "add-blueprint-ui": {
+      "brief": "https://app.notion.com/p/41c43cce21f281aab4cdf8edc10c9d8a",
+      "review": "https://app.notion.com/p/41c43cce21f2816c8bc6c76cfdbd313d",
+      "tickets": "https://app.notion.com/p/41c43cce21f2816c8bc6c76cfdbd313d",
+      "status": "applied",
+      "baseCommit": "90bfeb3d7c8e0bdb508a5c31981d9afec0f50d2e",
+      "branch": "kn/blueprint-review-mod-2441a7"
+    }
+  }
 }

@@ -6,7 +6,7 @@ Turns a solution the user already has in mind into an approved blueprint: a brie
 
 ### Requirement: Mode selection
 
-`/blueprint` SHALL go into propose mode when its arguments describe a change or are empty, and into apply mode when the first word is `apply`.
+`/blueprint` SHALL go into propose mode when its arguments describe a change or are empty, into apply mode when the first word is `apply`, and into review mode when the first word is `review` followed by a review file.
 
 - **Scenario: Change described**
   - **WHEN** the user runs `/blueprint add SSO login`
@@ -14,6 +14,9 @@ Turns a solution the user already has in mind into an approved blueprint: a brie
 - **Scenario: Nothing given**
   - **WHEN** the user runs `/blueprint` with no arguments and the conversation holds no solution
   - **THEN** it asks in one line what they want to build and how
+- **Scenario: Review submitted**
+  - **WHEN** `/blueprint review /path/review.json` runs
+  - **THEN** review mode applies that file
 
 ### Requirement: Setup first in an unset repo
 

@@ -48,12 +48,12 @@ Setup SHALL ask whether to write specs now or lazily. Lazy capabilities get `"re
 
 ### Requirement: Repo files written
 
-Setup SHALL write `.blueprint/blueprint.json`, a fresh copy of `drift.py`, a `baseline/` folder with a baseline for every existing spec, and a short `README.md`. It SHALL commit nothing, and SHALL only offer the `CLAUDE.md` line and a drift guard, adding them on a yes.
+Setup SHALL write `.blueprint/blueprint.json`, a fresh copy of `drift.py`, a fresh copy of `notion_normalize.py` when the backend is Notion, a `baseline/` folder with a baseline for every existing spec, and a short `README.md`. It SHALL commit nothing, and SHALL only offer the `CLAUDE.md` line and a drift guard, adding them on a yes.
 
 - **Scenario: Rerun**
   - **GIVEN** `.blueprint/` already exists
   - **WHEN** setup runs again
-  - **THEN** it updates location, capabilities and `drift.py` without losing recorded specs or changes
+  - **THEN** it updates location, capabilities, `drift.py` and `notion_normalize.py` without losing recorded specs or changes
 
 ### Requirement: Pending mode for repos that don't exist yet
 
