@@ -37,7 +37,14 @@ export type BlueprintUiBlock =
 /** The open page as last read. */
 export type BlueprintUiDoc =
   | { page: string; status: 'loading' }
-  | { page: string; status: 'ready'; blocks: BlueprintUiBlock[]; readAt: string }
+  | {
+      page: string
+      status: 'ready'
+      blocks: BlueprintUiBlock[]
+      readAt: string
+      /** The first block a write changed, highlighted for a moment after the refresh. */
+      changed?: number
+    }
   | { page: string; status: 'error'; message: string; hint?: string }
   | { page: null; status: 'none' }
 

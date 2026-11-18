@@ -54,3 +54,21 @@ export function sameText(a: string, b: string): boolean {
       .trim()
   return flat(a) === flat(b)
 }
+
+/**
+ * The id of the first block of `after` that reads differently from `before`: a block
+ * whose text `before` doesn't hold, else (a block removed) the first position where
+ * the two disagree. `undefined` when nothing changed.
+ */
+export function firstChange(before: BlueprintUiBlock[], after: BlueprintUiBlock[]): number | undefined {
+  const old = before.map(quoteOf)
+  const added = after.find(b => !old.some(q => sameText(q, quoteOf(b))))
+  if (added) return added.id
+  const n = Math.max(before.length, after.length)
+  for (let i = 0; i < n; i++) {
+    const a = before[i]
+    const b = after[i]
+    if (!a || !b || !sameText(quoteOf(a), quoteOf(b))) return after.length ? after[Math.min(i, after.length - 1)]!.id : undefined
+  }
+  return undefined
+}

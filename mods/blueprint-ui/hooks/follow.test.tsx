@@ -1,8 +1,10 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { EngineInterface, On } from 'claude-code'
 
 import { READ_TOOL, idsIn, pagesNamed, pagesOf } from './pages'
-import { sameText } from './review'
+import { firstChange, sameText } from './review'
+import { blocksOf } from './blocks'
+import { typeInto } from './typing'
 
 const PANE = {
   plugin: 'blueprint-ui',
@@ -79,7 +81,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await call($, { tool: 'mcp__3c44__notion-update-page', page_id: '41c43cce21f281aab4cdf8edc10c9d8a' })
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'plus-1' })
-    await ui.input({ key: 'comment-1', text: 'why Friday?' })
+    await typeInto(ui, surface, 'comment-1', 'why Friday?')
     expect(await ui.find({ type: 'Text', text: /outdated/ })).toBeUndefined()
 
     // Blueprint rewrites the sentence: the write refreshes the pane.
@@ -88,6 +90,35 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ type: 'Text', text: /Pending review · 1 comment/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /outdated/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Ship it on Friday/ })).toBeDefined()
+    await ui.unmount()
+  })
+}
+
+test('firstChange finds the first block a write changed', () => {
+  const before = blocksOf('## A\n\none\n\ntwo\n\nthree\n', 'u')
+  expect(firstChange(before, blocksOf('## A\n\none\n\nTWO\n\nthree\n', 'u'))).toBe(2)
+  expect(firstChange(before, blocksOf('## A\n\none\n\nthree\n', 'u'))).toBe(2)
+  expect(firstChange(before, blocksOf('## A\n\none\n\ntwo\n\nthree\n\nfour\n', 'u'))).toBe(4)
+  expect(firstChange(before, blocksOf('## A\n\none   \n\ntwo\n\nthree\n', 'u'))).toBeUndefined()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a write scrolls to the first changed block and lights it briefly, on ${surface}`, async ($, on) => {
+    const clock = mock.clock(on)
+    const page = { text: '## Decisions\n\nShip it on Friday.\n\nKeep the flag.\n' }
+    world(on, page)
+    await call($, { tool: 'mcp__3c44__notion-update-page', page_id: '41c43cce21f281aab4cdf8edc10c9d8a' })
+    const ui = await $.ui.mount({ ...PANE, surface })
+    // The first read marks nothing: there was nothing to compare with.
+    expect((await ui.find({ key: 'block-1' }))?.props?.backgroundColor).toBeUndefined()
+
+    page.text = '## Decisions\n\nShip it on Friday.\n\nDrop the flag.\n'
+    await call($, { tool: 'mcp__3c44__notion-update-page', page_id: '41c43cce21f281aab4cdf8edc10c9d8a' })
+    expect((await ui.find({ key: 'block-2' }))?.props?.backgroundColor).toBe('diffAddedDimmed')
+    expect((await ui.find({ key: 'block-1' }))?.props?.backgroundColor).toBeUndefined()
+
+    await clock.advance(3000)
+    expect((await ui.find({ key: 'block-2' }))?.props?.backgroundColor).toBeUndefined()
     await ui.unmount()
   })
 }

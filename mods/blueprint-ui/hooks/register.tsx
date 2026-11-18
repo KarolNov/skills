@@ -5,8 +5,10 @@ import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage
 import { blocksOf } from './blocks'
 import { candidates, fetchPage } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, targetsOf } from './pages'
-import { countOf, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
+import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
 import type { Map } from './pages'
+import { TABS, accentOf } from './tabs'
+import type { Mode, TabsProps } from './tabs'
 
 export const PANE = 'blueprint-ui'
 const TITLE = 'Blueprint'
@@ -16,6 +18,9 @@ const NO_DOC: BlueprintUiDoc = { page: null, status: 'none' }
 const doc = atom({ plugin: 'blueprint-ui', key: 'doc' } as const, NO_DOC, { shape: 'doc-1' })
 const NO_ITEMS: BlueprintUiItem[] = []
 const pending = atom({ plugin: 'blueprint-ui', key: 'pending' } as const, NO_ITEMS, { shape: 'pending-1' })
+
+/** What each open field holds, by its key, so "Add" can submit it like Enter does. */
+const drafts = new Map<string, string>()
 
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 
@@ -41,8 +46,28 @@ async function load($: EngineInterface): Promise<Loaded> {
   }
 }
 
-/** Shows `page` and reads it into `doc`; a later open of another page wins over this read. */
-async function openPage($: EngineInterface, page: BlueprintUiPage, backend: string, configured: string): Promise<void> {
+/** How long the block a write changed stays highlighted. */
+const HIGHLIGHT_MS = 2500
+
+/** The desktop's one tab bar instance: it waits hidden and moves into an editor, so its code loads once. */
+const TAB_BAR = 'tabs'
+
+/** The element a block is scrolled to by: its "+" in the gutter. */
+const plusKey = (block: number) => `plus-${block}`
+
+/**
+ * Shows `page` and reads it into `doc`; a later open of another page wins over this read.
+ * With `mark`, a page that was showing scrolls to the first block that changed and lights it briefly.
+ */
+async function openPage(
+  $: EngineInterface,
+  page: BlueprintUiPage,
+  backend: string,
+  configured: string,
+  mark = false,
+): Promise<void> {
+  const before = await read($, doc)
+  const was = mark && before.page === page.id && before.status === 'ready' ? before.blocks : null
   await update($, view, v => ({ ...v, page: page.id }))
   if (backend !== 'notion') {
     await update($, doc, (): BlueprintUiDoc => ({
@@ -68,7 +93,53 @@ async function openPage($: EngineInterface, page: BlueprintUiPage, backend: stri
           }
         : { page: page.id, status: 'error', message: `Couldn't read the page: ${got.detail}` }
   if (ticket !== lastRead) return
-  await update($, doc, cur => (cur.page === page.id ? next : cur))
+  const changed = was && next.status === 'ready' ? firstChange(was, next.blocks) : undefined
+  const shown = changed === undefined || next.status !== 'ready' ? next : { ...next, changed }
+  await update($, doc, cur => (cur.page === page.id ? shown : cur))
+  if (changed === undefined || shown.status !== 'ready') return
+  const readAt = shown.readAt
+  try {
+    await $.ui.scroll({ to: { key: plusKey(changed) }, in: PANE, block: 'center' })
+  } catch {
+    // Not drawn, or the pane isn't placed: the highlight still shows.
+  }
+  $.clock.after(HIGHLIGHT_MS, () => {
+    void update($, doc, cur =>
+      cur.status === 'ready' && cur.readAt === readAt && cur.changed !== undefined ? withoutChange(cur) : cur,
+    )
+  })
+}
+
+const withoutChange = ({ changed: _, ...rest }: Extract<BlueprintUiDoc, { status: 'ready' }>): BlueprintUiDoc => rest
+
+/** Adds a pending item on block `b` of `page` and closes the editor; empty or unchanged text adds nothing. */
+async function addItem(
+  $: EngineInterface,
+  page: BlueprintUiPage,
+  b: BlueprintUiBlock,
+  kind: BlueprintUiItem['kind'],
+  text: string,
+): Promise<void> {
+  const t = text.trim()
+  if (!t || (kind === 'suggest' && t === quoteOf(b).trim())) return
+  drafts.delete(`${kind}-${b.id}`)
+  await Promise.all([
+    update($, pending, list => [...list, itemFor(page, b, kind, t, newId())]),
+    update($, view, s => ({ ...s, editor: null })),
+  ])
+}
+
+/**
+ * Moves the pane's focus ring onto a field just drawn, and says whether it moved;
+ * a pane not holding the keys is left alone.
+ */
+async function focusField($: EngineInterface, key: string): Promise<boolean> {
+  try {
+    const r = await $.ui.focus({ requestId: PANE, key })
+    return !('deny' in r && r.deny)
+  } catch {
+    return false // The field takes the focus on the person's own click instead.
+  }
 }
 
 /** The `/blueprint` command as this session names it: `blueprint`, or `<plugin>:blueprint` when installed as a plugin. */
@@ -139,7 +210,7 @@ async function followWrite($: EngineInterface, args: string, configured: string)
   const v = await read($, view)
   const target = named.find(p => p.id === v.page) ?? named[named.length - 1]!
   await $.ui.open({ id: PANE, title: TITLE })
-  await openPage($, target, loaded.map.backend, configured)
+  await openPage($, target, loaded.map.backend, configured, true)
 }
 
 export const register: Register = (on, options) => {
@@ -186,8 +257,24 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  // A tab clicked in the desktop's tab bar: the editor on that block switches to it.
+  on('ui.message', async ($, e, next) => {
+    if (e.requestId !== PANE || !e.module.endsWith('tabs.tsx')) return next(e)
+    // Posted by code, not the engine: checked before it is used.
+    const data = e.data as { kind?: unknown; id?: unknown; mode?: unknown } | null
+    const m = data && data.kind === 'mode' && typeof data.id === 'string' ? /^(comment|suggest)-(\d+)$/.exec(data.id) : null
+    const mode = data?.mode as Mode | undefined
+    if (!m || (mode !== 'comment' && mode !== 'suggest')) return {}
+    await update($, view, v => (v.editor?.block === Number(m[2]) ? { ...v, editor: { ...v.editor, mode } } : v))
+    await focusField($, `${mode}-${m[2]}`)
+    return {}
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Input, Link, Markdown } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Button, Input, Link, Markdown } = elements
+    // Every Button on the desktop is a native button, so there the editor's tab bar is our own.
+    const Client = e.surface === 'desktop' && 'Client' in elements ? elements.Client : undefined
     const loaded = await load($)
     if ('error' in loaded) {
       return (
@@ -216,48 +303,102 @@ export const register: Register = (on, options) => {
       const editor = v.editor && v.editor.page === open.id ? v.editor : null
       // The editor stays on its block only while that block reads as it did when opened.
       const editing = (b: BlueprintUiBlock) => editor?.block === b.id && sameText(editor.quote, quoteOf(b))
-
-      const setEditor = (next: typeof editor) => update($, view, s => ({ ...s, editor: next }))
-      const add = (b: BlueprintUiBlock, kind: BlueprintUiItem['kind'], text: string) => {
-        const t = text.trim()
-        if (!t || (kind === 'suggest' && t === quoteOf(b).trim())) return
-        return Promise.all([
-          update($, pending, list => [...list, itemFor(open, b, kind, t, newId())]),
-          setEditor(null),
-        ])
-      }
-      const remove = (id: string) => update($, pending, list => list.filter(i => i.id !== id))
-
       const blocks = mine?.status === 'ready' ? mine.blocks : null
-      const isOutdated = (i: BlueprintUiItem) => blocks !== null && !blocks.some(b => sameText(quoteOf(b), i.quote))
-      const itemLine = (i: BlueprintUiItem, where: boolean) => (
-        <Box key={`item-${where ? 'bar' : 'inline'}-${i.id}`} flexDirection="row" gap={1}>
-          <Button key={`rm-${where ? 'bar' : 'inline'}-${i.id}`} plain dimColor label="✕" onPress={() => remove(i.id)} />
+      const changed = mine?.status === 'ready' ? mine.changed : undefined
+
+      const fieldKey = (block: number, mode: 'comment' | 'suggest') => `${mode}-${block}`
+      const setEditor = (next: typeof editor) => update($, view, s => ({ ...s, editor: next }))
+      /** Opens the editor on a block in `mode` and puts the cursor in its field. */
+      const edit = async (b: BlueprintUiBlock, mode: 'comment' | 'suggest') => {
+        await setEditor({ page: open.id, block: b.id, quote: quoteOf(b), mode })
+        await focusField($, fieldKey(b.id, mode))
+      }
+      const add = (b: BlueprintUiBlock, kind: BlueprintUiItem['kind'], text: string) => addItem($, open, b, kind, text)
+      const remove = (id: string) => update($, pending, list => list.filter(i => i.id !== id))
+      const blockOf = (i: BlueprintUiItem) => blocks?.find(b => sameText(quoteOf(b), i.quote))
+      const isOutdated = (i: BlueprintUiItem) => blocks !== null && !blockOf(i)
+
+      const kindTag = (i: BlueprintUiItem) =>
+        i.kind === 'comment' ? <Text color="suggestion" bold>Comment</Text> : <Text color="success" bold>Suggestion</Text>
+
+      // One item in the pending review: what it is, where it sits, what it says.
+      const reviewItem = (i: BlueprintUiItem) => {
+        const at = blockOf(i)
+        return (
+          <Box key={`item-bar-${i.id}`} flexDirection="row" gap={1}>
+            <Button key={`rm-bar-${i.id}`} plain dimColor label="✕" onPress={() => remove(i.id)} />
+            <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+              <Box flexDirection="row" gap={1}>
+                <Text>
+                  {kindTag(i)}
+                  <Text dimColor> on {oneLine(i.heading || 'the top of the page', 48)}</Text>
+                  {isOutdated(i) ? <Text color="warning"> · outdated</Text> : null}
+                </Text>
+                {at ? (
+                  <Button key={`goto-${i.id}`} plain dimColor label="↓ show in page" onPress={() => void $.ui.scroll({ to: { key: plusKey(at.id) }, in: PANE, block: 'center' }).catch(() => undefined)} />
+                ) : null}
+              </Box>
+              <Text dimColor italic>“{oneLine(i.quote, 72)}”</Text>
+              <Text>{i.kind === 'suggest' ? '→ ' : ''}{oneLine(i.text, 120)}</Text>
+            </Box>
+          </Box>
+        )
+      }
+
+      // An item under its block, short: the block itself is right above.
+      const inlineItem = (i: BlueprintUiItem) => (
+        <Box key={`item-inline-${i.id}`} flexDirection="row" gap={1}>
+          <Text dimColor>└</Text>
           <Text>
-            <Text color={i.kind === 'comment' ? 'suggestion' : 'success'}>{i.kind === 'comment' ? 'comment' : 'suggestion'}</Text>
-            {isOutdated(i) ? <Text color="warning"> outdated</Text> : null}
-            {where ? <Text dimColor> · {oneLine(i.heading || '(top of page)', 32)} · “{oneLine(i.quote, 36)}”</Text> : null}
-            <Text> {oneLine(i.text, where ? 60 : 90)}</Text>
+            {kindTag(i)}
+            <Text> {i.kind === 'suggest' ? '→ ' : ''}{oneLine(i.text, 90)}</Text>
           </Text>
+          <Button key={`rm-inline-${i.id}`} plain dimColor label="✕" onPress={() => remove(i.id)} />
         </Box>
       )
 
-      // The field sits inside the block indent (2), the box's border and padding (4).
-      const fieldColumns = (e.props.bodyColumns ?? 60) - 6
-      const editorBox = (b: BlueprintUiBlock, mode: 'comment' | 'suggest') => {
+      // The field sits inside the gutter (3), the box's border and padding (4).
+      const fieldColumns = (e.props.bodyColumns ?? 60) - 7
+      const editorBox = (b: BlueprintUiBlock, mode: Mode) => {
         const quote = quoteOf(b)
+        const key = fieldKey(b.id, mode)
+        const value = mode === 'suggest' ? quote : ''
+        const placeholder = mode === 'comment' ? 'Leave a comment on this block' : ''
+        const hint = mode === 'suggest' ? "Edit the block's text into the wording you want." : undefined
+        const rows = mode === 'comment' ? 3 : rowsFor(quote, fieldColumns)
+
+        // The desktop: our own tab bar (its Buttons are native buttons). The terminal: plain buttons.
+        const tabBar = Client ? (
+          <Client key={TAB_BAR} module="./tabs.tsx" props={{ id: key, mode } satisfies TabsProps} width="100%" />
+        ) : (
+          <Box flexDirection="row" gap={4}>
+            {TABS.map(t => (
+              <Button key={`tab-${t.mode[0]}-${b.id}`} plain onPress={() => void edit(b, t.mode)}>
+                {t.mode === mode ? (
+                  <Text bold underline color={accentOf(t.mode)}>{t.label}</Text>
+                ) : (
+                  <Text dimColor>{t.label}</Text>
+                )}
+              </Button>
+            ))}
+          </Box>
+        )
+        // On the desktop the field's own button (it always draws one) is the Add button;
+        // the terminal draws its label as a key hint only, so it has Add below as well.
+        const addLabel = mode === 'comment' ? 'Add comment' : 'Add suggestion'
         return (
-          <Box flexDirection="column" borderStyle="round" paddingX={1} gap={1}>
-            <Box flexDirection="row" gap={1}>
-              <Button key={`tab-c-${b.id}`} plain={mode !== 'comment' ? true : undefined} variant={mode === 'comment' ? 'primary' : undefined} label="Comment" onPress={() => setEditor({ page: open.id, block: b.id, quote, mode: 'comment' })} />
-              <Button key={`tab-s-${b.id}`} plain={mode !== 'suggest' ? true : undefined} variant={mode === 'suggest' ? 'primary' : undefined} label="Suggest change" onPress={() => setEditor({ page: open.id, block: b.id, quote, mode: 'suggest' })} />
-              <Button key={`cancel-${b.id}`} plain dimColor label="Cancel" onPress={() => setEditor(null)} />
+          <Box key={`editor-${b.id}`} flexDirection="column" borderStyle="round" borderColor={accentOf(mode)} paddingX={1} marginTop={1} gap={1}>
+            {tabBar}
+            <Box flexDirection="column">
+              {hint ? <Text dimColor>{hint}</Text> : null}
+              <Input key={key} value={value || undefined} placeholder={placeholder} submitLabel={Client ? addLabel : mode === 'comment' ? 'add comment' : 'add'} rows={rows} autoFocus onInput={(t: string) => void drafts.set(key, t)} onSubmit={(t: string) => add(b, mode, t)} />
             </Box>
-            {mode === 'comment' ? (
-              <Input key={`comment-${b.id}`} placeholder="Leave a comment" submitLabel="add comment" rows={3} autoFocus onSubmit={(t: string) => add(b, 'comment', t)} />
-            ) : (
-              <Input key={`suggest-${b.id}`} value={quote} submitLabel="add suggestion" rows={rowsFor(quote, fieldColumns)} autoFocus onSubmit={(t: string) => add(b, 'suggest', t)} />
-            )}
+            <Box flexDirection="row" justifyContent="flex-end" gap={1}>
+              <Button key={`cancel-${b.id}`} plain dimColor label="Cancel" onPress={() => (drafts.delete(key), setEditor(null))} />
+              {Client ? null : (
+                <Button key={`add-${b.id}`} variant="primary" label={addLabel} onPress={() => add(b, mode, drafts.get(key) ?? value)} />
+              )}
+            </Box>
           </Box>
         )
       }
@@ -269,20 +410,23 @@ export const register: Register = (on, options) => {
             <Button key="refresh" plain label="↻ Refresh" onPress={() => void openPage($, open, backend, configured)} />
             <Link href={open.url} label="Open in Notion" />
           </Box>
-          <Text bold>{labelOf(open)}</Text>
+          <Text bold size="heading">{labelOf(open)}</Text>
           {here.length > 0 ? (
-            <Box flexDirection="column" borderStyle="round" paddingX={1}>
-              <Box flexDirection="row" gap={2}>
+            <Box flexDirection="column" borderStyle="round" borderColor="suggestion" paddingX={1} gap={1}>
+              <Box flexDirection="row" justifyContent="space-between" flexWrap="wrap" columnGap={2}>
                 <Text bold>Pending review · {countOf(here)}</Text>
-                <Button key="submit" variant="primary" label="Submit review" onPress={() => submit($, open, here)} />
-                <Button key="discard" plain dimColor label="Discard" onPress={() => update($, pending, list => list.filter(i => i.page !== open.id))} />
+                <Box flexDirection="row" gap={1}>
+                  <Button key="discard" plain dimColor label="Discard all" onPress={() => update($, pending, list => list.filter(i => i.page !== open.id))} />
+                  <Button key="submit" variant="primary" label="Submit review" onPress={() => submit($, open, here)} />
+                </Box>
               </Box>
-              {here.map(i => itemLine(i, true))}
+              {here.map(reviewItem)}
+              <Text dimColor>Submit hands these to /blueprint review, which applies them to the page in Notion.</Text>
             </Box>
           ) : (
-            <Text dimColor>Press + beside a block to comment on it or suggest new wording.</Text>
+            <Text dimColor>Press + beside a block to comment on it or suggest new wording. Your notes collect here as a pending review until you submit it.</Text>
           )}
-          {elsewhere > 0 ? <Text dimColor>{elsewhere} more pending on other pages.</Text> : null}
+          {elsewhere > 0 ? <Text dimColor>{elsewhere} more pending on other pages: ← All pages shows where.</Text> : null}
           {!mine || mine.status === 'loading' ? (
             <Text dimColor>Reading the page…</Text>
           ) : mine.status === 'error' ? (
@@ -294,19 +438,34 @@ export const register: Register = (on, options) => {
             <Box flexDirection="column" gap={1}>
               {mine.blocks.map(b => {
                 const onBlock = here.filter(i => sameText(i.quote, quoteOf(b)))
+                const isOpen = editing(b)
+                const isChanged = changed === b.id
                 return (
-                  <Box key={`block-${b.id}`} flexDirection="column">
-                    <Box flexDirection="row" gap={1}>
-                      <Button key={`plus-${b.id}`} plain dimColor label="+" onPress={() => setEditor(editing(b) ? null : { page: open.id, block: b.id, quote: quoteOf(b), mode: 'comment' })} />
-                      <Box flexDirection="column" flexGrow={1}>
+                  <Box key={`block-${b.id}`} flexDirection="column" backgroundColor={isChanged ? 'diffAddedDimmed' : undefined}>
+                    <Box flexDirection="row">
+                      <Box width={3} flexShrink={0}>
+                        <Button
+                          key={plusKey(b.id)}
+                          plain
+                          dimColor={isOpen ? undefined : true}
+                          label={isOpen ? '−' : '+'}
+                          onPress={() => (isOpen ? setEditor(null) : edit(b, 'comment'))}
+                        />
+                      </Box>
+                      <Box flexDirection="column" flexGrow={1} flexShrink={1}>
                         {b.kind === 'link' ? <Link href={b.href} label={`↗ ${b.label} (open in Notion)`} /> : <Markdown key={`b${b.id}`} text={b.text} />}
+                        {onBlock.length > 0 ? <Box flexDirection="column" marginTop={1}>{onBlock.map(inlineItem)}</Box> : null}
+                        {isOpen && editor ? editorBox(b, editor.mode) : null}
                       </Box>
                     </Box>
-                    {onBlock.length > 0 ? <Box flexDirection="column" paddingLeft={2}>{onBlock.map(i => itemLine(i, false))}</Box> : null}
-                    {editor && editing(b) ? editorBox(b, editor.mode) : null}
                   </Box>
                 )
               })}
+            </Box>
+          ) : null}
+          {Client && !blocks?.some(editing) ? (
+            <Box height={0} overflow="hidden">
+              <Client key={TAB_BAR} module="./tabs.tsx" props={{ id: '', mode: 'comment' } satisfies TabsProps} width="100%" />
             </Box>
           ) : null}
         </Box>
