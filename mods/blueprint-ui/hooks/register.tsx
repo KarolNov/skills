@@ -5,7 +5,7 @@ import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage
 import { blocksOf } from './blocks'
 import { ago, boardOf, columnsFor, rowsOf } from './board'
 import type { CapRow, ChangeRow, Side } from './board'
-import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckSpec, runStep } from './checks'
+import { NO_CODE, NO_SPECS, checkCode, checkSpecs, isCheckingSpecs, recheckSpec, runStep, wasStopped } from './checks'
 import { candidates, fetchPage } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, parentOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
@@ -227,7 +227,12 @@ async function submitOnce($: EngineInterface, page: BlueprintUiPage, items: Blue
   try {
     await $.command.run({ command, args: `review ${file} — ${countOf(items)} on ${labelOf(page)}` })
   } catch (err) {
-    await $.ui.toast(`Submit failed: /${command} didn't start (${String(err)}). The review is still pending.`)
+    // Stopping the session rejects the run whether it was queued or partway: the items stay, to submit again.
+    await $.ui.toast(
+      wasStopped(err)
+        ? `/${command} review was stopped. The review is still pending, to submit again.`
+        : `Submit failed: /${command} didn't start (${String(err)}). The review is still pending.`,
+    )
     return
   }
   const sent = new Set(items.map(i => i.id))

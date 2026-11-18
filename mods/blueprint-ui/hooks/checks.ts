@@ -132,6 +132,10 @@ export async function runStep($: EngineInterface, step: Step): Promise<void> {
   try {
     await $.command.run({ command, args: step.args })
   } catch (err) {
-    await $.ui.toast(`/${command} didn't start (${String(err)}).`)
+    // Stopping the session (Ctrl+C, Esc) rejects a run that is queued or running: say that, not "didn't start".
+    await $.ui.toast(wasStopped(err) ? `/${command} ${step.args} was stopped.` : `/${command} didn't start (${String(err)}).`)
   }
 }
+
+/** Whether `$.command.run` rejected because the session stopped the run, not because the command failed to start. */
+export const wasStopped = (err: unknown) => /\bwas stopped\b|\binterrupted\b|\baborted\b/i.test(String(err))

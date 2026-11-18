@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface, On } from 'claude-code'
 
+import { wasStopped } from './checks'
+
 const PANE = {
   plugin: 'blueprint-ui',
   component: 'Pane',
@@ -41,6 +43,8 @@ function repo() {
     unanchored: 'x.md\ny.md\n',
     marker: { [UI]: 'aaaaaaaaaaaaaaaa', [PROPOSE]: 'bbbbbbbbbbbbbbbb', [APPLY]: 'cccccccccccccccc' } as Record<string, string>,
     ran: [] as string[],
+    /** Set, command runs reject. */
+    stop: false,
     toasts: [] as string[],
     commands: [{ name: 'blueprint:blueprint' }, { name: 'blueprint:blueprint-sync' }, { name: 'blueprint:blueprint-drift' }],
   }
@@ -67,6 +71,7 @@ function world(on: On, r: Repo, own: { read?: Read; run?: Run } = {}) {
   on('command.register', () => ({ value: { command: 'blueprint-ui' } }))
   on('command.list', () => ({ value: r.commands.map(c => ({ ...c, description: '', source: 'plugin' as const })) }))
   on('command.run', (_, e) => {
+    if (r.stop) throw new Error('no answer') // Skipped: nothing beneath answers, so the run rejects.
     r.ran.push(`/${e.command} ${e.args}`)
     return { text: '' }
   })
@@ -212,5 +217,21 @@ test('a session in a subfolder finds the nearest .blueprint/ and runs drift.py f
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: 'code moved (3 files)' })).toBeDefined()
   expect(cwds.length > 0 && cwds.every(c => c === '/repo')).toBe(true)
+  await ui.unmount()
+})
+
+test('a run that rejects: stopped by the session, or never started, each says so', async ($, on) => {
+  // The engine's own words when Ctrl+C stops the session under a queued or running command.
+  expect(wasStopped(new Error('HooksError: blueprint-ui: $.command.run: the session was stopped'))).toBe(true)
+  expect(wasStopped(new Error('unknown command'))).toBe(false)
+
+  const r = repo()
+  world(on, r)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(typed())
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  r.stop = true
+  await ui.press({ key: 'step-change-board' })
+  expect(r.toasts[0]).toStartWith("/blueprint:blueprint didn't start")
   await ui.unmount()
 })
