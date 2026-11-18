@@ -1,0 +1,59 @@
+import type { BlueprintUiPage } from '../types'
+
+export const BLUEPRINT_JSON = '.blueprint/blueprint.json'
+
+type BlueprintJson = {
+  docs?: { backend?: string }
+  specs?: Record<string, { ref?: string | null }>
+  changes?: Record<string, { brief?: string; review?: string; status?: string }>
+}
+
+export type Map = { backend: string; pages: BlueprintUiPage[] }
+
+/** The pages blueprint.json maps: each change's review and brief, then each spec that has a page. */
+export function pagesOf(text: string): Map {
+  const json = JSON.parse(text) as BlueprintJson
+  const pages: BlueprintUiPage[] = []
+  for (const [name, c] of Object.entries(json.changes ?? {})) {
+    if (c.review) pages.push({ id: `change:${name}:review`, kind: 'review', name, url: c.review })
+    if (c.brief) pages.push({ id: `change:${name}:brief`, kind: 'brief', name, url: c.brief })
+  }
+  for (const [name, s] of Object.entries(json.specs ?? {})) {
+    if (s.ref) pages.push({ id: `spec:${name}`, kind: 'spec', name, url: s.ref })
+  }
+  return { backend: json.docs?.backend ?? 'unknown', pages }
+}
+
+/** `/blueprint-ui <change or capability> [review|brief]`: the page it names, if any. */
+export function pageFor(pages: BlueprintUiPage[], args: string): BlueprintUiPage | undefined {
+  const [name, which] = args.trim().split(/\s+/)
+  if (!name) return undefined
+  const spec = pages.find(p => p.kind === 'spec' && p.name === name)
+  if (spec) return spec
+  const kind = which === 'brief' ? 'brief' : 'review'
+  return pages.find(p => p.kind === kind && p.name === name) ?? pages.find(p => p.name === name)
+}
+
+export const labelOf = (p: BlueprintUiPage) => (p.kind === 'spec' ? p.name : `${p.name} · ${p.kind}`)
+
+const PAGE_ID = /[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/gi
+
+/** Every Notion-style page id in `text` (a URL, a dashed or bare UUID), as 32 lowercase hex characters. */
+export function idsIn(text: string): string[] {
+  return [...text.matchAll(PAGE_ID)].map(m => m[0].replace(/-/g, '').toLowerCase())
+}
+
+/** The mapped pages a tool call's arguments name, in the order they are named. */
+export function pagesNamed(pages: BlueprintUiPage[], args: string): BlueprintUiPage[] {
+  const named = idsIn(args)
+  const byId = new globalThis.Map(pages.flatMap(p => idsIn(p.url).slice(-1).map(id => [id, p] as const)))
+  const out: BlueprintUiPage[] = []
+  for (const id of named) {
+    const p = byId.get(id)
+    if (p && !out.includes(p)) out.push(p)
+  }
+  return out
+}
+
+/** Tools that only read, by name, for servers that don't declare it: `notion-fetch`, `get_issue`, `list_pages`. */
+export const READ_TOOL = /(?:^|__|[-_])(?:fetch|get|query|search|list|read|view|download)(?:$|[-_])/i

@@ -1,7 +1,7 @@
 # Skills
 
 A collection of [Claude Code](https://claude.com/claude-code) skills I use day to day,
-grouped into plugins.
+grouped into plugins, plus a mod that extends one of them.
 
 ## Install
 
@@ -14,6 +14,7 @@ In Claude Code:
 /plugin install walkthrough@karolnov-skills
 /plugin install slack-nag@karolnov-skills
 /plugin install blueprint@karolnov-skills
+/plugin install blueprint-ui@karolnov-skills   # the review pane for blueprint
 ```
 
 ### Manually
@@ -124,6 +125,14 @@ blueprints against those specs. The specs themselves live in a private Notion wo
 
 **Needs:** Python 3, git, and the connector for your backend (Notion, Linear, Atlassian) or `gh`. Rendering diagrams to images (Notion) needs Python Playwright with Chromium, the same one `walkthrough-setup` installs.
 
+**Review pane (`blueprint-ui`):** a mod that opens a pane beside the chat with `/blueprint-ui`
+(or `/blueprint-ui <change or capability>`). It lists the reviews, briefs and specs `.blueprint/blueprint.json`
+maps and shows the chosen page read-only. Press "+" beside a block to comment on it or suggest new
+wording, as on a GitHub diff line; comments batch up like a pending review, and "Submit review" hands
+the batch to `/blueprint review`, which shows one preview and writes on your yes. It reads Notion through
+your session's Notion connection (the server name is a setting, `claude.ai Notion` by default) and
+works the same in the terminal and the desktop app. Install it next to `blueprint`.
+
 Try it: `/blueprint-setup`, then *"/blueprint move session storage from cookies to Redis, keyed by
 user id, with a 30-day sliding expiry"*.
 
@@ -132,6 +141,7 @@ user id, with a 30-day sliding expiry"*.
 ```
 .claude-plugin/marketplace.json   # plugin marketplace manifest
 skills/<skill-name>/SKILL.md      # one folder per skill
+mods/<mod-name>/                  # one folder per mod (its own plugin manifest and hooks module)
 template/SKILL.md                 # starting point for new skills
 ```
 
@@ -142,6 +152,14 @@ template/SKILL.md                 # starting point for new skills
 3. Add `"./skills/<skill-name>"` to a plugin's `skills` array in `.claude-plugin/marketplace.json`,
    or add a new plugin entry for a new family of skills.
 4. Add it to the README.
+
+## Adding a mod
+
+A mod (a Claude Code plugin with a hooks module: panes, commands, hooks) lives in `mods/<mod-name>/`
+with its own `.claude-plugin/plugin.json`, and gets its own plugin entry in
+`.claude-plugin/marketplace.json` with `"source": "./mods/<mod-name>"`. Add its install line and a
+paragraph to the README next to the skills it extends. Check it with `claude plugin validate` and
+`claude plugin test` on its folder.
 
 ## License
 
