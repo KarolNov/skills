@@ -24,6 +24,16 @@ export const TABS: readonly { mode: Mode; label: string }[] = [
 /** Cells each tab takes: its label and two cells of room either side. */
 const tabWidth = (label: string) => label.length + 4
 
+/** The first column of `mode`'s tab. */
+export function tabStart(mode: Mode): number {
+  let at = 0
+  for (const t of TABS) {
+    if (t.mode === mode) return at
+    at += tabWidth(t.label)
+  }
+  return at
+}
+
 /** The tab under column `x`, if any. */
 export function tabAt(x: number): Mode | undefined {
   let at = 0
@@ -43,6 +53,13 @@ const Tabs: ClientModule<TabsProps> = (props, surface) => {
     if (e.type !== 'down' || !props.id) return
     const mode = tabAt(e.x)
     if (mode && mode !== props.mode) surface.post({ kind: 'mode', id: props.id, mode } satisfies TabsPost)
+  })
+  // With the focus on the bar, the arrow keys switch tabs too.
+  surface.onKey(e => {
+    if (!props.id || (e.key !== 'left' && e.key !== 'right')) return
+    const at = TABS.findIndex(t => t.mode === props.mode)
+    const to = TABS[at + (e.key === 'right' ? 1 : -1)]
+    if (to) surface.post({ kind: 'mode', id: props.id, mode: to.mode } satisfies TabsPost)
   })
   return (
     <Box flexDirection="row">

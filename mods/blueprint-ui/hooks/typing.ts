@@ -1,3 +1,5 @@
+import { tabStart } from './tabs'
+
 // Test helpers: type into the editor's field, and switch its tab, the way each surface takes it.
 
 type Ui = {
@@ -7,7 +9,7 @@ type Ui = {
 }
 
 /** Types `text` into the field `key` and, unless `submit` is false, presses Enter. */
-export async function typeInto(ui: Ui, _surface: 'terminal' | 'desktop', key: string, text: string, submit = true): Promise<void> {
+export async function typeInto(ui: Ui, key: string, text: string, submit = true): Promise<void> {
   await ui.input({ key, text, kind: submit ? 'submit' : 'change' })
 }
 
@@ -17,8 +19,7 @@ export async function pickTab(ui: Ui, surface: 'terminal' | 'desktop', block: nu
     await ui.press({ key: `tab-${mode[0]}-${block}` })
     return
   }
-  // The desktop's tab bar reads "  Comment  " then "  Suggest change  ".
-  const x = mode === 'comment' ? 2 : 14
+  const x = tabStart(mode) + 2
   await ui.pointer({ type: 'down', x, y: 0, button: 'left', in: 'tabs' })
   await ui.pointer({ type: 'up', x, y: 0, button: 'left', in: 'tabs' })
 }

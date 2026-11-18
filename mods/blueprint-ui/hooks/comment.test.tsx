@@ -57,7 +57,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     // The desktop's tab bar is drawn hidden before any "+", so its code is loaded when one opens.
     if (surface === 'desktop') expect((await ui.find({ key: 'tabs' }))?.props?.props).toMatchObject({ id: '' })
     await ui.press({ key: 'plus-2' })
-    await typeInto(ui, surface, 'comment-2', 'why five?')
+    await typeInto(ui, 'comment-2', 'why five?')
     expect(await ui.find({ type: 'Text', text: /Pending review · 1 comment$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Comment on Requirement: Retry on failure$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^“Scenario: Flaky network WHEN/ })).toBeDefined()
@@ -69,9 +69,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     if (surface === 'desktop') {
       expect(await ui.find({ key: 'add-0' })).toBeUndefined()
       expect((await ui.find({ key: 'comment-0' }))?.props?.submitLabel).toBe('Add comment')
-      await typeInto(ui, surface, 'comment-0', 'typed, then Add')
+      await typeInto(ui, 'comment-0', 'typed, then Add')
     } else {
-      await typeInto(ui, surface, 'comment-0', 'typed, then Add', false)
+      await typeInto(ui, 'comment-0', 'typed, then Add', false)
       await ui.press({ key: 'add-0' })
     }
     expect(await ui.find({ type: 'Text', text: /Pending review · 2 comments$/ })).toBeDefined()
@@ -84,9 +84,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pickTab(ui, surface, 1, 'suggest')
     const field = await ui.find({ key: 'suggest-1' })
     expect(field?.props?.value).toBe('The client SHALL retry a failed upload at most five times.')
-    await typeInto(ui, surface, 'suggest-1', 'The client SHALL retry a failed upload at most five times.')
+    await typeInto(ui, 'suggest-1', 'The client SHALL retry a failed upload at most five times.')
     expect(await ui.find({ type: 'Text', text: /Pending review · 1 comment$/ })).toBeDefined()
-    await typeInto(ui, surface, 'suggest-1', 'The client SHALL retry a failed upload at most three times.')
+    await typeInto(ui, 'suggest-1', 'The client SHALL retry a failed upload at most three times.')
     expect(await ui.find({ type: 'Text', text: /Pending review · 1 comment and 1 suggestion/ })).toBeDefined()
 
     // Switch pages and come back: both still pending, and the picker shows the count.
@@ -126,7 +126,7 @@ test('Submit review writes one file, runs /blueprint review with it, and clears 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'spec:upload/retry' })
   await ui.press({ key: 'plus-2' })
-  await typeInto(ui, 'desktop', 'comment-2', 'why five?')
+  await typeInto(ui, 'comment-2', 'why five?')
   await ui.press({ key: 'submit' })
 
   expect(ran).toHaveLength(1)

@@ -57,18 +57,20 @@ export function sameText(a: string, b: string): boolean {
 
 /**
  * The id of the first block of `after` that reads differently from `before`: a block
- * whose text `before` doesn't hold, else (a block removed) the first position where
+ * whose text (whitespace aside) `before` doesn't hold, else (a block removed) the first position where
  * the two disagree. `undefined` when nothing changed.
  */
 export function firstChange(before: BlueprintUiBlock[], after: BlueprintUiBlock[]): number | undefined {
-  const old = before.map(quoteOf)
-  const added = after.find(b => !old.some(q => sameText(q, quoteOf(b))))
-  if (added) return added.id
-  const n = Math.max(before.length, after.length)
+  // Only whitespace is ignored: a write that changes markup or a link target is a change.
+  const norm = (b: BlueprintUiBlock) => quoteOf(b).replace(/\s+/g, ' ').trim()
+  const was = before.map(norm)
+  const now = after.map(norm)
+  const old = new Set(was)
+  const added = now.findIndex(q => !old.has(q))
+  if (added >= 0) return after[added]!.id
+  const n = Math.max(was.length, now.length)
   for (let i = 0; i < n; i++) {
-    const a = before[i]
-    const b = after[i]
-    if (!a || !b || !sameText(quoteOf(a), quoteOf(b))) return after.length ? after[Math.min(i, after.length - 1)]!.id : undefined
+    if (was[i] === undefined || was[i] !== now[i]) return after.length ? after[Math.min(i, after.length - 1)]!.id : undefined
   }
   return undefined
 }

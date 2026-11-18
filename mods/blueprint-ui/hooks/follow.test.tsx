@@ -81,7 +81,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await call($, { tool: 'mcp__3c44__notion-update-page', page_id: '41c43cce21f281aab4cdf8edc10c9d8a' })
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'plus-1' })
-    await typeInto(ui, surface, 'comment-1', 'why Friday?')
+    await typeInto(ui, 'comment-1', 'why Friday?')
     expect(await ui.find({ type: 'Text', text: /outdated/ })).toBeUndefined()
 
     // Blueprint rewrites the sentence: the write refreshes the pane.

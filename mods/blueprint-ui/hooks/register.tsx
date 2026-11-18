@@ -59,6 +59,10 @@ const TAB_BAR = 'tabs'
 /** The element a block is scrolled to by: its "+" in the gutter. */
 const plusKey = (block: number) => `plus-${block}`
 
+/** Scrolls the pane to block `block`; not drawn, or the pane not placed, leaves it where it is. */
+const scrollToBlock = ($: EngineInterface, block: number) =>
+  $.ui.scroll({ to: { key: plusKey(block) }, in: PANE, block: 'center' }).catch(() => undefined)
+
 /**
  * Shows `page` and reads it into `doc`; a later open of another page wins over this read.
  * With `mark`, a page that was showing scrolls to the first block that changed and lights it briefly.
@@ -72,6 +76,7 @@ async function openPage(
 ): Promise<void> {
   const before = await read($, doc)
   const was = mark && before.page === page.id && before.status === 'ready' ? before.blocks : null
+  if (before.page !== page.id) drafts.clear()
   await update($, view, v => ({ ...v, page: page.id }))
   if (backend !== 'notion') {
     await update($, doc, (): BlueprintUiDoc => ({
@@ -86,14 +91,17 @@ async function openPage(
   await update($, doc, (): BlueprintUiDoc => ({ page: page.id, status: 'loading' }))
   let got = await fetchPage($, page.url, await candidates($, configured))
   // At the start of a session the Notion connection may not be up yet: retry for a while before saying so.
-  for (let waited = 0; 'error' in got && got.error === 'no-server' && waited < NOTION_WAIT_MS && ticket === lastRead; waited += NOTION_RETRY_MS) {
+  // `waited` counts each attempt's own time as well as the sleeps, so the wait stays near its bound.
+  for (let waited = 0; 'error' in got && got.error === 'no-server' && waited < NOTION_WAIT_MS && ticket === lastRead; ) {
     if (!waited) await update($, doc, cur => (cur.page === page.id && cur.status === 'loading' ? { ...cur, isWaiting: true } : cur))
     try {
       await $.clock.sleep(NOTION_RETRY_MS)
     } catch {
       break
     }
+    const started = Date.now()
     got = await fetchPage($, page.url, await candidates($, configured))
+    waited += NOTION_RETRY_MS + (Date.now() - started)
   }
   const next: BlueprintUiDoc =
     'markdown' in got
@@ -112,11 +120,7 @@ async function openPage(
   await update($, doc, cur => (cur.page === page.id ? shown : cur))
   if (changed === undefined || shown.status !== 'ready') return
   const readAt = shown.readAt
-  try {
-    await $.ui.scroll({ to: { key: plusKey(changed) }, in: PANE, block: 'center' })
-  } catch {
-    // Not drawn, or the pane isn't placed: the highlight still shows.
-  }
+  await scrollToBlock($, changed)
   $.clock.after(HIGHLIGHT_MS, () => {
     void update($, doc, cur =>
       cur.status === 'ready' && cur.readAt === readAt && cur.changed !== undefined ? withoutChange(cur) : cur,
@@ -279,6 +283,7 @@ export const register: Register = (on, options) => {
     const m = data && data.kind === 'mode' && typeof data.id === 'string' ? /^(comment|suggest)-(\d+)$/.exec(data.id) : null
     const mode = data?.mode as Mode | undefined
     if (!m || (mode !== 'comment' && mode !== 'suggest')) return {}
+    drafts.clear()
     await update($, view, v => (v.editor?.block === Number(m[2]) ? { ...v, editor: { ...v.editor, mode } } : v))
     await focusField($, `${mode}-${m[2]}`)
     return {}
@@ -321,7 +326,7 @@ export const register: Register = (on, options) => {
       const changed = mine?.status === 'ready' ? mine.changed : undefined
 
       const fieldKey = (block: number, mode: 'comment' | 'suggest') => `${mode}-${block}`
-      const setEditor = (next: typeof editor) => update($, view, s => ({ ...s, editor: next }))
+      const setEditor = (next: typeof editor) => (drafts.clear(), update($, view, s => ({ ...s, editor: next })))
       /** Opens the editor on a block in `mode` and puts the cursor in its field. */
       const edit = async (b: BlueprintUiBlock, mode: 'comment' | 'suggest') => {
         await setEditor({ page: open.id, block: b.id, quote: quoteOf(b), mode })
@@ -330,10 +335,10 @@ export const register: Register = (on, options) => {
       const add = (b: BlueprintUiBlock, kind: BlueprintUiItem['kind'], text: string) => addItem($, open, b, kind, text)
       const remove = (id: string) => update($, pending, list => list.filter(i => i.id !== id))
       const blockOf = (i: BlueprintUiItem) => blocks?.find(b => sameText(quoteOf(b), i.quote))
-      const isOutdated = (i: BlueprintUiItem) => blocks !== null && !blockOf(i)
 
-      const kindTag = (i: BlueprintUiItem) =>
-        i.kind === 'comment' ? <Text color="suggestion" bold>Comment</Text> : <Text color="success" bold>Suggestion</Text>
+      const kindTag = (i: BlueprintUiItem) => (
+        <Text color={accentOf(i.kind === 'comment' ? 'comment' : 'suggest')} bold>{i.kind === 'comment' ? 'Comment' : 'Suggestion'}</Text>
+      )
 
       // One item in the pending review: what it is, where it sits, what it says.
       const reviewItem = (i: BlueprintUiItem) => {
@@ -346,10 +351,10 @@ export const register: Register = (on, options) => {
                 <Text>
                   {kindTag(i)}
                   <Text dimColor> on {oneLine(i.heading || 'the top of the page', 48)}</Text>
-                  {isOutdated(i) ? <Text color="warning"> · outdated</Text> : null}
+                  {blocks !== null && !at ? <Text color="warning"> · outdated</Text> : null}
                 </Text>
                 {at ? (
-                  <Button key={`goto-${i.id}`} plain dimColor label="↓ show in page" onPress={() => void $.ui.scroll({ to: { key: plusKey(at.id) }, in: PANE, block: 'center' }).catch(() => undefined)} />
+                  <Button key={`goto-${i.id}`} plain dimColor label="↓ show in page" onPress={() => void scrollToBlock($, at.id)} />
                 ) : null}
               </Box>
               <Text dimColor italic>“{oneLine(i.quote, 72)}”</Text>
@@ -408,7 +413,7 @@ export const register: Register = (on, options) => {
               <Input key={key} value={value || undefined} placeholder={placeholder} submitLabel={Client ? addLabel : mode === 'comment' ? 'add comment' : 'add'} rows={rows} autoFocus onInput={(t: string) => void drafts.set(key, t)} onSubmit={(t: string) => add(b, mode, t)} />
             </Box>
             <Box flexDirection="row" justifyContent="flex-end" gap={1}>
-              <Button key={`cancel-${b.id}`} plain dimColor label="Cancel" onPress={() => (drafts.delete(key), setEditor(null))} />
+              <Button key={`cancel-${b.id}`} plain dimColor label="Cancel" onPress={() => setEditor(null)} />
               {Client ? null : (
                 <Button key={`add-${b.id}`} variant="primary" label={addLabel} onPress={() => add(b, mode, drafts.get(key) ?? value)} />
               )}
