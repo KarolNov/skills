@@ -6,7 +6,7 @@ Turns a solution the user already has in mind into an approved blueprint: a brie
 
 ### Requirement: Mode selection
 
-`/blueprint` SHALL go into propose mode when its arguments describe a change or are empty, into apply mode when the first word is `apply`, and into review mode when the first word is `review` followed by a review file.
+`/blueprint` SHALL go into propose mode when its arguments describe a change or are empty, into apply mode when the first word is `apply`, and into review mode only when the first word is `review` followed by a `.json` review file that exists. Any other text starting with "review" SHALL be treated as a change description.
 
 - **Scenario: Change described**
   - **WHEN** the user runs `/blueprint add SSO login`
@@ -17,6 +17,9 @@ Turns a solution the user already has in mind into an approved blueprint: a brie
 - **Scenario: Review submitted**
   - **WHEN** `/blueprint review /path/review.json` runs
   - **THEN** review mode applies that file
+- **Scenario: Change that starts with "review"**
+  - **WHEN** the user runs `/blueprint review flow should require two approvers`
+  - **THEN** propose mode starts with that solution
 
 ### Requirement: Setup first in an unset repo
 
