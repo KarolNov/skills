@@ -66,6 +66,7 @@ Mermaid code blocks show as code when written through the connector, and a rebui
 
 1. Render the review's diagrams to SVG with `scripts/render_mermaid.py` (see visuals.md).
 2. For each file, `notion-create-file-upload` (filename ending `.svg`), then POST the file to the returned `upload_url` as multipart field `file` with the returned headers: `curl -X POST <upload_url> -H "authorization: <value>" -F "file=@diagram.svg;type=image/svg+xml"`. Uploads expire within the hour unless placed on a page.
-3. In the review, write `<image source="file-upload://<id>">caption</image>`, then a `<toggle>` holding a grey "Mermaid source" line and the ` ```mermaid ` block.
+3. Draw each diagram's terminal version and check it with `scripts/text_diagram.py` (visuals.md, "Terminal version").
+4. In the review, write `<image source="file-upload://<id>">caption</image>`, then a `<toggle>` holding a grey "Mermaid source" line, the ` ```mermaid ` block, a grey "Terminal version" line and the terminal version as a ` ```text ` block. The `blueprint-ui` pane shows that block in a terminal, in place of the image.
 
 The playground runs inside the review: upload the HTML file the same way (filename ending `.html`) and place it with `<embed source="file-upload://<id>" />` in the Playground section. Notion renders it as a sandboxed live preview. On a rebuild, upload fresh files and replace the old blocks; read the page back to confirm each source turned into a `notion-file-block://` URL.

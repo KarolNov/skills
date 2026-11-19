@@ -45,6 +45,25 @@ export function svgSource(tag: string): string | undefined {
 }
 
 /**
+ * A diagram toggle's terminal version: its first fenced block that isn't Mermaid (written as
+ * ```text, which Notion may read back under another name), without its fences.
+ */
+export function terminalVersion(inner: string[]): string | undefined {
+  for (let k = 0; k < inner.length; k++) {
+    const open = /^\s*(```+|~~~+)\s*(.*)$/.exec(inner[k]!)
+    if (!open) continue
+    let end = k + 1
+    while (end < inner.length && !inner[end]!.trim().startsWith(open[1]!)) end++
+    if (!/^mermaid\b/i.test(open[2]!.trim())) {
+      const body = inner.slice(k + 1, end).join('\n').replace(/^\n+|\s+$/g, '')
+      if (body) return body
+    }
+    k = end
+  }
+  return undefined
+}
+
+/**
  * Splits a normalized page into blocks: a heading, a paragraph, a table, a code
  * fence, or one top-level list item with its nested lines. Images, embeds and
  * the Mermaid toggles under diagrams become links to the page; a subpage
@@ -87,7 +106,12 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
         j++
       }
       const inner = lines.slice(i + 1, j - 1)
-      if (!inner.some(l => /^\s*```mermaid/.test(l))) {
+      if (inner.some(l => /^\s*```mermaid/.test(l))) {
+        // Under a diagram's image: its terminal version, if the toggle has one, goes on the image.
+        const drawn = terminalVersion(inner)
+        const image = out[out.length - 1]
+        if (drawn && image?.kind === 'link' && image.picture) out[out.length - 1] = { ...image, diagram: drawn }
+      } else {
         const [title = '', ...rest] = inner.filter((l, k) => k > 0 || l.trim())
         const text = [`**▸ ${inline(title.replace(/<[^>]+>/g, '').trim())}**`, ...rest.map(inline)].join('\n').trim()
         push({ kind: 'md', text }, i, j)
