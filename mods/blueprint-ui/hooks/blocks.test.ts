@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { blocksOf } from './blocks'
+import { blocksOf, svgSource } from './blocks'
+import { SVG_MAX, svgMarkup } from './notion'
 
 const PAGE = 'https://app.notion.com/p/review'
 
@@ -71,6 +72,34 @@ test('a review splits into blocks, with links in place of media', () => {
   const fence = blocks[8]!
   expect(fence.kind === 'md' && fence.text.includes('\n\n')).toBe(true)
   expect(blocks[2]!.heading).toBe('Picture')
+})
+
+test('an uploaded SVG image carries its reference; other media do not', () => {
+  const blocks = blocksOf(REVIEW, PAGE)
+  const image = blocks[2]!
+  expect(image.kind === 'link' && image.picture).toBe('notion-file-block://x?name=before-after.svg')
+  const embed = blocks[9]!
+  expect(embed.kind === 'link' && embed.picture).toBe(undefined)
+  const png = blocksOf('<image source="notion-file-block://p?space_id=s&amp;name=shot.png">A shot</image>\n', PAGE)[0]!
+  expect(png.kind === 'link' && png.picture).toBe(undefined)
+  const external = blocksOf('<image source="https://example.com/a.svg"></image>\n', PAGE)[0]!
+  expect(external.kind === 'link' && external.picture).toBe(undefined)
+})
+
+test('an image reference has its &amp; undone and its name read encoded', () => {
+  expect(svgSource('<image source="notion-file-block://a/b?space_id=s&amp;name=flow%20chart.svg">')).toBe(
+    'notion-file-block://a/b?space_id=s&name=flow%20chart.svg',
+  )
+  expect(svgSource('<image source="notion-file-block://a/b?space_id=s&name=bad%zz.svg">')).toBe(
+    'notion-file-block://a/b?space_id=s&name=bad%zz.svg',
+  )
+})
+
+test('only a whole SVG document within the size cap is drawable', () => {
+  expect(svgMarkup('<?xml version="1.0"?>\n<svg xmlns="x"><g/></svg>\n')).toBe('<svg xmlns="x"><g/></svg>')
+  expect(svgMarkup('<html>nope</html>')).toBe(undefined)
+  expect(svgMarkup('<svg><g/>')).toBe(undefined)
+  expect(svgMarkup(`<svg>${'x'.repeat(SVG_MAX)}</svg>`)).toBe(undefined)
 })
 
 test('a toggle that is not a diagram shows its content', () => {

@@ -74,6 +74,52 @@ export async function fetchPage($: EngineInterface, url: string, names: string[]
   return 'error' in out ? out : { markdown: out.text, server: got.server }
 }
 
+/** The most SVG markup the desktop's `Svg` element takes. */
+export const SVG_MAX = 131072
+
+/** The markup from `<svg` on, when `text` is an SVG document the pane can draw. */
+export function svgMarkup(text: string): string | undefined {
+  const at = text.search(/<svg[\s>]/i)
+  if (at < 0) return undefined
+  const svg = text.slice(at).trim()
+  return svg.length <= SVG_MAX && /<\/svg>$/i.test(svg) ? svg : undefined
+}
+
+/**
+ * Downloads uploaded SVG files by their `notion-file-block://` references: signed URLs from
+ * `notion-get-file-download-urls` on `server`, then each file through the host. Answers the
+ * references that came back as drawable SVG; any that didn't are left out (their links stay).
+ */
+export async function fetchSvgs($: EngineInterface, server: string, refs: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {}
+  const unique = [...new Set(refs)]
+  for (let i = 0; i < unique.length; i += 25) {
+    let files: { reference?: unknown; url?: unknown }[] = []
+    try {
+      const res = await $.mcp.call(server, 'notion-get-file-download-urls', { references: unique.slice(i, i + 25) })
+      if (res.isError) continue
+      const text = res.content.map(b => ('text' in b && typeof b.text === 'string' ? b.text : '')).join('')
+      const parsed = JSON.parse(text) as { files?: unknown }
+      if (Array.isArray(parsed.files)) files = parsed.files
+    } catch {
+      continue
+    }
+    await Promise.all(
+      files.map(async f => {
+        if (typeof f.reference !== 'string' || typeof f.url !== 'string' || !/^https:\/\//.test(f.url)) return
+        try {
+          const got = await $.http.fetch(f.url)
+          const svg = got.ok ? svgMarkup(got.text) : undefined
+          if (svg) out[f.reference] = svg
+        } catch {
+          // Left as a link.
+        }
+      }),
+    )
+  }
+  return out
+}
+
 /** A page's version marker, computed as blueprint computes it for `specVersion`; or why it couldn't be. */
 export async function fetchMarker($: EngineInterface, url: string, names: string[], root: string): Promise<{ marker: string } | { error: string }> {
   const got = await fetchRaw($, url, names)

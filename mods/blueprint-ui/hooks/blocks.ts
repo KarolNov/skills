@@ -28,6 +28,22 @@ const MEDIA_LABEL: Record<string, string> = {
   bookmark: 'Bookmark',
 }
 
+const SOURCE = /\bsource="(notion-file-block:\/\/[^"]+)"/
+
+/** An image tag's uploaded-file reference, when the file is an SVG (by its `name` or its path). */
+export function svgSource(tag: string): string | undefined {
+  const ref = SOURCE.exec(tag)?.[1]?.replace(/&amp;/g, '&')
+  if (!ref) return undefined
+  const name = /[?&]name=([^&#]*)/.exec(ref)?.[1] ?? ref.split(/[?#]/)[0]!
+  let decoded = name
+  try {
+    decoded = decodeURIComponent(name)
+  } catch {
+    // A stray % leaves the name as written.
+  }
+  return /\.svg$/i.test(decoded) ? ref : undefined
+}
+
 /**
  * Splits a normalized page into blocks: a heading, a paragraph, a table, a code
  * fence, or one top-level list item with its nested lines. Images, embeds and
@@ -40,7 +56,7 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
   let heading = ''
   let i = 0
   // `source` is the block's lines as the page has them: the quote /blueprint review searches for.
-  const push = (b: { kind: 'md'; text: string } | { kind: 'link'; label: string; href: string }, from: number, to: number) =>
+  const push = (b: { kind: 'md'; text: string } | { kind: 'link'; label: string; href: string; picture?: string }, from: number, to: number) =>
     out.push({ ...b, id: out.length, heading, source: lines.slice(from, to).join('\n').trim() })
 
   while (i < lines.length) {
@@ -89,7 +105,8 @@ export function blocksOf(markdown: string, pageUrl: string): Block[] {
       const kind = m?.[1] ?? 'embed'
       const caption = (m?.[3] ?? '').replace(/<[^>]+>/g, '').trim()
       const what = MEDIA_LABEL[kind] ?? 'Embed'
-      push({ kind: 'link', label: caption ? `${what}: ${caption}` : what, href: pageUrl }, i, j + 1)
+      const picture = kind === 'image' ? svgSource(chunk) : undefined
+      push({ kind: 'link', label: caption ? `${what}: ${caption}` : what, href: pageUrl, ...(picture ? { picture } : {}) }, i, j + 1)
       i = j + 1
       continue
     }

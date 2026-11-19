@@ -89,7 +89,18 @@ export type BlueprintUiItem = {
 /** One block of the open page: Markdown text, or a link in place of what the pane can't draw. */
 export type BlueprintUiBlock =
   | { id: number; kind: 'md'; heading: string; text: string; source: string }
-  | { id: number; kind: 'link'; heading: string; label: string; href: string; source: string }
+  | {
+      id: number
+      kind: 'link'
+      heading: string
+      label: string
+      href: string
+      source: string
+      /** An uploaded SVG image's stable `notion-file-block://` reference: the pane draws it where it can. */
+      picture?: string
+      /** The picture's SVG markup once downloaded; until then, or if it can't be drawn, the link shows. */
+      svg?: string
+    }
 
 /** The open page as last read. */
 export type BlueprintUiDoc =
