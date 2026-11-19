@@ -79,6 +79,38 @@ test('an uploaded SVG diagram is downloaded and drawn on the desktop; the termin
   await terminal.unmount()
 })
 
+const DRAWN = '┌──────┐\n│ open │\n└──┬───┘\n   ▼\n Board'
+const WITH_TEXT = `<image source="${REF.replace('&', '&amp;')}">\nThe flow\n</image>\n\n<toggle>\n<span color="gray">Mermaid source</span>\n\n\`\`\`mermaid\nflowchart TD\n  A --> B\n\`\`\`\n\n<span color="gray">Terminal version</span>\n\n\`\`\`text\n${DRAWN}\n\`\`\`\n</toggle>\n`
+
+test("the terminal draws a diagram's text version in place of its image; the desktop keeps the SVG", async ($, on) => {
+  on('fs.read', () => ({ value: map('notion') }))
+  on('tool.list', () => ({ value: [{ name: 'mcp__3c44__notion-fetch', description: 'Fetch', mcp: true }] }))
+  on('mcp.call', (_, e) => {
+    if (e.server !== '3c44') throw new Error(`no server ${e.server}`)
+    if (e.tool === 'notion-get-file-download-urls') {
+      const files = [{ reference: REF, url: 'https://files.example/flow.svg' }]
+      return { value: { content: [{ type: 'text', text: JSON.stringify({ files }) }], isError: false } }
+    }
+    return { value: { content: [{ type: 'text', text: 'page' }], isError: false } }
+  })
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: WITH_TEXT, stderr: '', isStdoutTruncated: false, isStderrTruncated: false, argv: e.argv } }))
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: SVG } }))
+
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await terminal.press({ key: 'spec:auth/session' })
+  expect((await terminal.find({ type: 'Code' }))?.props).toEqual({ source: DRAWN })
+  expect(await terminal.find({ type: 'Text', text: /^The flow$/ })).toBeDefined()
+  expect(await terminal.find({ type: 'Link', text: /Image: The flow/ })).toBeUndefined()
+  await terminal.press({ key: 'back' })
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desktop.press({ key: 'spec:auth/session' })
+  expect(await desktop.find({ type: 'Svg' })).toBeDefined()
+  expect(await desktop.find({ type: 'Code' })).toBeUndefined()
+  await desktop.unmount()
+})
+
 test('a diagram that does not download stays a link', async ($, on) => {
   on('fs.read', () => ({ value: map('notion') }))
   on('tool.list', () => ({ value: [{ name: 'mcp__3c44__notion-fetch', description: 'Fetch', mcp: true }] }))

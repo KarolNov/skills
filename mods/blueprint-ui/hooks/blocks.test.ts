@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { blocksOf, svgSource } from './blocks'
+import { blocksOf, svgSource, terminalVersion } from './blocks'
 import { SVG_MAX, svgMarkup } from './notion'
 
 const PAGE = 'https://app.notion.com/p/review'
@@ -100,6 +100,22 @@ test('only a whole SVG document within the size cap is drawable', () => {
   expect(svgMarkup('<html>nope</html>')).toBe(undefined)
   expect(svgMarkup('<svg><g/>')).toBe(undefined)
   expect(svgMarkup(`<svg>${'x'.repeat(SVG_MAX)}</svg>`)).toBe(undefined)
+})
+
+const DRAWN = '┌────┐\n│ A  │\n└─┬──┘\n  ▼\n  B'
+
+test("a diagram toggle's terminal version goes on its image; a toggle without one leaves it off", () => {
+  const page = (lang: string) =>
+    `<image source="notion-file-block://x?name=flow.svg">\nThe flow\n</image>\n\n<toggle>\n<span color="gray">Mermaid source</span>\n\n\`\`\`mermaid\nflowchart TD\n  A --> B\n\`\`\`\n\n<span color="gray">Terminal version</span>\n\n\`\`\`${lang}\n${DRAWN}\n\`\`\`\n</toggle>\n`
+  for (const lang of ['text', 'plain text', '']) {
+    const blocks = blocksOf(page(lang), PAGE)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]!.kind === 'link' && blocks[0]!.diagram).toBe(DRAWN)
+  }
+  // The review above has a Mermaid-only toggle: no terminal version.
+  const image = blocksOf(REVIEW, PAGE)[2]!
+  expect(image.kind === 'link' && image.diagram).toBe(undefined)
+  expect(terminalVersion(['```mermaid', 'flowchart TD', '```'])).toBe(undefined)
 })
 
 test('a toggle that is not a diagram shows its content', () => {

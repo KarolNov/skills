@@ -100,6 +100,8 @@ export type BlueprintUiBlock =
       picture?: string
       /** The picture's SVG markup once downloaded; until then, or if it can't be drawn, the link shows. */
       svg?: string
+      /** The diagram's terminal version, drawn in box characters: what a terminal shows in its place. */
+      diagram?: string
     }
 
 /** The open page as last read. */

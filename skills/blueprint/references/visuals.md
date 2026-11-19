@@ -57,3 +57,21 @@ Build it as one self-contained HTML file: inline CSS and JS, no build step, no n
 ## When the backend can't render it
 
 Some backends store Mermaid but show it as code (Notion does, and every rebuild of the review would reset a block switched to preview by hand). There, place each diagram as an **image** with its caption, and keep the Mermaid source in a collapsed toggle under it, so it stays readable and editable. Render with `python3 <this skill>/scripts/render_mermaid.py <out dir> <file.mmd | review.md | review.html>`: it writes standalone SVGs with plain-text labels and a white card behind them, so they work as images and read on dark pages. The backend file says which way it goes; for any other backend, read the page back after writing and switch to images if the diagrams show as code.
+
+### Terminal version
+
+Where diagrams go in as images, the `blueprint-ui` pane draws them on the desktop but can't in a terminal, so each image also gets a **terminal version**: the same diagram drawn by hand in box-drawing characters, in a plain-text code block under the Mermaid source in the toggle. Draw it for the terminal, not as a copy of the layout: Mermaid's left-to-right fan-outs don't fit.
+
+- **At most 56 columns**, top to bottom. Stack what Mermaid puts side by side; two or three boxes per row at most.
+- Boxes `┌─┐ │ └─┘`, lines `─ │`, joins `├ ┤ ┬ ┴ ┼`, arrowheads `▼ ▲ ► ◄`. A label sits on its line (`──one──►`) or beside it.
+- A fan-out from one node is a list, not a row of boxes:
+  ```
+  Board model
+    ├──► Needs attention · ▶ drift / sync
+    └──► In sync: one quiet list
+  ```
+- A decision is a list of cases, not a diamond: `spec only ──► ▶ drift`.
+- Same words as the image; change is said in words where it matters ("(new)"), since there is no color.
+- No tabs, emoji or wide (CJK) characters: terminals disagree on their width.
+
+Check each one with `python3 <this skill>/scripts/text_diagram.py <file.txt>` before writing the review: it checks width, characters, and that every corner, tee and arrowhead joins a line. Fix and re-check until it prints `ok`.

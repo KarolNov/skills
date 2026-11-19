@@ -453,7 +453,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
-    const { Box, Text, Button, Input, Link, Markdown } = elements
+    const { Box, Text, Button, Input, Link, Markdown, Code } = elements
     // Every Button on the desktop is a native button, so there the editor's tab bar is our own.
     const Client = e.surface === 'desktop' && 'Client' in elements ? elements.Client : undefined
     // The terminal's table answers `Svg` too, drawing only its alt: there the link stays instead.
@@ -703,6 +703,12 @@ export const register: Register = (on, options) => {
                         ) : Svg && b.svg ? (
                           <Box flexDirection="column">
                             <Svg key={`svg${b.id}`} source={b.svg} alt={b.label} />
+                            <Text dimColor>{b.label.replace(/^Image: /, '')}</Text>
+                          </Box>
+                        ) : !Svg && b.diagram ? (
+                          // The terminal can't draw the image: the diagram's own text version stands in.
+                          <Box flexDirection="column">
+                            <Code key={`diagram${b.id}`} source={b.diagram} />
                             <Text dimColor>{b.label.replace(/^Image: /, '')}</Text>
                           </Box>
                         ) : (
