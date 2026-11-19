@@ -23,7 +23,17 @@ Two groups that would edit the same files are stacked, never parallel, even when
 
 **Specs** is always the last group: the fold task, run after every other group has merged ([step 5](#5-fold-the-delta-into-the-specs)). Code PRs leave `.blueprint/` alone, except the first to start, which records `building`. Parallel sessions then never write the same spec page or `blueprint.json` entry.
 
-Show the plan as a table and change it until the user approves:
+Show the plan as a diagram, so the shape reads at a glance: a tree of branches from the default branch, each group under the branch it is cut from, so a stacked group sits under its base and parallel groups are siblings. Mark which groups can start now (▶) and end with Specs:
+
+```text
+main
+├── 1. Session store ········ tasks 1, 2   ▶ starts now
+│   └── 2. Login endpoint ··· tasks 3, 4   stacked on 1
+├── 3. Admin UI ············· task 5       ▶ starts now, parallel with 1
+└── Specs ··················· task 6       after 1–3 merge
+```
+
+Under it, the same plan as a table, and change both until the user approves:
 
 | Group | Tasks | Base | Runs |
 | --- | --- | --- | --- |
