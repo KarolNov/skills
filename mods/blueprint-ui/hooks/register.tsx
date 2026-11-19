@@ -6,7 +6,7 @@ import { blocksOf } from './blocks'
 import { ago, boardOf, columnsFor, rowsOf, syncAll } from './board'
 import type { CapRow, ChangeRow, Side, Step } from './board'
 import { NO_CODE, NO_SPECS, NO_STEPS, checkCode, checkSpecs, isCheckingSpecs, recheckCode, recheckSpec, runStep, stepKey, wasStopped } from './checks'
-import { candidates, fetchPage } from './notion'
+import { candidates, fetchPage, fetchSvgs } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, parentOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
 import type { Map } from './pages'
@@ -176,9 +176,11 @@ async function openPage(
     got = await fetchPage($, page.url, await candidates($, configured), root)
     waited += NOTION_RETRY_MS + (Date.now() - started)
   }
+  // Diagrams already downloaded for this page carry over, so a re-read after a write doesn't flash their links.
+  const known = before.page === page.id && before.status === 'ready' ? svgsOf(before.blocks) : {}
   const next: BlueprintUiDoc =
     'markdown' in got
-      ? { page: page.id, status: 'ready', blocks: blocksOf(got.markdown, page.url), readAt: new Date().toISOString() }
+      ? { page: page.id, status: 'ready', blocks: withSvgs(blocksOf(got.markdown, page.url), known), readAt: new Date().toISOString() }
       : got.error === 'no-server'
         ? {
             page: page.id,
@@ -191,6 +193,7 @@ async function openPage(
   const changed = was && next.status === 'ready' ? firstChange(was, next.blocks) : undefined
   const shown = changed === undefined || next.status !== 'ready' ? next : { ...next, changed }
   await update($, doc, cur => (cur.page === page.id ? shown : cur))
+  if (shown.status === 'ready' && 'server' in got) void loadSvgs($, page.id, shown.readAt, got.server, shown.blocks)
   if (changed === undefined || shown.status !== 'ready') return
   const readAt = shown.readAt
   await scrollToBlock($, changed)
@@ -201,7 +204,31 @@ async function openPage(
   })
 }
 
-const withoutChange = ({ changed: _, ...rest }: Extract<BlueprintUiDoc, { status: 'ready' }>): BlueprintUiDoc => rest
+/** The SVG markup a page's blocks hold, by picture reference. */
+function svgsOf(blocks: BlueprintUiBlock[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const b of blocks) if (b.kind === 'link' && b.picture && b.svg) out[b.picture] = b.svg
+  return out
+}
+
+/** `blocks` with each picture's markup from `svgs` filled in where it's known. */
+function withSvgs(blocks: BlueprintUiBlock[], svgs: Record<string, string>): BlueprintUiBlock[] {
+  return blocks.map(b => (b.kind === 'link' && b.picture && !b.svg && svgs[b.picture] ? { ...b, svg: svgs[b.picture] } : b))
+}
+
+/**
+ * Downloads the page's SVG diagrams not yet drawn and fills them into the read they came from;
+ * a newer read or another page leaves this one's result unused.
+ */
+async function loadSvgs($: EngineInterface, page: string, readAt: string, server: string, blocks: BlueprintUiBlock[]): Promise<void> {
+  const refs = blocks.flatMap(b => (b.kind === 'link' && b.picture && !b.svg ? [b.picture] : []))
+  if (!refs.length) return
+  const svgs = await fetchSvgs($, server, refs).catch(() => ({}))
+  if (!Object.keys(svgs).length) return
+  await update($, doc, cur => (cur.page === page && cur.status === 'ready' && cur.readAt === readAt ? { ...cur, blocks: withSvgs(cur.blocks, svgs) } : cur))
+}
+
+const withoutChange =({ changed: _, ...rest }: Extract<BlueprintUiDoc, { status: 'ready' }>): BlueprintUiDoc => rest
 
 /** Adds a pending item on block `b` of `page` and closes the editor; empty or unchanged text adds nothing. */
 async function addItem(
@@ -429,6 +456,8 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button, Input, Link, Markdown } = elements
     // Every Button on the desktop is a native button, so there the editor's tab bar is our own.
     const Client = e.surface === 'desktop' && 'Client' in elements ? elements.Client : undefined
+    // The terminal's table answers `Svg` too, drawing only its alt: there the link stays instead.
+    const Svg = e.surface !== 'terminal' && 'Svg' in elements ? elements.Svg : undefined
     const loaded = await load($)
     if ('error' in loaded) {
       return (
@@ -669,7 +698,16 @@ export const register: Register = (on, options) => {
                         />
                       </Box>
                       <Box flexDirection="column" flexGrow={1} flexShrink={1}>
-                        {b.kind === 'link' ? <Link href={b.href} label={`↗ ${b.label} (open in Notion)`} /> : <Markdown key={`b${b.id}`} text={b.text} />}
+                        {b.kind === 'md' ? (
+                          <Markdown key={`b${b.id}`} text={b.text} />
+                        ) : Svg && b.svg ? (
+                          <Box flexDirection="column">
+                            <Svg key={`svg${b.id}`} source={b.svg} alt={b.label} />
+                            <Text dimColor>{b.label.replace(/^Image: /, '')}</Text>
+                          </Box>
+                        ) : (
+                          <Link href={b.href} label={`↗ ${b.label} (open in Notion)`} />
+                        )}
                         {onBlock.length > 0 ? <Box flexDirection="column" marginTop={1}>{onBlock.map(inlineItem)}</Box> : null}
                         {isOpen && editor ? editorBox(b, editor.mode) : null}
                       </Box>

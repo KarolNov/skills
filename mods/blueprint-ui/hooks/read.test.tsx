@@ -37,6 +37,68 @@ test('a Notion page is fetched, normalized and drawn block by block', async ($, 
   expect(calls.slice(0, 2)).toEqual(['claude.ai Notion', '3c44'])
 })
 
+const REF = 'notion-file-block://a/b?space_id=s&name=flow.svg'
+const DIAGRAM = `## Picture\n\n<image source="${REF.replace('&', '&amp;')}">\nThe flow\n</image>\n\n<image source="notion-file-block://c/d?name=shot.png">A shot</image>\n`
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
+
+test('an uploaded SVG diagram is downloaded and drawn on the desktop; the terminal keeps the link', async ($, on) => {
+  const asked: unknown[] = []
+  const fetched: string[] = []
+  on('fs.read', () => ({ value: map('notion') }))
+  on('tool.list', () => ({ value: [{ name: 'mcp__3c44__notion-fetch', description: 'Fetch', mcp: true }] }))
+  on('mcp.call', (_, e) => {
+    if (e.server !== '3c44') throw new Error(`no server ${e.server}`)
+    if (e.tool === 'notion-get-file-download-urls') {
+      asked.push(e.args.references)
+      const files = [{ reference: REF, url: 'https://files.example/flow.svg?sig=1' }]
+      return { value: { content: [{ type: 'text', text: JSON.stringify({ files, unresolved: [] }) }], isError: false } }
+    }
+    return { value: { content: [{ type: 'text', text: 'page' }], isError: false } }
+  })
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: DIAGRAM, stderr: '', isStdoutTruncated: false, isStderrTruncated: false, argv: e.argv } }))
+  on('http.fetch', (_, e) => {
+    fetched.push(e.url)
+    return { value: { status: 200, ok: true, headers: { 'content-type': 'image/svg+xml' }, text: `<?xml version="1.0"?>\n${SVG}\n` } }
+  })
+
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desktop.press({ key: 'spec:auth/session' })
+  const svg = await desktop.find({ type: 'Svg' })
+  expect(svg?.props).toEqual({ source: SVG, alt: 'Image: The flow' })
+  expect(await desktop.find({ type: 'Text', text: /^The flow$/ })).toBeDefined()
+  // Only the SVG is asked for; the PNG stays a link.
+  expect(asked).toEqual([[REF]])
+  expect(fetched).toEqual(['https://files.example/flow.svg?sig=1'])
+  expect(await desktop.find({ type: 'Link', text: /Image: A shot/ })).toBeDefined()
+  await desktop.press({ key: 'back' })
+  await desktop.unmount()
+
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await terminal.press({ key: 'spec:auth/session' })
+  expect(await terminal.find({ type: 'Link', text: /Image: The flow \(open in Notion\)/ })).toBeDefined()
+  await terminal.unmount()
+})
+
+test('a diagram that does not download stays a link', async ($, on) => {
+  on('fs.read', () => ({ value: map('notion') }))
+  on('tool.list', () => ({ value: [{ name: 'mcp__3c44__notion-fetch', description: 'Fetch', mcp: true }] }))
+  on('mcp.call', (_, e) => {
+    if (e.server !== '3c44') throw new Error(`no server ${e.server}`)
+    if (e.tool === 'notion-get-file-download-urls') {
+      const files = [{ reference: REF, url: 'https://files.example/flow.svg' }]
+      return { value: { content: [{ type: 'text', text: JSON.stringify({ files }) }], isError: false } }
+    }
+    return { value: { content: [{ type: 'text', text: 'page' }], isError: false } }
+  })
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: DIAGRAM, stderr: '', isStdoutTruncated: false, isStderrTruncated: false, argv: e.argv } }))
+  on('http.fetch', () => ({ value: { status: 403, ok: false, headers: {}, text: '<Error>expired</Error>' } }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'spec:auth/session' })
+  expect(await ui.find({ type: 'Link', text: /Image: The flow \(open in Notion\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('no Notion server: the pane waits for it, then names what it tried and the setting', async ($, on) => {
   const clock = mock.clock(on)
   on('fs.read', () => ({ value: map('notion') }))
