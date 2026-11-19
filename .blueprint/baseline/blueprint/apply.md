@@ -41,7 +41,7 @@ When the session is on the default branch, apply SHALL create a branch for the c
 
 ### Requirement: Split into PRs
 
-Before building a brief with no PR plan, apply SHALL judge its size. When it is big (more than about four build tasks, several capabilities whose code doesn't overlap, or more than about 400 changed lines), apply SHALL propose splitting its tasks into groups, each one branch, one PR and one session. A group SHALL be stacked on the group whose code it builds on, or whose files it edits, and parallel otherwise. Folding the delta SHALL be its own last group, run after every other group has merged; code groups SHALL leave `.blueprint/` alone apart from recording `building`. Apply SHALL show the proposed plan as a diagram as well as a table: a tree of branches in which a stacked group sits under its base, parallel groups are siblings, and the groups that can start now are marked. After the user approves, the plan SHALL be written into the brief, and apply SHALL offer a fresh session for each group that can start now: those based on the default branch, and those stacked on a group whose PR is open. `/blueprint apply <change> <group>` SHALL build only that group's tasks, on its own branch, and open its PR against its base.
+Before building a brief with no PR plan, apply SHALL judge its size. When it is big (more than about four build tasks, several capabilities whose code doesn't overlap, or more than about 400 changed lines), apply SHALL propose splitting its tasks into groups, each one branch, one PR and one session. A group SHALL be stacked on the group whose code it builds on, or whose files it edits, and parallel otherwise. Folding the delta SHALL be its own last group, run after every other group has merged; code groups SHALL leave `.blueprint/` alone apart from recording `building`. Apply SHALL show the proposed plan as a diagram as well as a table: a tree of branches in which a stacked group sits under its base, parallel groups are siblings, and the groups that can start now are marked. When blueprint-ui's `split` tool is in the session, apply SHALL show the plan through it instead of drawing the tree in chat, with the prompt each group's session starts with, and SHALL call it again once the plan is approved and as groups start, open PRs and merge. After the user approves, the plan SHALL be written into the brief, and apply SHALL offer a fresh session for each group that can start now: those based on the default branch, and those stacked on a group whose PR is open. `/blueprint apply <change> <group>` SHALL build only that group's tasks, on its own branch, and open its PR against its base.
 
 - **Scenario: Small change**
   - **GIVEN** a brief with three build tasks in one capability
@@ -52,6 +52,10 @@ Before building a brief with no PR plan, apply SHALL judge its size. When it is 
   - **WHEN** apply proposes the split
   - **THEN** group 2 (tasks 3, 4) is stacked on group 1 (tasks 1, 2), group 3 (task 5) runs in parallel from the default branch, and Specs comes last
   - **AND** the diagram shows group 2 under group 1, and groups 1 and 3 as starting now
+- **Scenario: With the pane**
+  - **GIVEN** blueprint-ui is installed
+  - **WHEN** apply proposes the split
+  - **THEN** the plan shows in the blueprint pane, each group with its session's prompt, and chat shows the table alone
 - **Scenario: Build one group**
   - **GIVEN** the PR plan is on the brief and group 1's PR is open
   - **WHEN** the user runs `/blueprint apply add-sso-login 2`

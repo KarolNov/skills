@@ -102,6 +102,22 @@ A step runs once the session is idle. While Claude is working, the board SHALL s
   - **WHEN** the user presses ▶ sync on `blueprint/ui`
   - **THEN** the row shows "◷ sync queued" until the turn ends, then `/blueprint-sync blueprint/ui` runs once
 
+### Requirement: PR plan
+
+When `/blueprint apply` splits a change, it SHALL be able to show the plan in the pane, in place of the board, through the mod's `split` tool: a tree of branches under the default branch, with a stacked group under its base, parallel groups as siblings and Specs last, each group with its tasks and state. Until the plan is approved, the pane SHALL show it as a proposal with no buttons. Once it is approved, each group that can start now SHALL get ▶ start, and two or more such groups a ▶ start all ready (n). A press SHALL send Claude a message, as the user's, asking to start those groups, each in a new session with the prompt apply wrote for it, and SHALL show them as starting. A stacked group can start once its base's PR is open, and Specs once every other group has merged. A change with a plan SHALL get a PRs link on its board row.
+
+- **Scenario: Proposed plan**
+  - **GIVEN** apply proposes group 1, group 2 stacked on 1, group 3 and Specs
+  - **WHEN** it calls the `split` tool
+  - **THEN** the pane shows group 2 under group 1, group 3 beside group 1 and Specs last, with no ▶ start
+- **Scenario: Start a group**
+  - **GIVEN** the plan is approved
+  - **WHEN** the user presses ▶ start on group 1
+  - **THEN** Claude gets a message to start group 1 in a new session with its prompt, and the row reads "starting…"
+- **Scenario: Stacked group waits**
+  - **GIVEN** the plan is approved and group 1's PR is not open
+  - **THEN** group 2 has no ▶ start and reads "waits for group 1's PR"
+
 ### Requirement: Opens after a blueprint write
 
 When a tool call finishes whose id-like arguments (`page_id`, `parent`, `id` and the like) name a page that `blueprint.json` maps, the pane SHALL open on that page, or refresh it if it is already showing it. Links inside the written content SHALL NOT count. A refresh caused by a write SHALL scroll to the first block that changed and highlight it for about 2.5 seconds.

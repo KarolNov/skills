@@ -45,12 +45,12 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "a9d476d734af9396",
+      "specVersion": "38b243f6152fef11",
       "anchorsFiles": {
-        "skills/blueprint/references/apply.md": "edf2720e675c",
+        "skills/blueprint/references/apply.md": "9ad275a3b2ea",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
       },
-      "syncedCommit": "4900d4d266d1d670327c8cc30322da00c1d0a903"
+      "syncedCommit": "cc002ea1c6a19104992ab6b84b4236587feb3004"
     },
     "blueprint/backends": {
       "ref": "https://app.notion.com/p/41c43cce21f28136b9ded9fc8d7d6011",
@@ -125,9 +125,9 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "d82b594b5750f199",
+      "specVersion": "e43bdfff5aebf9d0",
       "anchorsFiles": {
-        "mods/blueprint-ui/.claude-plugin/plugin.json": "f559d1bba7b1",
+        "mods/blueprint-ui/.claude-plugin/plugin.json": "17fe6b5075b0",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6d96c4a97249",
         "mods/blueprint-ui/hooks/blocks.ts": "d35643e36713",
         "mods/blueprint-ui/hooks/board.test.ts": "4e8cf28f8bb6",
@@ -140,16 +140,18 @@
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
         "mods/blueprint-ui/hooks/read.test.tsx": "55cfaf16693a",
         "mods/blueprint-ui/hooks/register.test.tsx": "fe974e8c0b62",
-        "mods/blueprint-ui/hooks/register.tsx": "bde2f85c701f",
+        "mods/blueprint-ui/hooks/register.tsx": "d2aaac1d685c",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
+        "mods/blueprint-ui/hooks/split.test.tsx": "98e7e93d885a",
+        "mods/blueprint-ui/hooks/split.ts": "e05d22940a37",
         "mods/blueprint-ui/hooks/status.test.tsx": "896b369c577f",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "0f244d855455"
+        "mods/blueprint-ui/types/index.d.ts": "23ddffe92fb6"
       },
-      "syncedCommit": "449a494f23e35cd27180db5ef74d9ea163960fb0"
+      "syncedCommit": "cc002ea1c6a19104992ab6b84b4236587feb3004"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",

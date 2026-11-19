@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiItem, BlueprintUiPage } from '../types'
+import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiGroup, BlueprintUiItem, BlueprintUiPage, BlueprintUiSplit } from '../types'
 import { blocksOf } from './blocks'
 import { ago, boardOf, columnsFor, rowsOf, syncAll } from './board'
 import type { CapRow, ChangeRow, Side, Step } from './board'
@@ -10,6 +10,7 @@ import { candidates, fetchPage } from './notion'
 import { BLUEPRINT_JSON, READ_TOOL, labelOf, pageFor, pagesNamed, pagesOf, parentOf, targetsOf } from './pages'
 import { countOf, firstChange, itemFor, oneLine, quoteOf, rowsFor, sameText } from './review'
 import type { Map } from './pages'
+import { SPLIT_SPEC, SPLIT_TOOL, isReady, splitOf, startPrompt, stateOf, treeOf } from './split'
 import { TABS, accentOf } from './tabs'
 import type { Mode, TabsProps } from './tabs'
 
@@ -28,6 +29,35 @@ const rev = atom({ plugin: 'blueprint-ui', key: 'rev' } as const, 0, { shape: 'r
 const queued = atom({ plugin: 'blueprint-ui', key: 'queued' } as const, NO_STEPS, { shape: 'queued-1' })
 /** Whether the main loop is mid-turn: a ▶ step then waits for it, and the board says so. */
 const working = atom({ plugin: 'blueprint-ui', key: 'working' } as const, false, { shape: 'working-1' })
+const NO_SPLITS: Record<string, BlueprintUiSplit> = {}
+const splits = atom({ plugin: 'blueprint-ui', key: 'splits' } as const, NO_SPLITS, { shape: 'splits-1' })
+
+/** The split tool as the model calls it. */
+const SPLIT_CALL = `mcp__blueprint-ui__${SPLIT_TOOL}`
+
+/**
+ * Starts groups from the plan: marks them starting and sends Claude the prompt, as the person's own
+ * words since they pressed it; Claude starts the sessions and calls the tool again to mark them started.
+ */
+async function startGroups($: EngineInterface, change: string, ids: string[]): Promise<void> {
+  const split = (await read($, splits))[change]
+  if (!split) return
+  const groups = split.groups.filter(g => ids.includes(g.id) && isReady(split, g))
+  if (!groups.length) return
+  const mark = (status: BlueprintUiGroup['status'], from: BlueprintUiGroup['status']) =>
+    update($, splits, all => {
+      const cur = all[change]
+      if (!cur) return all
+      return { ...all, [change]: { ...cur, groups: cur.groups.map(g => (ids.includes(g.id) && g.status === from ? { ...g, status } : g)) } }
+    })
+  await mark('starting', 'planned')
+  try {
+    await $.prompt.submit({ text: startPrompt(split, groups), asUser: true })
+  } catch {
+    await mark('planned', 'starting')
+    $.ui.toast('Could not send the start request: try again, or ask Claude to start the group.')
+  }
+}
 
 /** What each open field holds, by its key, so "Add" can submit it like Enter does. */
 const drafts = new Map<string, string>()
@@ -120,7 +150,7 @@ async function openPage(
   const before = await read($, doc)
   const was = mark && before.page === page.id && before.status === 'ready' ? before.blocks : null
   if (before.page !== page.id) drafts.clear()
-  await update($, view, v => ({ ...v, page: page.id }))
+  await update($, view, v => ({ ...v, page: page.id, split: null }))
   if (backend !== 'notion') {
     await update($, doc, (): BlueprintUiDoc => ({
       page: page.id,
@@ -302,6 +332,7 @@ export const register: Register = (on, options) => {
       description: 'Open the blueprint pane: reviews, briefs and specs this repo maps',
       argumentHint: '[change or capability] [review|brief]',
     })
+    await $.tool.register(SPLIT_SPEC)
     return next(e)
   })
 
@@ -335,6 +366,28 @@ export const register: Register = (on, options) => {
     return { text: note }
   })
 
+  // apply's PR plan: kept by change and shown in the pane in place of the board.
+  on('tool.call', { tool: new RegExp(`^${SPLIT_CALL}$`) }, async ($, e) => {
+    const { tool: _, tool_use_id: __, ...input } = e as unknown as Record<string, unknown>
+    const got = splitOf(input)
+    if ('error' in got) return { isError: true as const, result: got.error, text: `Not shown: ${got.error}` }
+    await update($, splits, all => {
+      // A group whose start is on its way stays starting until a call says it started.
+      const was = all[got.change]
+      const groups = got.groups.map(g => (g.status === 'planned' && was?.groups.find(o => o.id === g.id)?.status === 'starting' ? { ...g, status: 'starting' as const } : g))
+      return { ...all, [got.change]: { ...got, groups } }
+    })
+    await update($, view, v => ({ ...v, page: null, split: got.change }))
+    const { isPlaced } = await $.ui.open({ id: PANE, title: TITLE })
+    const ready = got.groups.filter(g => isReady(got, g)).length
+    const text = !isPlaced
+      ? 'The plan is saved, but no pane is showing: draw the tree in chat instead.'
+      : got.isApproved
+        ? `Shown in the blueprint pane with ${ready} group${ready === 1 ? '' : 's'} ready to start: the user starts them from its ▶ buttons, or asks you to. Don't draw the tree in chat.`
+        : "Shown in the blueprint pane as a proposal: don't draw the tree in chat; show the table and ask the user to approve or change it."
+    return { result: { shown: isPlaced, ready }, text }
+  })
+
   // A write through an MCP tool to a mapped page opens or refreshes the pane once it has run.
   // Awaited, so the pane reads as the page does when the call returns; only writes to mapped pages wait.
   on('tool.call', async ($, e, next) => {
@@ -347,7 +400,7 @@ export const register: Register = (on, options) => {
       if (loaded && 'map' in loaded) void recheckCode($, loaded.map).catch(() => undefined)
       return result
     }
-    if (!tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
+    if (tool === SPLIT_CALL || !tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
     try {
       await followWrite($, targetsOf(e), configured)
     } catch {
@@ -393,6 +446,60 @@ export const register: Register = (on, options) => {
     const { pages, backend } = loaded.map
     const v = await read($, view)
     const open = pages.find(p => p.id === v.page)
+    const plan = !open && v.split ? (await read($, splits))[v.split] : undefined
+
+    // A change's PR plan: the tree of branches apply proposed, with ▶ start on the groups ready now.
+    if (plan) {
+      const isWorking = await read($, working)
+      const ready = plan.groups.filter(g => isReady(plan, g))
+      const stateColor = (g: BlueprintUiGroup) =>
+        g.status === 'merged' ? 'success' : g.status === 'pr' || g.status === 'started' ? 'suggestion' : g.status === 'starting' ? 'warning' : undefined
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Box flexDirection="row" gap={2}>
+            <Button key="split-back" plain label="← Board" onPress={() => update($, view, s => ({ ...s, split: null }))} />
+          </Box>
+          <Text bold size="heading">{plan.change} · PRs</Text>
+          <Text key="split-note" dimColor>
+            {!plan.isApproved
+              ? 'Proposed: approve or change it in chat. ▶ start appears once it is approved.'
+              : ready.length
+                ? isWorking
+                  ? 'Claude is working: a start waits until the turn ends.'
+                  : '▶ start opens a new session for that group, with the prompt apply wrote for it.'
+                : 'No group can start now: a stacked group waits for its base PR, Specs for every merge.'}
+          </Text>
+          <Box key="split-tree" flexDirection="column">
+            <Text key="split-root" mono dimColor>{plan.defaultBranch}</Text>
+            {treeOf(plan).map(({ prefix, group: g }) => (
+              <Box key={`group-${g.id}`} flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
+                <Text mono dimColor>{prefix.trimEnd()}</Text>
+                <Text bold={g.id.toLowerCase() !== 'specs' || undefined}>{g.id.toLowerCase() === 'specs' ? g.name || 'Specs' : `${g.id}. ${g.name}`}</Text>
+                <Text dimColor>· tasks {g.tasks}</Text>
+                <Text key={`state-${g.id}`} italic size="footnote" color={stateColor(g)} dimColor={stateColor(g) ? undefined : true}>
+                  {stateOf(plan, g)}
+                </Text>
+                {g.pr ? <Link href={g.pr} label="PR" /> : null}
+                {isReady(plan, g) ? (
+                  <Button key={`start-${g.id}`} plain dimColor={isWorking || undefined} label="▶ start" onPress={() => void startGroups($, plan.change, [g.id])} />
+                ) : null}
+              </Box>
+            ))}
+          </Box>
+          {ready.length > 1 ? (
+            <Box flexDirection="row">
+              <Button
+                key="start-all"
+                plain
+                dimColor={isWorking || undefined}
+                label={`▶ start all ready (${ready.length})`}
+                onPress={() => void startGroups($, plan.change, ready.map(g => g.id))}
+              />
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
 
     if (open) {
       const d = await read($, doc)
@@ -587,6 +694,7 @@ export const register: Register = (on, options) => {
     const items = await read($, pending)
     const waiting = new Set(await read($, queued))
     const isWorking = await read($, working)
+    const plans = await read($, splits)
     const board = boardOf(loaded.map, c, sp, page => items.filter(i => i.page === page).length)
     const byId = (id: string | undefined) => (id ? pages.find(p => p.id === id) : undefined)
     const openId = (id: string | undefined) => {
@@ -643,6 +751,7 @@ export const register: Register = (on, options) => {
           {/* A change has two pages: each gets its own link, named for what it opens. */}
           {byId(r.review) ? <Button key={r.review!} plain dimColor label="review" onPress={openId(r.review)!} /> : null}
           {byId(r.brief) ? <Button key={r.brief!} plain dimColor label="brief" onPress={openId(r.brief)!} /> : null}
+          {plans[r.name] ? <Button key={`prs-${r.name}`} plain dimColor label="PRs" onPress={() => update($, view, s => ({ ...s, split: r.name }))} /> : null}
           {r.step ? stepButton(`step-change-${r.name}`, r.step) : null}
         </Box>
       )
