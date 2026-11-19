@@ -45,12 +45,12 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "4e6b504cb0410a34",
+      "specVersion": "a9d476d734af9396",
       "anchorsFiles": {
-        "skills/blueprint/references/apply.md": "24fd89951480",
+        "skills/blueprint/references/apply.md": "edf2720e675c",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
       },
-      "syncedCommit": "449a494f23e35cd27180db5ef74d9ea163960fb0"
+      "syncedCommit": "4900d4d266d1d670327c8cc30322da00c1d0a903"
     },
     "blueprint/backends": {
       "ref": "https://app.notion.com/p/41c43cce21f28136b9ded9fc8d7d6011",
