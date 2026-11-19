@@ -33,7 +33,9 @@ main
 └── Specs ··················· task 6       after 1–3 merge
 ```
 
-Under it, the same plan as a table, and change both until the user approves:
+**With blueprint-ui installed** (the session has its `split` tool, `mcp__blueprint-ui__split`; load it through ToolSearch when it is deferred), call the tool instead of drawing the tree: the blueprint pane shows the same tree beside the chat. Send every group, Specs last, each with its `base` (the default branch or a group's id) and the `prompt` its session will start with: `/blueprint apply <change> <group>` on the first line, then two or three sentences on what the group builds, the branch it is cut from and the files it touches, so a fresh session starts oriented. Send `isApproved: false` while proposing.
+
+Under the tree, or alone in chat when the pane shows it, the same plan as a table, and change it until the user approves (with the pane, call the tool again after each change):
 
 | Group | Tasks | Base | Runs |
 | --- | --- | --- | --- |
@@ -44,7 +46,7 @@ Under it, the same plan as a table, and change both until the user approves:
 
 On a yes, write it into the brief as a **PRs** section after Tasks, one line per group (`- [ ] 1. Session store · tasks 1, 2 · base main · branch: · PR:`), and mark each task line with its group (`- [ ] 3. … (group 2)`). The plan is on the brief, so every session reads the same one.
 
-**Hand off.** Start the groups that can start now: those based on the default branch, and those stacked on a group whose PR is already open. Each runs `/blueprint apply <change> <group>` in a fresh session with its own worktree. Where the host can start sessions (Claude Code's desktop app can), offer one per ready group, parallel ones together. Otherwise give the commands to paste. When a group's PR opens, offer to start the groups stacked on it. Building a group here is fine too: it keeps the context small all the same.
+**Hand off.** With the pane, call the tool again with `isApproved: true`: each group that can start now gets a ▶ start button, and two or more a ▶ start all. A press sends you a message asking to start those groups with their prompts: start each with its prompt in a fresh session with its own worktree (where the host can't start sessions, give the prompts to paste), then call the tool again marking them `started`. Call it again as groups move on (`pr` with the link once a group's PR opens, `merged` once it merges), so the buttons for stacked groups and Specs appear when they can start. Without the pane, start the groups that can start now: those based on the default branch, and those stacked on a group whose PR is already open. Each runs `/blueprint apply <change> <group>` in a fresh session with its own worktree. Where the host can start sessions (Claude Code's desktop app can), offer one per ready group, parallel ones together. Otherwise give the commands to paste. When a group's PR opens, offer to start the groups stacked on it. Building a group here is fine too: it keeps the context small all the same.
 
 **Building one group** follows steps 3 and 4 for that group's tasks only, on its own branch: cut from the default branch, or from its base group's branch when stacked. Verify only the requirements its tasks satisfy. Open its PR (stacked: against the base group's branch), and fill its line on the brief with the branch and PR, ticking it when the PR merges. When a base group merges, rebase the groups stacked on it onto the default branch and retarget their PRs. The Specs group runs step 4 in full over the merged code, then step 5.
 

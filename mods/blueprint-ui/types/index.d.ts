@@ -14,9 +14,29 @@ export type BlueprintUiEditor = { page: string; block: number; quote: string; mo
 /** The board's folding sections, by whether each is open; unset is the section's default. */
 export type BlueprintUiSections = { attention?: boolean; changes?: boolean; sync?: boolean }
 
+/** One PR group of a split change, as apply proposed it through the `split` tool. */
+export type BlueprintUiGroup = {
+  /** `1`, `2`, … or `specs`. */
+  id: string
+  name: string
+  /** The brief's task numbers it builds, as written: `1, 2`. */
+  tasks: string
+  /** The default branch's name, or the id of the group it is stacked on. */
+  base: string
+  /** What its session starts with: `/blueprint apply <change> <group>` and a short brief, written by apply. */
+  prompt: string
+  status: 'planned' | 'starting' | 'started' | 'pr' | 'merged'
+  pr?: string
+}
+
+/** A change's PR plan; `isApproved` once the user said yes in chat, before which nothing starts. */
+export type BlueprintUiSplit = { change: string; defaultBranch: string; isApproved: boolean; groups: BlueprintUiGroup[] }
+
 /** What the pane shows now; `isDoneOpen` and `sections` are the board's folds, for this session. */
 export type BlueprintUiView = {
   page: string | null
+  /** The change whose PR plan is showing, in place of the board. */
+  split?: string | null
   editor?: BlueprintUiEditor | null
   isDoneOpen?: boolean
   sections?: BlueprintUiSections
@@ -100,6 +120,10 @@ declare module 'claude-code' {
       specs: Shaped<BlueprintUiSpecs>
       /** Bumped when blueprint.json may have changed, so a board showing it redraws. */
       rev: Shaped<number>
+      queued: Shaped<string[]>
+      working: Shaped<boolean>
+      /** PR plans by change, as apply last sent them. */
+      splits: Shaped<Record<string, BlueprintUiSplit>>
     }
   }
 }
