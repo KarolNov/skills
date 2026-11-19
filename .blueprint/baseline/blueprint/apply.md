@@ -39,6 +39,24 @@ When the session is on the default branch, apply SHALL create a branch for the c
   - **WHEN** apply starts on the default branch
   - **THEN** a branch is created for the change and recorded
 
+### Requirement: Split into PRs
+
+Before building a brief with no PR plan, apply SHALL judge its size. When it is big (more than about four build tasks, several capabilities whose code doesn't overlap, or more than about 400 changed lines), apply SHALL propose splitting its tasks into groups, each one branch, one PR and one session. A group SHALL be stacked on the group whose code it builds on, or whose files it edits, and parallel otherwise. Folding the delta SHALL be its own last group, run after every other group has merged; code groups SHALL leave `.blueprint/` alone apart from recording `building`. Apply SHALL show the proposed plan as a diagram as well as a table: a tree of branches in which a stacked group sits under its base, parallel groups are siblings, and the groups that can start now are marked. After the user approves, the plan SHALL be written into the brief, and apply SHALL offer a fresh session for each group that can start now: those based on the default branch, and those stacked on a group whose PR is open. `/blueprint apply <change> <group>` SHALL build only that group's tasks, on its own branch, and open its PR against its base.
+
+- **Scenario: Small change**
+  - **GIVEN** a brief with three build tasks in one capability
+  - **WHEN** apply starts
+  - **THEN** it builds them as one PR, with no split proposed
+- **Scenario: Stacked and parallel**
+  - **GIVEN** tasks 3 and 4 need the store that tasks 1 and 2 add, and task 5 touches only the admin UI
+  - **WHEN** apply proposes the split
+  - **THEN** group 2 (tasks 3, 4) is stacked on group 1 (tasks 1, 2), group 3 (task 5) runs in parallel from the default branch, and Specs comes last
+  - **AND** the diagram shows group 2 under group 1, and groups 1 and 3 as starting now
+- **Scenario: Build one group**
+  - **GIVEN** the PR plan is on the brief and group 1's PR is open
+  - **WHEN** the user runs `/blueprint apply add-sso-login 2`
+  - **THEN** only tasks 3 and 4 are built, on a branch cut from group 1's, and the PR targets group 1's branch
+
 ### Requirement: One task at a time
 
 Apply SHALL build the unticked tasks in order. After each one passes its checks, it SHALL close that task's ticket and tick it in the brief. When a session gets long, it MAY stop after a task and name the next one.
