@@ -103,6 +103,25 @@ test('the split tool shows the plan in the pane; ▶ start sends the prompt once
   await ui.unmount()
 })
 
+test('the split tool returns its note as text, the shape an MCP tool result takes', async ($, on) => {
+  host(on)
+  const got = await $.tool.call({ tool: 'mcp__blueprint-ui__split', ...PLAN, isApproved: true } as never)
+  expect(typeof got.result).toBe('string')
+  expect(String(got.result)).toContain('ready to start')
+})
+
+test('a plan whose change is not in blueprint.json still has a way back from the board', async ($, on) => {
+  host(on)
+  await $.tool.call({ tool: 'mcp__blueprint-ui__split', ...PLAN, change: 'add-sso-demo', isApproved: true } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^add-sso-demo · PRs$/ })).toBeDefined()
+  await ui.press({ key: 'split-back' })
+  expect(await ui.find({ key: 'prs-add-sso-demo' })).toBeDefined()
+  await ui.press({ key: 'prs-add-sso-demo' })
+  expect(await ui.find({ key: 'group-1' })).toBeDefined()
+  await ui.unmount()
+})
+
 test('start all sends every ready group in one prompt', async ($, on) => {
   const sent = host(on)
   await $.tool.call({ tool: 'mcp__blueprint-ui__split', ...PLAN, isApproved: true } as never)

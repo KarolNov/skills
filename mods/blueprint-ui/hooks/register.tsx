@@ -385,7 +385,8 @@ export const register: Register = (on, options) => {
       : got.isApproved
         ? `Shown in the blueprint pane with ${ready} group${ready === 1 ? '' : 's'} ready to start: the user starts them from its ▶ buttons, or asks you to. Don't draw the tree in chat.`
         : "Shown in the blueprint pane as a proposal: don't draw the tree in chat; show the table and ask the user to approve or change it."
-    return { result: { shown: isPlaced, ready }, text }
+    // An MCP tool's result reaches the model as text or content blocks, never a bare object.
+    return { result: text, text }
   })
 
   // A write through an MCP tool to a mapped page opens or refreshes the pane once it has run.
@@ -696,6 +697,11 @@ export const register: Register = (on, options) => {
     const isWorking = await read($, working)
     const plans = await read($, splits)
     const board = boardOf(loaded.map, c, sp, page => items.filter(i => i.page === page).length)
+    // A plan whose change has no row (renamed, removed, or never in blueprint.json) gets a row of its own,
+    // so ← Board never strands it.
+    const strayPlans = Object.keys(plans)
+      .filter(n => !board.changes.some(r => r.name === n) && !board.done.some(r => r.name === n))
+      .sort()
     const byId = (id: string | undefined) => (id ? pages.find(p => p.id === id) : undefined)
     const openId = (id: string | undefined) => {
       const p = byId(id)
@@ -824,12 +830,22 @@ export const register: Register = (on, options) => {
             {isOpen.attention ? <Box key="list-attention" {...LIST}>{board.attention.map(capRow)}</Box> : null}
           </Box>
         ) : null}
-        {board.changes.length || board.done.length ? (
+        {board.changes.length || board.done.length || strayPlans.length ? (
           <Box flexDirection="column">
-            {head('changes', 'Changes', board.changes.length + board.done.length, isOpen.changes)}
+            {head('changes', 'Changes', board.changes.length + board.done.length + strayPlans.length, isOpen.changes)}
             {isOpen.changes ? (
               <Box key="list-changes" {...LIST}>
                 {board.changes.map(changeRow)}
+                {strayPlans.map(n => (
+                  <Box key={`stray-${n}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+                    <Text dimColor>○</Text>
+                    <Text key={`stray-name-${n}`}>{n}</Text>
+                    <Text key={`stray-note-${n}`} italic size="footnote" dimColor>
+                      not in {BLUEPRINT_JSON}
+                    </Text>
+                    <Button key={`prs-${n}`} plain dimColor label="PRs" onPress={() => update($, view, s => ({ ...s, split: n }))} />
+                  </Box>
+                ))}
                 {board.done.length ? (
                   // The arrow sits inside the button, on its text's baseline; the row starts at the left edge.
                   <Box key="done-row" flexDirection="row" marginTop={board.changes.length ? 1 : 0}>
