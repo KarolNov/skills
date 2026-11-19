@@ -163,6 +163,13 @@
         "skills/blueprint/references/review.md": "38642acdc737"
       },
       "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
+    },
+    "blueprint/tidy": {
+      "ref": null,
+      "anchors": [
+        "skills/blueprint-tidy/**",
+        "skills/blueprint/references/upgrades.md"
+      ]
     }
   },
   "changes": {
@@ -182,6 +189,13 @@
       "baseCommit": "3cfbf251b7740661fb06e12b9c1b4ba2f8b37108",
       "branch": "kn/blueprint-pane-status-board-514df1",
       "pr": "https://github.com/KarolNov/skills/pull/11"
+    },
+    "domains-and-tidy": {
+      "brief": "https://app.notion.com/p/41d43cce21f2817daf47d2a4daf27127",
+      "review": "https://app.notion.com/p/41d43cce21f281c38dedc1c8950bcd98",
+      "tickets": "https://app.notion.com/p/41d43cce21f281c38dedc1c8950bcd98",
+      "status": "approved",
+      "baseCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
     }
   }
 }
