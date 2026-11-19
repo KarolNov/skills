@@ -24,9 +24,10 @@
         "skills/blueprint/references/formats.md",
         "skills/blueprint/references/visuals.md",
         "skills/blueprint/scripts/render_mermaid.py",
+        "skills/blueprint/scripts/text_diagram.py",
         "skills/blueprint/examples/**"
       ],
-      "specVersion": "51636c07484ed411",
+      "specVersion": "4a4643838b4822b6",
       "anchorsFiles": {
         "skills/blueprint/SKILL.md": "c1baf15e5107",
         "skills/blueprint/examples/fictional-yjs-provider/brief.md": "9ec2d1b8408a",
@@ -34,10 +35,11 @@
         "skills/blueprint/examples/fictional-yjs-provider/review.html": "de95a652c7ee",
         "skills/blueprint/references/formats.md": "81c2f828890c",
         "skills/blueprint/references/propose.md": "9f7491700c88",
-        "skills/blueprint/references/visuals.md": "01cf484a99af",
-        "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1"
+        "skills/blueprint/references/visuals.md": "542144087ae9",
+        "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
+        "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7"
       },
-      "syncedCommit": "449a494f23e35cd27180db5ef74d9ea163960fb0"
+      "syncedCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
     },
     "blueprint/apply": {
       "ref": "https://app.notion.com/p/41c43cce21f281bbb3fef91cff515a26",
@@ -58,17 +60,17 @@
         "skills/blueprint/references/backends/**",
         "skills/blueprint/scripts/notion_normalize.py"
       ],
-      "specVersion": "74e4782dc6c55965",
+      "specVersion": "3a8b71ab11ad20b0",
       "anchorsFiles": {
         "skills/blueprint/references/backends/github.md": "1c03584bb73f",
         "skills/blueprint/references/backends/jira.md": "a4fbe3b283c5",
         "skills/blueprint/references/backends/linear.md": "8b3ec58d3950",
         "skills/blueprint/references/backends/markdown.md": "1bcf072e0004",
-        "skills/blueprint/references/backends/notion.md": "6a6158a44c03",
+        "skills/blueprint/references/backends/notion.md": "90991574d406",
         "skills/blueprint/references/backends/obsidian.md": "b90b39b1ab1c",
         "skills/blueprint/scripts/notion_normalize.py": "624e503e65c9"
       },
-      "syncedCommit": "42124d1738ba0e04f21fa864993b82e9c5b2b5e8"
+      "syncedCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
     },
     "blueprint/setup": {
       "ref": "https://app.notion.com/p/41c43cce21f2817cbf54d2b0daf6550f",
@@ -125,33 +127,33 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "e43bdfff5aebf9d0",
+      "specVersion": "3d88476e342cdc53",
       "anchorsFiles": {
-        "mods/blueprint-ui/.claude-plugin/plugin.json": "17fe6b5075b0",
-        "mods/blueprint-ui/hooks/blocks.test.ts": "6d96c4a97249",
-        "mods/blueprint-ui/hooks/blocks.ts": "d35643e36713",
+        "mods/blueprint-ui/.claude-plugin/plugin.json": "6b7771ba4d56",
+        "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
+        "mods/blueprint-ui/hooks/blocks.ts": "9efd548adfa7",
         "mods/blueprint-ui/hooks/board.test.ts": "4e8cf28f8bb6",
         "mods/blueprint-ui/hooks/board.ts": "458d09dba972",
         "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
         "mods/blueprint-ui/hooks/comment.test.tsx": "325fb554a04a",
         "mods/blueprint-ui/hooks/follow.test.tsx": "f6e1fb556628",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
-        "mods/blueprint-ui/hooks/notion.ts": "0ee24b338ff3",
+        "mods/blueprint-ui/hooks/notion.ts": "8e0bdd11af69",
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
-        "mods/blueprint-ui/hooks/read.test.tsx": "55cfaf16693a",
+        "mods/blueprint-ui/hooks/read.test.tsx": "e9f3acdcd6d3",
         "mods/blueprint-ui/hooks/register.test.tsx": "fe974e8c0b62",
-        "mods/blueprint-ui/hooks/register.tsx": "d2aaac1d685c",
+        "mods/blueprint-ui/hooks/register.tsx": "c1eaa561a874",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
-        "mods/blueprint-ui/hooks/split.test.tsx": "98e7e93d885a",
+        "mods/blueprint-ui/hooks/split.test.tsx": "a92484fa4a86",
         "mods/blueprint-ui/hooks/split.ts": "e05d22940a37",
         "mods/blueprint-ui/hooks/status.test.tsx": "896b369c577f",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "23ddffe92fb6"
+        "mods/blueprint-ui/types/index.d.ts": "fa81c68ff04c"
       },
-      "syncedCommit": "cc002ea1c6a19104992ab6b84b4236587feb3004"
+      "syncedCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
