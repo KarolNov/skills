@@ -224,7 +224,7 @@
     "capability-map-and-ci-drift": {
       "brief": "https://app.notion.com/p/41e43cce21f281e9910dfb7204f07258",
       "review": "https://app.notion.com/p/41e43cce21f281acb29cec1bb3066e4a",
-      "status": "approved",
+      "status": "building",
       "baseCommit": "9b41921b690996696b6fbf11def92ae163842a82"
     }
   }
