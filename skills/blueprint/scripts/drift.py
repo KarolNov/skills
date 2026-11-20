@@ -8,10 +8,12 @@ since its spec was last synced. It never talks to the spec backend.
 
     drift.py check [--json] [CAPABILITY ...]   exit 1 if anything drifted
     drift.py stamp CAPABILITY ... | --all      record the current state as synced
-    drift.py files CAPABILITY                  list the files a capability's anchors match
+    drift.py files CAPABILITY [ANCHOR ...]     list the files a capability's anchors match, or
+                                               the given anchors instead (writes nothing)
     drift.py unanchored [--since REF]          changed files no capability covers
     drift.py overlaps [--json]                 files two or more capabilities' anchors match
     drift.py rename OLD NEW                    rename a capability, keeping its stamps
+    drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match
     drift.py hint                              one line suggesting /blueprint-tidy, or nothing
     drift.py version                           the format version of blueprint.json
 
@@ -179,12 +181,32 @@ def cmd_stamp(args):
 
 
 def cmd_files(args):
-    if len(args) != 1:
-        sys.exit("files takes one capability")
+    if not args:
+        sys.exit("files takes a capability, then optionally anchors to try instead of its own")
     spec = load().get("specs", {}).get(args[0])
     if spec is None:
         sys.exit(f"unknown capability: {args[0]}")
+    if args[1:]:
+        # Proposed anchors, so a narrowing can be checked before blueprint.json changes.
+        spec = dict(spec, anchors=args[1:])
     print("\n".join(matched(spec, repo_files())))
+    return 0
+
+
+def cmd_prune(args):
+    if len(args) != 1:
+        sys.exit("prune takes one capability")
+    state = load()
+    spec = state.get("specs", {}).get(args[0])
+    if spec is None:
+        sys.exit(f"unknown capability: {args[0]}")
+    # Judged on the path, not on whether the file exists, so a deleted file the anchors
+    # still cover keeps its stamp and still reads as removed. syncedCommit stays.
+    compiled, old = compile_anchors(spec), spec.get("anchorsFiles", {})
+    kept = {p: h for p, h in old.items() if matching_anchors(compiled, p)}
+    spec["anchorsFiles"] = kept
+    save(state)
+    print(f"pruned {args[0]}: dropped {len(old) - len(kept)} of {len(old)} stamps")
     return 0
 
 
@@ -330,7 +352,7 @@ def main():
     cmd, args = sys.argv[1], sys.argv[2:]
     handlers = {"check": cmd_check, "stamp": cmd_stamp, "files": cmd_files,
                 "unanchored": cmd_unanchored, "overlaps": cmd_overlaps, "rename": cmd_rename,
-                "hint": cmd_hint, "version": cmd_version}
+                "prune": cmd_prune, "hint": cmd_hint, "version": cmd_version}
     if cmd not in handlers:
         sys.exit(f"unknown command: {cmd}")
     return handlers[cmd](args)

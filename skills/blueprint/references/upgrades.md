@@ -4,7 +4,7 @@ The ledger of breaking changes to the blueprint format: the shape of `.blueprint
 
 **Current format version: 2**
 
-Only `/blueprint-tidy` reads this file to migrate. Every other skill compares the repo's `version` with the current one above and, when it is older, says in one line that `/blueprint-tidy` upgrades it, then carries on without migrating.
+Only `/blueprint-tidy` reads this file to migrate. `/blueprint` compares the repo's `version` with the current one above and, when it is older, says in one line that `/blueprint-tidy` upgrades it, then carries on without migrating.
 
 ## How to migrate
 
@@ -22,7 +22,7 @@ Entries are append-only. A new format version adds a section at the end, raises 
 
 - `blueprint.json` gains `version` and `domains` (`name → { ref, purpose }`), [formats.md](formats.md).
 - Capabilities can be grouped into domains, each with an overview page in the backend that holds its capabilities like a folder. A name is either a domain or a capability, never both.
-- `drift.py` gains `version`, `overlaps`, `rename` and `hint`.
+- `drift.py` gains `version`, `overlaps`, `rename`, `prune` and `hint`, and `files` takes proposed anchors.
 
 **Migrate**
 
