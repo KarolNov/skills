@@ -18,22 +18,33 @@ The location comes from `blueprint-setup`: usually a new subpage of the repo's o
 
 - **Root page** `Specs & blueprints` under that parent, with two lines saying what the databases hold, that the row page is the review and the brief is its subpage, and where tickets live (linked).
 - **Specs** database under the root:
-  `CREATE TABLE ("Capability" TITLE, "Kind" SELECT('Capability':gray, 'Domain':blue), "Purpose" RICH_TEXT, "Last edited" LAST_EDITED_TIME)`, then turn on sub-items (a `Parent item` self-relation), so a domain row can hold capability rows.
+  `CREATE TABLE ("Capability" TITLE, "Kind" SELECT('Capability':gray, 'Domain':blue), "Purpose" RICH_TEXT, "Last edited" LAST_EDITED_TIME)`
+  then add the self-relation for sub-items, `"Parent item" RELATION('<specs data source>', DUAL 'Sub-items')`, and turn on sub-items with it ([Domains](#domains)).
 - **Blueprints** database under the root:
   `CREATE TABLE ("Change" TITLE, "Status" STATUS('Draft':gray:to_do, 'Approved':blue:to_do, 'Building':yellow:in_progress, 'Applied':green:complete, 'Abandoned':red:complete), "Capabilities" RELATION('<specs data source>', DUAL 'Blueprints'), "Brief" URL, "Tickets" URL, "Branch" RICH_TEXT, "PR" URL, "Last edited" LAST_EDITED_TIME)`
 
 If tickets go to a new Notion `Tasks` database, it is created under the same root; its schema is in [../tickets.md](../tickets.md).
 
-Never put them in a private draft or at the workspace root: they belong next to where the team tracks the project. Never add rows or properties to the team's existing databases from here.
+Never put them in a private draft or at the workspace root: they belong next to where the team tracks the project. Never add rows or properties to the team's existing databases from here. The Specs and Blueprints databases are the blueprint's own, so their `Kind` property and sub-items are fine.
 
 Fetch each database once after creating it and record its `collection://` URL in `location`.
 
 ## Pages
 
-- **Capability spec**: a row in Specs. Title = capability name; page body = the spec from Purpose down (the title is the property, not a heading in the body).
+- **Capability spec**: a row in Specs with `Kind = Capability`. Title = capability name; page body = the spec from Purpose down (the title is the property, not a heading in the body). A capability in a domain sets its domain row as `Parent item` ([Domains](#domains)).
 - **Blueprint**: a row in Blueprints, titled with the change. The row's body is the **review**, because that's what people open from the database. The **brief** is a child page inside the row, titled `<change>: brief`, so the two always sit together; its URL also goes in the row's `Brief` property. Status and Capabilities are row properties, so drop those lines from both bodies.
 - **Tasks** are Notion to-dos in the brief (`- [ ] 1. …`), each linking its ticket ([../tickets.md](../tickets.md)). Notion escapes the number on save, so the page reads back as `- [ ] 1\. …`: tick a task with `update_content`, replacing `- [ ] <n>\.` with `- [x] <n>\.`, copied from a fresh fetch.
 - **Rewrite a spec**: `update_content` per changed requirement block when the edit is local; `replace_content` for a full merge.
+
+## Domains
+
+A domain is a row in Specs, so the table shows it as an expandable row holding its capabilities:
+
+- **Overview**: a Specs row with `Kind = Domain`, title = domain name, `Purpose` = the domain's one-line purpose, page body = the overview from Purpose down ([../formats.md](../formats.md), "Domain overview"). Its URL is the domain's `ref` in `blueprint.json`.
+- **Nesting**: each capability row in the domain sets the domain row as `Parent item`; a bare capability has none. The Blueprints `Capabilities` relation links capability rows only, never a domain row.
+- **Sub-items**: Notion shows rows nested only once sub-items are turned on for the `Parent item` relation. Turn it on through the connector if it can; otherwise ask the user to do it once (database `⋯` → Sub-items → `Parent item`), then read the table back to confirm.
+- **Move** a capability into or out of a domain by setting or clearing its `Parent item`. **Rename** by changing the title property: the page, its URL and its history stay, and the version marker is a hash of the body, so a rename never reads as drift.
+- No version marker or baseline for an overview; never fetch it for status.
 
 ## Writing
 

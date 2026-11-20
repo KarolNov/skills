@@ -22,6 +22,15 @@ Check `gh auth status`. The wiki must be enabled and have at least one page befo
 - **Blueprint**: an issue labelled `blueprint`, titled with the change; its body is the **review**. The **brief** is the wiki page `Blueprint:-<change id>.md`, linked at the top of the issue body; the brief links the issue back. Status: open while draft / approved / building, closed when applied (`--reason completed`) or abandoned (`--reason "not planned"`); the brief's `Status:` line says the same.
 - **Tasks**: tickets per [../tickets.md](../tickets.md); with the `github` tracker they become sub-issues of the blueprint issue.
 
+## Domains
+
+Wiki pages can't nest, so the domain is a page of its own and the capability pages keep the prefix:
+
+- **Overview**: the wiki page `Domain:-<name>.md`, whose body is the overview ([../formats.md](../formats.md), "Domain overview"), linking each capability page. Its file name is the domain's `ref`.
+- **Nesting**: capability pages keep `Spec:-<domain>-<capability>.md`. `Specs.md` lists each domain (linking its overview) with its capabilities indented under it, then the bare capabilities.
+- **Rename**: `git mv` the page in the wiki clone, update the links in `Specs.md`, the overview and open blueprints' briefs, commit and push. Use `git log --follow` for the page's history afterwards.
+- A rename is a new commit touching the page. After it, when the body still matches the baseline, record that commit as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
+
 ## Version marker
 
 The wiki's last commit touching the page: `git -C <wikiClone> log -1 --format=%H -- <file>`, after `git pull`. Always pull before reading a spec; teammates edit the wiki on github.com.

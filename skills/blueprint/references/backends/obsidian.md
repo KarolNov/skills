@@ -18,7 +18,7 @@ Ask for the vault path (look for a folder containing `.obsidian/` under the home
 
 ## Pages
 
-- **Capability spec**: `<specs>/<capability>.md`, so a domain is a folder: `auth/session` is `<specs>/auth/session.md`, a bare `search` is `<specs>/search.md`. Frontmatter:
+- **Capability spec**: `<specs>/<capability>.md`, keeping `/` as real folders: `<specs>/auth/session.md` for `auth/session`, `<specs>/search.md` for a bare `search`. Repos on format 1 used flattened names (`auth__session.md`); the version 2 migration moves them ([../upgrades.md](../upgrades.md)). Frontmatter:
   ```yaml
   ---
   capability: auth/session
@@ -27,7 +27,14 @@ Ask for the vault path (look for a folder containing `.obsidian/` under the home
   ---
   ```
 - **Blueprint**: two notes side by side in `<blueprints>/`: the review `<change id>.md` and the brief `<change id>.brief.md`, each linking the other with a `[[wikilink]]`. The brief's frontmatter holds `status`, `capabilities` (as `[[wikilinks]]` to the spec notes), `branch`, `pr`, `tags: [blueprint/brief]`; the review's holds `brief`, `built-from` and `tags: [blueprint/review]`. Tasks are Markdown checkboxes in the brief.
-- Links between notes use `[[wikilinks]]`; the `ref` in `blueprint.json` is the path relative to the vault.
+- Links between notes use `[[wikilinks]]` with the path from the vault root and the capability name as the alias (`[[<specs>/auth/session|auth/session]]`), because leaf names like `session` repeat across domains. The `ref` in `blueprint.json` is the path relative to the vault.
+
+## Domains
+
+- **Overview**: the folder note `<specs>/<domain>/<domain>.md`, in the overview format ([../formats.md](../formats.md), "Domain overview"), with frontmatter `domain: <name>` and `tags: [blueprint/domain]`. The note named after its folder is the folder-note convention (the Folder notes community plugin opens it when the folder is clicked). Its path relative to the vault is the domain's `ref`. No capability may be named `<domain>/<domain>`.
+- **Nesting**: the domain's capability notes are the other notes in `<specs>/<domain>/`.
+- **Move or rename**: move the file on disk, create the folder (and its folder note) if the domain is new, then update its `ref`, the `capability:` frontmatter, and every `[[wikilink]]` to the old path (search the vault for it). Obsidian rewrites links only for moves made inside the app, so do it yourself. The frontmatter edit changes the content hash: after the move, when the body below the frontmatter still matches the baseline, record the new hash as `specVersion`, so the rename never reads as drift.
+- An overview has no version marker or baseline.
 
 ## Version marker
 
