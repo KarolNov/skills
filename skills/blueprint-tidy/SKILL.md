@@ -24,7 +24,7 @@ If the user declines a migration, stop: grouping needs the current format (the `
 
 ## 2. Record where things stand
 
-Before proposing anything, run `python3 .blueprint/drift.py check --json` (again, if a migration ran) and keep it as **before**, and compute the spec side of each capability's status as [status.md](../blueprint/references/status.md) says. Tidy doesn't settle drift: a capability whose spec or code moved keeps that status through the move, and the report names it for `blueprint-drift` or `blueprint-sync`.
+Before proposing anything, run `python3 .blueprint/drift.py check --json` (again, if a migration ran) and keep it as **before**, along with the output of `python3 .blueprint/drift.py unanchored`, and compute the spec side of each capability's status as [status.md](../blueprint/references/status.md) says. Tidy doesn't settle drift: a capability whose spec or code moved keeps that status through the move, and the report names it for `blueprint-drift` or `blueprint-sync`.
 
 List the open blueprints: `changes` with status `draft`, `approved` or `building`, and the capabilities each names. A rename that touches one is listed first in the move table.
 
@@ -44,6 +44,8 @@ Run `python3 .blueprint/drift.py overlaps` and sort each file it lists:
 
 - **Broad glob**: one capability matches it through a wide glob (`shared/**`) while another anchors that part more narrowly (`shared/board/**`). Propose narrowing the broad one: an exclusion (`!shared/board/**`) when most of the folder still belongs to it, or explicit narrower globs when only some does.
 - **Intended**: shared entry points and wiring that more than one capability genuinely depends on (`worker/index.ts`). Leave them, and say why in one line.
+
+Before proposing a narrower anchor, check which files it drops: compare `drift.py files <capability>` under the old and new anchors. A dropped file that another capability already matches is fine; it simply stops overlapping. A dropped file that nothing else matches would become **unanchored**. Keep it in the narrowed capability (an exclusion rather than explicit globs often does that), or, when it plainly belongs elsewhere, list it in the move table as left for `blueprint-sync` to anchor. Never widen another capability's anchors here: that changes what its spec covers, which is a sync decision, not a move.
 
 Ask the user to confirm which overlaps are intended; those stay and are not raised again in this run. Anchors change only through the move table.
 
@@ -75,6 +77,7 @@ In one pass, in this order (each step needs the one before it):
 
 - `python3 .blueprint/drift.py check --json` reports, for every capability under its new name, the same status as **before**, and each renamed page's marker still equals its `specVersion`. A difference is a bug in this run: find it and fix it before reporting.
 - `python3 .blueprint/drift.py overlaps` lists only the overlaps the user marked as intended.
+- `python3 .blueprint/drift.py unanchored` lists nothing beyond what it listed before, apart from the files the table left for `blueprint-sync`.
 - `python3 .blueprint/drift.py hint` prints nothing, unless the user left groups out on purpose.
 
-Report: the migration applied (format <old> → <new>) or that the format was current; the domains created, each linked; the renames and moves; the anchors narrowed and the overlaps kept as intended; the open blueprints updated, linked; and any capability that was already drifted, for `blueprint-drift` or `blueprint-sync`. Commit nothing; offer to commit the `.blueprint/` changes as one commit on a yes.
+Report: the migration applied (format <old> → <new>) or that the format was current; the domains created, each linked; the renames and moves; the anchors narrowed the overlaps kept as intended, and any files left unanchored for `blueprint-sync`; the open blueprints updated, linked; and any capability that was already drifted, for `blueprint-drift` or `blueprint-sync`. Commit nothing; offer to commit the `.blueprint/` changes as one commit on a yes.
