@@ -19,7 +19,7 @@ Pick by the first word of the arguments, then read that mode's file and follow i
 | --- | --- | --- |
 | a description of a change, or nothing | Grill the solution and write the blueprint | [references/propose.md](references/propose.md) |
 | `apply [change] [group]` | Build a blueprint, split into stacked or parallel PRs when it is big, then fold it into the capability specs | [references/apply.md](references/apply.md) |
-| `map`, alone | Draw the repo's capabilities, domains, shared files and drift as one local page, and open it | [references/map.md](references/map.md) |
+| `map`, alone or with `--out PATH` / `--json` | Draw the repo's capabilities, domains, shared files and drift as one local page, and open it | [references/map.md](references/map.md) |
 | `review <file>.json …`, where that file exists | Apply a review submitted from the `blueprint-ui` pane to the page it was written on | [references/review.md](references/review.md) |
 
 Any other text starting with "review" or "map" (such as "review flow should require two approvers" or "map pads to sounds by default") is a change description: propose it.
@@ -40,7 +40,7 @@ When setup and propose run together, don't ask twice: put setup's questions (doc
 - **Tickets**: where a blueprint's tasks are tracked, which may be a different tool from the docs (specs in Notion, tickets in GitHub issues). How to create and close them is in [references/tickets.md](references/tickets.md), per `tickets.tracker`.
 - **`.blueprint/` in the repo**: the only part that lives with the code. `blueprint.json` maps each capability to its page and its **anchors** (globs for the code that implements it), and records when each side was last synced. `baseline/<capability>.md` is the spec text as of the last sync: the merge base for three-way sync, never edited by hand, never the source of truth.
 - **Format version**: `version` in `blueprint.json` (absent means 1) says which shape `.blueprint/` and the backend structure are in. When the skill's format moves on, [references/upgrades.md](references/upgrades.md) records what changed and how to migrate; `/blueprint-tidy` applies it. Every other skill only checks the version and points there.
-- **Map**: `.blueprint/map.html`, one self-contained page drawn from `.blueprint/` and the repo's files by this skill's `scripts/graph.py` ([references/map.md](references/map.md)). Local and gitignored, regenerated on demand, never uploaded.
+- **Map**: `.blueprint/map.html`, one self-contained page drawn from `.blueprint/` and the repo's files by this skill's `scripts/graph.py` ([references/map.md](references/map.md)). Local and kept out of git (`.blueprint/.gitignore`), regenerated on demand; uploaded (say, as a Notion embed) only when the user asks.
 - **Drift**: a capability whose spec or code moved since they last agreed. `.blueprint/drift.py` (copied there from this skill's `scripts/` by `blueprint-setup`) detects the code side with git alone; the spec side is detected by comparing the backend's version marker with the one in `blueprint.json` ([references/status.md](references/status.md)). Two sibling skills reconcile it, by which side is right: `blueprint-drift` judges the code against the spec and fixes the code; `blueprint-sync` judges the spec against the code and fixes the spec.
 
 ## Rules

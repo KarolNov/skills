@@ -1,6 +1,6 @@
 # Map
 
-Draw the repo's capabilities as one local page and open it: how they group into domains, which share files, which drifted, and what each requires, with search across all of it. It reads only what is in the repo (`blueprint.json`, `baseline/`, the files), so it needs no backend connection and writes nothing outside `.blueprint/map.html` and, once, `.gitignore`.
+Draw the repo's capabilities as one local page and open it: how they group into domains, which share files, which drifted, and what each requires, with search across all of it. It reads only what is in the repo (`blueprint.json`, `baseline/`, the files), so it needs no backend connection and writes nothing outside `.blueprint/map.html` and, once, `.blueprint/.gitignore` (or the `--out` path, when the user gave one).
 
 ## 1. Write the page
 
@@ -10,27 +10,17 @@ From anywhere inside the repo:
 python3 <this skill>/scripts/graph.py
 ```
 
-Run the skill's own `graph.py`, never a copy in the repo: it imports anchor matching from the `drift.py` next to it, so it works even where the repo's `.blueprint/drift.py` is an older copy. It writes `.blueprint/map.html` (repo root, the main checkout's name in the title when run in a worktree) with d3, the page script and the data inlined, so it opens offline and inside a Notion embed, and prints the path. `--out PATH` writes elsewhere; `--json` prints the extracted data instead, which is the quickest way to answer a question about the graph without opening it.
+Run the skill's own `graph.py`, never a copy in the repo: it imports anchor matching from the `drift.py` next to it, so it works even where the repo's `.blueprint/drift.py` is an older copy. It writes `.blueprint/map.html` (repo root, the main checkout's name in the title when run in a worktree) with d3, the page script and the data inlined, so it opens offline and inside a Notion embed, and prints the path, then a summary line: how many capabilities and domains, which drifted on the code side, and whether files start as nodes. It also adds `map.html` to `.blueprint/.gitignore` (once), so the page never reaches git and the repo root's `.gitignore` is never touched. `--out PATH` writes elsewhere and leaves gitignore alone: if that path is inside the repo and `git check-ignore -q <printed path>` fails, tell the user in one line that it will show up in git. `--json` prints the extracted data instead, which is the quickest way to answer a question about the graph without opening it.
 
 If it exits with an error, show the error and stop; don't hand-build the page.
 
-## 2. Keep it out of git
-
-The page is regenerated on demand and goes stale with the next commit, so it is never committed. Check:
-
-```bash
-git check-ignore -q .blueprint/map.html
-```
-
-When that fails (exit 1), append `.blueprint/map.html` on its own line to the repo root's `.gitignore` (create the file if there is none) and tell the user in one line that you added it. Don't commit it: it rides along with whatever the user commits next. When the check passes, say nothing about it.
-
-## 3. Open it
+## 2. Open it
 
 Open the printed path with the platform's opener: `open` on macOS, `xdg-open` on Linux, `start ""` on Windows. Print the path either way, so a headless session or a failed opener still leaves the user one click away.
 
-## 4. Report
+## 3. Report
 
-Two or three lines: the path, how many capabilities and domains it shows, and which capabilities drifted on the code side (from `--json` or `python3 <this skill>/scripts/drift.py check`), each with what fixes it: `/blueprint-drift` when the spec is right, `/blueprint-sync` when the code is. Say that spec-side drift is not on the map and `/blueprint-sync` reports it, as the page's legend does. When no two capabilities share a file, say the page starts with files shown as nodes.
+Two or three lines: the path, how many capabilities and domains it shows, and which capabilities drifted on the code side (all from graph.py's summary line; don't run it or `drift.py` again), each with what fixes it: `/blueprint-drift` when the spec is right, `/blueprint-sync` when the code is. Say that spec-side drift is not on the map and `/blueprint-sync` reports it, as the page's legend does. When no two capabilities share a file, say the page starts with files shown as nodes.
 
 ## What the page does
 

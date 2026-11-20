@@ -96,7 +96,7 @@ notes tool, builds it, and keeps the specs and the code honest in both direction
 | `/blueprint-setup` | Looks at where you already track projects and tickets, then picks where specs and blueprints live (as databases or folders next to the project), where tasks become tickets, and maps the repo's **capabilities** to code (anchors). Optionally seeds specs from the code or imports OpenSpec specs. |
 | `/blueprint <your solution>` | Plays the solution back, sketches it, grills it in at most three rounds of five short questions, and writes a **blueprint** as two linked documents side by side: a text **brief** for agents (decisions, spec delta, tasks; the source of truth) and a visual **review** for people. |
 | `/blueprint apply [change]` | Builds the blueprint task by task, verifies each requirement against the code, then folds the delta into the capability specs. |
-| `/blueprint map` | Writes `.blueprint/map.html` and opens it: one local page (d3 inlined, works offline) with capabilities as nodes, domains as outlines, lines between capabilities that share files, code-drifted ones in red, a details panel with each capability's requirements and scenarios, and search across names, requirements and file paths. Gitignored and regenerated on demand. |
+| `/blueprint map` | Writes `.blueprint/map.html` and opens it: one local page (d3 inlined, works offline) with capabilities as nodes, domains as outlines, lines between capabilities that share files, code-drifted ones in red, a details panel with each capability's requirements and scenarios, and search across names, requirements and file paths. Kept out of git by `.blueprint/.gitignore` and regenerated on demand. |
 | `/blueprint-drift [capability]` | **Intent drift**: the spec is right. Judges the code against it requirement by requirement, including spec edits people made outside the code, and fixes the code or turns the gap into a blueprint or tickets. |
 | `/blueprint-sync [capability]` | **Spec sync**: the code is right. Reads what the code changed since the spec last matched it and updates the spec, or writes a spec from the code for a capability that has none. |
 | `/blueprint-tidy [--dry-run]` | **Tidy**, on demand: migrates `.blueprint/` to the current format, groups capabilities into **domains** (each with an overview page that holds its specs like a folder), renames a name that is both a domain and a capability, and reports anchors that overlap through broad globs. Shows one move table and writes nothing until you approve it (a migration asks first on its own); renames keep each page and its history, so nothing reads as drift. |
@@ -126,9 +126,9 @@ Confluence, or GitHub (wiki for specs, issues for blueprints).
 spec text as of the last sync (the merge base), and `drift.py`, which tells from git alone which
 capabilities' code moved since their spec was synced. `python3 .blueprint/drift.py check` can run
 as a pre-push hook or in CI. For CI, `/blueprint-setup` copies a ready-made GitHub Action,
-[`blueprint-drift.yml`](skills/blueprint-setup/templates/blueprint-drift.yml), into `.github/workflows/`: it keeps one
-comment on each pull request listing the drifted capabilities and their changed files (updated on every push),
-always adds a warning annotation, and passes unless you set `BLUEPRINT_DRIFT_FAIL: "true"`. It is a starting
+[`blueprint-drift.yml`](skills/blueprint-setup/templates/blueprint-drift.yml), into `.github/workflows/`: when a pull request
+drifts it comments listing the drifted capabilities and their changed files (one comment, updated on every push,
+marked back in sync once fixed) and adds a warning annotation per drifted capability; a clean PR gets neither. It passes unless you set `BLUEPRINT_DRIFT_FAIL: "true"`. It is a starting
 point the repo owns; ask setup to tailor it (a `drifted` label, a reviewer). Both the map and CI see
 code-side drift only; `/blueprint-sync` reports specs edited in the backend.
 

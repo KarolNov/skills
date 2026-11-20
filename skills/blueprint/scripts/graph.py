@@ -3,8 +3,9 @@
 
     python3 graph.py [--out PATH] [--json]
 
-Reads blueprint.json, baseline/ and the repo's files; writes .blueprint/map.html (git-ignored)
-(or PATH) with d3, the page script and the data inlined, so it opens offline.
+Reads blueprint.json, baseline/ and the repo's files; writes .blueprint/map.html
+(or PATH) with d3, the page script and the data inlined, so it opens offline, and prints
+the path and a one-line summary. The default path is kept out of git by .blueprint/.gitignore.
 --json prints the extracted data instead of writing the page.
 
 Run from anywhere inside the repository. Anchor matching comes from the drift.py
@@ -139,8 +140,26 @@ def main(argv):
         return 0
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(data), encoding="utf-8")
+    if out == drift.ROOT / ".blueprint" / "map.html":
+        ignore_map(out.parent / ".gitignore")
     print(out)
+    print(summary(data))
     return 0
+
+
+def ignore_map(path):
+    """Keep the generated page out of git with .blueprint/.gitignore, so the repo root's is never touched."""
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    if "map.html" not in (l.strip() for l in lines):
+        path.write_text("".join(l + "\n" for l in lines + ["map.html"]), encoding="utf-8")
+
+
+def summary(data):
+    """One line for the report: counts, and the capabilities whose code moved."""
+    moved = [n["id"] for n in data["nodes"] if n["status"] == "code-moved"]
+    shared = "" if data["edges"] else "; no shared files, so files start as nodes"
+    return (f"{len(data['nodes'])} capabilities, {len(data['domains'])} domains; "
+            f"code-drifted: {', '.join(moved) or 'none'}{shared}")
 
 
 if __name__ == "__main__":
