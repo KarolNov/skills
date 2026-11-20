@@ -3,7 +3,7 @@
 
     python3 graph.py [--out PATH] [--json]
 
-Reads blueprint.json, baseline/ and the repo's files; writes .blueprint/map.html
+Reads blueprint.json, baseline/ and the repo's files; writes .blueprint/map.html (git-ignored)
 (or PATH) with d3, the page script and the data inlined, so it opens offline.
 --json prints the extracted data instead of writing the page.
 
@@ -42,15 +42,14 @@ def domain_of(name, domains):
     return head if "/" in name and head in domains else None
 
 
-def status_of(spec, mine):
-    """Code-side status and changed files, the same verdict `drift.py check` gives."""
-    if not spec.get("anchors"):
-        return "no-anchors", []
-    if not spec.get("ref") or "anchorsFiles" not in spec:
-        return "no-spec", []
-    old, now = spec["anchorsFiles"], drift.file_hashes(mine)
-    changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
-    return ("code-moved" if changed else "in-sync"), changed
+def cached_hashes():
+    """drift.file_hashes with a cache, so a file several capabilities match is read once."""
+    cache = {}
+
+    def hashes(paths):
+        cache.update(drift.file_hashes([p for p in paths if p not in cache]))
+        return {p: cache[p] for p in paths}
+    return hashes
 
 
 def repo_name(root):
@@ -61,28 +60,28 @@ def repo_name(root):
     return root.name
 
 
-def build(state=None, files=None, root=None):
+def build(state=None, files=None):
     """The map's data: domains, capability nodes, and links between capabilities sharing files."""
     state = drift.load() if state is None else state
     files = drift.repo_files() if files is None else files
-    root = drift.ROOT if root is None else Path(root)
     specs, domains = state.get("specs", {}), state.get("domains", {})
 
-    nodes, owners = [], {}
+    nodes, owners, hashes = [], {}, cached_hashes()
     for name, spec in specs.items():
         compiled = drift.compile_anchors(spec)
         mine = [f for f in files if drift.matching_anchors(compiled, f)]
         for f in mine:
             owners.setdefault(f, []).append(name)
-        status, changed = status_of(spec, mine)
-        baseline = root / ".blueprint" / "baseline" / f"{name}.md"
-        purpose, reqs = parse_baseline(baseline.read_text()) if baseline.is_file() else ("", [])
+        status, changed = drift.code_status(spec, mine, hashes)
+        baseline = drift.ROOT / ".blueprint" / "baseline" / f"{name}.md"
+        has_baseline = baseline.is_file()
+        purpose, reqs = parse_baseline(baseline.read_text(encoding="utf-8")) if has_baseline else ("", [])
         nodes.append({
             "id": name,
             "domain": domain_of(name, domains),
             "status": status,
             "ref": spec.get("ref"),
-            "hasBaseline": baseline.is_file(),
+            "hasBaseline": has_baseline,
             "purpose": purpose,
             "requirements": reqs,
             "files": mine,
@@ -98,7 +97,7 @@ def build(state=None, files=None, root=None):
              for (a, b), fs in sorted(shared.items())]
 
     return {
-        "repo": repo_name(root),
+        "repo": repo_name(drift.ROOT),
         "domains": [{"id": d, "purpose": (v or {}).get("purpose", "")} for d, v in domains.items()],
         "nodes": nodes,
         "edges": edges,
@@ -116,11 +115,11 @@ def script_json(data):
 
 def render(data, template=None, d3=None):
     """The page: the template with d3 and the data dropped in at their markers."""
-    template = TEMPLATE.read_text() if template is None else template
-    d3 = D3.read_text() if d3 is None else d3
+    template = TEMPLATE.read_text(encoding="utf-8") if template is None else template
+    d3 = D3.read_text(encoding="utf-8") if d3 is None else d3
     for marker in ("/*D3*/", "/*DATA*/"):
         if template.count(marker) != 1:
-            sys.exit(f"{TEMPLATE.name}: expected one {marker} marker")
+            sys.exit(f"map template: expected one {marker} marker")
     # Split rather than str.replace, so nothing inside d3 or the data is read as a marker.
     head, rest = template.split("/*D3*/")
     mid, tail = rest.split("/*DATA*/")
@@ -139,7 +138,7 @@ def main(argv):
         print(json.dumps(data, indent=1, ensure_ascii=False))
         return 0
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(data))
+    out.write_text(render(data), encoding="utf-8")
     print(out)
     return 0
 

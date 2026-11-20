@@ -117,6 +117,22 @@ def uncommitted():
             | git_paths("ls-files", "-o", "--exclude-standard"))
 
 
+def code_status(spec, paths, hashes=file_hashes):
+    """A capability's code-side status and changed files, given the files its anchors match.
+
+    hashes maps paths to {path: hash}; pass a caching one to hash shared files once.
+    """
+    if not spec.get("anchors"):
+        return "no-anchors", []
+    if not spec.get("ref") or "anchorsFiles" not in spec:
+        # Mapped but never written as a spec (lazy setup): nothing to drift from.
+        return "no-spec", []
+    # Compare file by file, so additions, deletions and renames all show up.
+    old, now = spec["anchorsFiles"], hashes(paths)
+    changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
+    return ("code-moved" if changed else "in-sync"), changed
+
+
 def cmd_check(args):
     as_json = "--json" in args
     names = [a for a in args if not a.startswith("--")]
@@ -127,24 +143,16 @@ def cmd_check(args):
         spec = specs.get(name)
         if spec is None:
             sys.exit(f"unknown capability: {name}")
-        if not spec.get("anchors"):
-            report.append({"capability": name, "status": "no-anchors"})
-        elif not spec.get("ref") or "anchorsFiles" not in spec:
-            # Mapped but never written as a spec (lazy setup): nothing to drift from.
-            report.append({"capability": name, "status": "no-spec"})
+        status, changed = code_status(spec, matched(spec, files))
+        if status == "code-moved":
+            report.append({
+                "capability": name,
+                "status": status,
+                "syncedCommit": spec.get("syncedCommit"),
+                "changed": changed,
+            })
         else:
-            # Compare file by file, so additions, deletions and renames all show up.
-            old, now = spec["anchorsFiles"], file_hashes(matched(spec, files))
-            changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
-            if changed:
-                report.append({
-                    "capability": name,
-                    "status": "code-moved",
-                    "syncedCommit": spec.get("syncedCommit"),
-                    "changed": changed,
-                })
-            else:
-                report.append({"capability": name, "status": "in-sync"})
+            report.append({"capability": name, "status": status})
     if as_json:
         print(json.dumps(report, indent=2))
     else:

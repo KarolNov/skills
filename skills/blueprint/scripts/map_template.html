@@ -71,9 +71,30 @@ function toGraph(d) {
 // Line width grows with the number of shared files, with a ceiling so big overlaps stay readable.
 const lineWidth = (count) => Math.min(12, 1.2 + 1.6 * Math.sqrt(count));
 
+// Keeps the boxes themselves apart, not circles around them: a long name is wide but only
+// 26px tall, so a circle of half its width would push neighbours far away above and below.
+function rectCollide(pad) {
+  let nodes = [];
+  function force(alpha) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy - a.y - a.vy;
+        const ox = (a.w + b.w) / 2 + pad - Math.abs(dx), oy = 26 + pad - Math.abs(dy);
+        if (ox <= 0 || oy <= 0) continue;
+        // Separate along the axis that needs the smaller move.
+        if (ox < oy) { const m = (dx < 0 ? -1 : 1) * ox * 0.5 * Math.min(1, alpha * 4); a.vx -= m; b.vx += m; }
+        else { const m = (dy < 0 ? -1 : 1) * oy * 0.5 * Math.min(1, alpha * 4); a.vy -= m; b.vy += m; }
+      }
+    }
+  }
+  force.initialize = (n) => { nodes = n; };
+  return force;
+}
+
 // ---- canvas -------------------------------------------------------------
 const Canvas = (function () {
-  let el, svg, root, zoom, nodes = [];
+  let el, svg, root, zoom, nodes = [], moved = false;
   const W = () => el.clientWidth, H = () => el.clientHeight;
 
   // A domain's outline: a ring of points around each capability, wrapped in a smooth hull,
@@ -91,27 +112,35 @@ const Canvas = (function () {
       el = container;
       svg = d3.select(el).append("svg");
       root = svg.append("g");
-      zoom = d3.zoom().scaleExtent([0.15, 3]).on("zoom", (e) => root.attr("transform", e.transform));
+      zoom = d3.zoom().scaleExtent([0.15, 3]).on("zoom", (e) => {
+        root.attr("transform", e.transform);
+        if (e.sourceEvent) moved = true;  // the user panned or zoomed, not fit()
+      });
       svg.call(zoom).on("dblclick.zoom", null);
     },
     render(g) {
       root.selectAll("*").remove();
-      // Each domain pulls its capabilities toward a point on a circle; bare ones drift to the centre.
-      const ids = g.domains.map((d) => d.id), spread = ids.length > 1 ? 180 : 0;
-      const anchor = Object.fromEntries(ids.map((id, i) => [id, {
-        x: Math.cos(i / ids.length * 2 * Math.PI) * spread,
-        y: Math.sin(i / ids.length * 2 * Math.PI) * spread }]));
+      // Each domain pulls its capabilities toward a point on a circle. Capabilities outside any
+      // domain get a point of their own, so they never settle inside a domain's outline.
+      const BARE = "\u0000bare";
+      const slots = g.domains.map((d) => d.id);
+      if (g.caps.some((c) => !c.domain)) slots.push(BARE);
+      const spread = slots.length > 1 ? 120 + 40 * slots.length : 0;
+      const anchor = Object.fromEntries(slots.map((id, i) => [id, {
+        x: Math.cos(i / slots.length * 2 * Math.PI) * spread,
+        y: Math.sin(i / slots.length * 2 * Math.PI) * spread }]));
+      const at = (d) => anchor[d.domain || BARE];
       nodes = g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 }));
       const links = g.links.map((l) => ({ ...l }));
 
-      const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g");
+      const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g"), labelG = root.append("g");
       const hulls = hullG.selectAll("g").data(g.domains).join("g");
       hulls.append("path").attr("class", "hull");
       hulls.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
 
       const link = linkG.selectAll("line").data(links).join("line")
         .attr("class", "share").attr("stroke-width", (d) => lineWidth(d.count));
-      const linkLabel = linkG.selectAll("text").data(links).join("text")
+      const linkLabel = labelG.selectAll("text").data(links).join("text")
         .attr("class", "share-label").attr("text-anchor", "middle").text((d) => d.count);
 
       const node = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g").attr("class", "cap");
@@ -121,17 +150,23 @@ const Canvas = (function () {
 
       // Settle the layout before showing it, so nothing drifts into place on screen.
       d3.forceSimulation(nodes)
-        .force("link", d3.forceLink(links).id((d) => d.id).distance(110).strength(0.25))
+        .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.w + l.target.w) / 2 + 50).strength(0.25))
         .force("charge", d3.forceManyBody().strength(-380))
-        .force("collide", d3.forceCollide((d) => d.w / 2 + 6))
-        .force("x", d3.forceX((d) => d.domain ? anchor[d.domain].x : 0).strength((d) => d.domain ? 0.14 : 0.04))
-        .force("y", d3.forceY((d) => d.domain ? anchor[d.domain].y : 0).strength((d) => d.domain ? 0.14 : 0.04))
+        .force("collide", rectCollide(12))
+        .force("x", d3.forceX((d) => at(d).x).strength(0.14))
+        .force("y", d3.forceY((d) => at(d).y).strength(0.14))
         .stop()
         .tick(400);
 
-      link.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
-        .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
-      linkLabel.attr("x", (d) => (d.source.x + d.target.x) / 2).attr("y", (d) => (d.source.y + d.target.y) / 2 + 3);
+      // Lines run between box edges, and the count sits mid-way along the visible part.
+      links.forEach((d) => {
+        const a = d.source, b = d.target, dx = b.x - a.x, dy = b.y - a.y;
+        const cut = (n) => Math.min(dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? 13 / Math.abs(dy) : Infinity);
+        const s = Math.min(0.5, cut(a)), t = Math.max(0.5, 1 - cut(b));
+        Object.assign(d, { x1: a.x + dx * s, y1: a.y + dy * s, x2: a.x + dx * t, y2: a.y + dy * t });
+      });
+      link.attr("x1", (d) => d.x1).attr("y1", (d) => d.y1).attr("x2", (d) => d.x2).attr("y2", (d) => d.y2);
+      linkLabel.attr("x", (d) => (d.x1 + d.x2) / 2).attr("y", (d) => (d.y1 + d.y2) / 2 + 3);
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
       hulls.each(function (d) {
         const pts = nodes.filter((n) => n.domain === d.id);
@@ -141,12 +176,17 @@ const Canvas = (function () {
       this.fit(0);
     },
     fit(ms = 450) {
-      if (!nodes.length) return;
-      const [x0, x1] = d3.extent(nodes, (d) => d.x), [y0, y1] = d3.extent(nodes, (d) => d.y);
-      const pad = 60, k = Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / W(), (y1 - y0 + pad * 2) / H()));
+      moved = false;
+      if (!nodes.length || !W() || !H()) return;
+      // Box edges, not centres, so a long name at the side isn't cut off.
+      const x0 = d3.min(nodes, (d) => d.x - d.w / 2), x1 = d3.max(nodes, (d) => d.x + d.w / 2);
+      const [y0, y1] = d3.extent(nodes, (d) => d.y);
+      const pad = 60, k = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / W(), (y1 - y0 + pad * 2) / H())));
       const t = d3.zoomIdentity.translate(W() / 2, H() / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
       (ms ? svg.transition().duration(ms) : svg).call(zoom.transform, t);
     },
+    // On resize, refit only while the user hasn't moved the view themselves.
+    refit() { if (!moved) this.fit(0); },
   };
 })();
 
@@ -154,7 +194,8 @@ const Canvas = (function () {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function summary(d) {
-  const n = d.nodes.length, doms = d.domains.length, links = d.edges.length;
+  // Domains with no capabilities draw no outline, so they aren't counted either.
+  const n = d.nodes.length, doms = toGraph(d).domains.length, links = d.edges.length;
   return `<h2>${esc(d.repo)}</h2>
     <p>${n} capabilit${n === 1 ? "y" : "ies"} · ${doms} domain${doms === 1 ? "" : "s"} · ${links} shared-file link${links === 1 ? "" : "s"}</p>
     <p class="muted">Outlines are domains. A line joins two capabilities whose anchors match the same files; its label is how many, and it is thicker for more.</p>`;
@@ -166,7 +207,7 @@ window.addEventListener("DOMContentLoaded", () => {
   Canvas.mount(document.getElementById("graph"));
   Canvas.render(toGraph(DATA));
   document.getElementById("fit").onclick = () => Canvas.fit();
-  window.addEventListener("resize", () => Canvas.fit(0));
+  window.addEventListener("resize", () => Canvas.refit());
 });
 </script>
 </body></html>
