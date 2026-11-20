@@ -92,6 +92,95 @@ function rectCollide(pad) {
   return force;
 }
 
+// ---- layout -------------------------------------------------------------
+// A force layout settles wherever its start lands, and one start can leave lines crossing or
+// running behind boxes. So several starts are settled off screen and the least tangled is drawn.
+// Seeded, so the same data always gives the same picture.
+
+// Where a line between two boxes leaves each box, so lines and their counts sit in the gap.
+function clip(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const cut = (n) => Math.min(dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? 13 / Math.abs(dy) : Infinity);
+  const s = Math.min(0.5, cut(a)), t = Math.max(0.5, 1 - cut(b));
+  return { x1: a.x + dx * s, y1: a.y + dy * s, x2: a.x + dx * t, y2: a.y + dy * t };
+}
+
+function crosses(p, q) {
+  const o = (ax, ay, bx, by, cx, cy) => Math.sign((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+  return o(p.x1, p.y1, p.x2, p.y2, q.x1, q.y1) * o(p.x1, p.y1, p.x2, p.y2, q.x2, q.y2) < 0
+      && o(q.x1, q.y1, q.x2, q.y2, p.x1, p.y1) * o(q.x1, q.y1, q.x2, q.y2, p.x2, p.y2) < 0;
+}
+
+// Does the segment pass through the box (grown by pad)? Liang–Barsky clipping.
+function throughBox(l, n, pad) {
+  const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
+  let t0 = 0, t1 = 1;
+  for (const [p, q] of [[-dx, l.x1 - (n.x - n.w / 2 - pad)], [dx, n.x + n.w / 2 + pad - l.x1],
+                        [-dy, l.y1 - (n.y - 13 - pad)], [dy, n.y + 13 + pad - l.y1]]) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const r = q / p;
+    if (p < 0) { if (r > t1) return false; t0 = Math.max(t0, r); }
+    else { if (r < t0) return false; t1 = Math.min(t1, r); }
+  }
+  return t0 < t1;
+}
+
+// Lower is cleaner: crossings, lines behind boxes, counts on boxes or squeezed between them, boxes on boxes;
+// then, between equally clean layouts, shorter lines.
+function tangle(nodes, links) {
+  const segs = links.map((l) => ({ ...clip(l.source, l.target), l }));
+  let score = 0, length = 0;
+  segs.forEach((p, i) => {
+    const visible = Math.hypot(p.x2 - p.x1, p.y2 - p.y1);
+    length += visible;
+    if (visible < 44) score += 0.5;  // too short to show its count clear of the boxes
+    const mid = { x: (p.x1 + p.x2) / 2, y: (p.y1 + p.y2) / 2, w: 14 };
+    for (const q of segs.slice(i + 1)) {
+      const shared = [q.l.source, q.l.target].some((n) => n === p.l.source || n === p.l.target);
+      if (!shared && crosses(p, q)) score += 1;
+    }
+    for (const n of nodes) {
+      if (n === p.l.source || n === p.l.target) continue;
+      if (throughBox(p, n, 6)) score += 1;
+      if (Math.abs(mid.x - n.x) < n.w / 2 + 8 && Math.abs(mid.y - n.y) < 20) score += 0.5;
+    }
+  });
+  nodes.forEach((a, i) => nodes.slice(i + 1).forEach((b) => {
+    if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < 26) score += 1;
+  }));
+  return score + length / 1e5;
+}
+
+function settle(base, rawLinks, at, seed) {
+  const rand = d3.randomLcg(seed / 101);
+  const nodes = base.map((n) => ({ ...n })), links = rawLinks.map((l) => ({ ...l }));
+  // Start 0 is d3's own spiral; the others scatter capabilities around their anchors.
+  if (seed) nodes.forEach((n) => { n.x = at(n).x + (rand() - 0.5) * 500; n.y = at(n).y + (rand() - 0.5) * 500; });
+  d3.forceSimulation(nodes).randomSource(rand)
+    .force("link", d3.forceLink(links).id((d) => d.id)
+      .distance((l) => (l.source.w + l.target.w) / 2 + 50).strength(0.25))
+    .force("charge", d3.forceManyBody().strength(-380))
+    .force("collide", rectCollide(12))
+    .force("x", d3.forceX((d) => at(d).x).strength(0.14))
+    .force("y", d3.forceY((d) => at(d).y).strength(0.14))
+    .stop()
+    .tick(400);
+  return { nodes, links, score: tangle(nodes, links) };
+}
+
+// Stops at a clean layout, or when the work budget runs out: each start costs about
+// nodes² + links² (collisions and crossing checks), so big maps get fewer starts and the
+// page still opens at once. A budget of work, not time, keeps the picture the same everywhere.
+function layout(base, links, at) {
+  const starts = Math.max(1, Math.min(24, Math.floor(60000 / (base.length ** 2 + links.length ** 2 + 1))));
+  let best = null;
+  for (let seed = 0; seed < starts && (!best || best.score >= 1); seed++) {
+    const c = settle(base, links, at, seed);
+    if (!best || c.score < best.score) best = c;
+  }
+  return best;
+}
+
 // ---- canvas -------------------------------------------------------------
 const Canvas = (function () {
   let el, svg, root, zoom, nodes = [], moved = false;
@@ -130,8 +219,11 @@ const Canvas = (function () {
         x: Math.cos(i / slots.length * 2 * Math.PI) * spread,
         y: Math.sin(i / slots.length * 2 * Math.PI) * spread }]));
       const at = (d) => anchor[d.domain || BARE];
-      nodes = g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 }));
-      const links = g.links.map((l) => ({ ...l }));
+      // Settle the layout before showing it, so nothing drifts into place on screen.
+      const base = g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 }));
+      const best = layout(base, g.links, at);
+      nodes = best.nodes;
+      const links = best.links;
 
       const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g"), labelG = root.append("g");
       const hulls = hullG.selectAll("g").data(g.domains).join("g");
@@ -148,23 +240,8 @@ const Canvas = (function () {
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
       node.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
 
-      // Settle the layout before showing it, so nothing drifts into place on screen.
-      d3.forceSimulation(nodes)
-        .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.w + l.target.w) / 2 + 50).strength(0.25))
-        .force("charge", d3.forceManyBody().strength(-380))
-        .force("collide", rectCollide(12))
-        .force("x", d3.forceX((d) => at(d).x).strength(0.14))
-        .force("y", d3.forceY((d) => at(d).y).strength(0.14))
-        .stop()
-        .tick(400);
-
       // Lines run between box edges, and the count sits mid-way along the visible part.
-      links.forEach((d) => {
-        const a = d.source, b = d.target, dx = b.x - a.x, dy = b.y - a.y;
-        const cut = (n) => Math.min(dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? 13 / Math.abs(dy) : Infinity);
-        const s = Math.min(0.5, cut(a)), t = Math.max(0.5, 1 - cut(b));
-        Object.assign(d, { x1: a.x + dx * s, y1: a.y + dy * s, x2: a.x + dx * t, y2: a.y + dy * t });
-      });
+      links.forEach((d) => Object.assign(d, clip(d.source, d.target)));
       link.attr("x1", (d) => d.x1).attr("y1", (d) => d.y1).attr("x2", (d) => d.x2).attr("y2", (d) => d.y2);
       linkLabel.attr("x", (d) => (d.x1 + d.x2) / 2).attr("y", (d) => (d.y1 + d.y2) / 2 + 3);
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
