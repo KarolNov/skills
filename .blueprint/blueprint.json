@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "docs": {
     "backend": "notion",
     "location": {
@@ -15,6 +16,12 @@
     "conventions": {}
   },
   "project": "https://app.notion.com/p/41c43cce21f281fa8769f1c85bf1711b",
+  "domains": {
+    "blueprint": {
+      "ref": "https://app.notion.com/p/41e43cce21f28117b1b4f8c24c189153",
+      "purpose": "The blueprint workflow: set a repo up, propose and build changes against capability specs, and keep specs and code in step."
+    }
+  },
   "specs": {
     "blueprint/propose": {
       "ref": "https://app.notion.com/p/41c43cce21f2815c94eeedfd0195028f",
@@ -27,19 +34,19 @@
         "skills/blueprint/scripts/text_diagram.py",
         "skills/blueprint/examples/**"
       ],
-      "specVersion": "4a4643838b4822b6",
+      "specVersion": "0cd57ea1dafc51c6",
       "anchorsFiles": {
-        "skills/blueprint/SKILL.md": "c1baf15e5107",
+        "skills/blueprint/SKILL.md": "b1fea20e34a2",
         "skills/blueprint/examples/fictional-yjs-provider/brief.md": "9ec2d1b8408a",
         "skills/blueprint/examples/fictional-yjs-provider/playground.html": "4c2bf54894f3",
         "skills/blueprint/examples/fictional-yjs-provider/review.html": "de95a652c7ee",
-        "skills/blueprint/references/formats.md": "81c2f828890c",
-        "skills/blueprint/references/propose.md": "9f7491700c88",
+        "skills/blueprint/references/formats.md": "238266f778b0",
+        "skills/blueprint/references/propose.md": "71599851cb93",
         "skills/blueprint/references/visuals.md": "542144087ae9",
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7"
       },
-      "syncedCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/apply": {
       "ref": "https://app.notion.com/p/41c43cce21f281bbb3fef91cff515a26",
@@ -47,12 +54,12 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "38b243f6152fef11",
+      "specVersion": "feeb786676199316",
       "anchorsFiles": {
-        "skills/blueprint/references/apply.md": "9ad275a3b2ea",
+        "skills/blueprint/references/apply.md": "5fce00658aad",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
       },
-      "syncedCommit": "cc002ea1c6a19104992ab6b84b4236587feb3004"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/backends": {
       "ref": "https://app.notion.com/p/41c43cce21f28136b9ded9fc8d7d6011",
@@ -60,28 +67,28 @@
         "skills/blueprint/references/backends/**",
         "skills/blueprint/scripts/notion_normalize.py"
       ],
-      "specVersion": "3a8b71ab11ad20b0",
+      "specVersion": "f06e791bd2ebc873",
       "anchorsFiles": {
-        "skills/blueprint/references/backends/github.md": "1c03584bb73f",
-        "skills/blueprint/references/backends/jira.md": "a4fbe3b283c5",
-        "skills/blueprint/references/backends/linear.md": "8b3ec58d3950",
-        "skills/blueprint/references/backends/markdown.md": "1bcf072e0004",
-        "skills/blueprint/references/backends/notion.md": "90991574d406",
-        "skills/blueprint/references/backends/obsidian.md": "b90b39b1ab1c",
+        "skills/blueprint/references/backends/github.md": "3aa0509c7e8a",
+        "skills/blueprint/references/backends/jira.md": "b9b8117bbee6",
+        "skills/blueprint/references/backends/linear.md": "2a09fee3e3ce",
+        "skills/blueprint/references/backends/markdown.md": "7d3f846e4377",
+        "skills/blueprint/references/backends/notion.md": "19f404a689a8",
+        "skills/blueprint/references/backends/obsidian.md": "53ee9272bf1e",
         "skills/blueprint/scripts/notion_normalize.py": "624e503e65c9"
       },
-      "syncedCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/setup": {
       "ref": "https://app.notion.com/p/41c43cce21f2817cbf54d2b0daf6550f",
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "039b1473a9433606",
+      "specVersion": "5351059ba18210fc",
       "anchorsFiles": {
-        "skills/blueprint-setup/SKILL.md": "9eefd817fd15"
+        "skills/blueprint-setup/SKILL.md": "ecc57a6ea5d8"
       },
-      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/sync": {
       "ref": "https://app.notion.com/p/41c43cce21f281ef9bfcf823c8b351e2",
@@ -90,13 +97,13 @@
         "skills/blueprint/scripts/drift.py",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "ec963e3ff54dc994",
+      "specVersion": "9cc207094e4f5122",
       "anchorsFiles": {
-        "skills/blueprint-sync/SKILL.md": "67416010b22b",
+        "skills/blueprint-sync/SKILL.md": "c12fda4b9bdc",
         "skills/blueprint/references/status.md": "ffef668275ad",
-        "skills/blueprint/scripts/drift.py": "2c57ee68d945"
+        "skills/blueprint/scripts/drift.py": "841945b7bc5c"
       },
-      "syncedCommit": "42124d1738ba0e04f21fa864993b82e9c5b2b5e8"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
@@ -105,9 +112,9 @@
       ],
       "specVersion": "4487a4763019afba",
       "anchorsFiles": {
-        "skills/blueprint-drift/SKILL.md": "bca118e79ec6"
+        "skills/blueprint-drift/SKILL.md": "b2b9b6022e4c"
       },
-      "syncedCommit": "42124d1738ba0e04f21fa864993b82e9c5b2b5e8"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "distribution": {
       "ref": "https://app.notion.com/p/41c43cce21f281658fd1d742b8e50a7a",
@@ -115,12 +122,12 @@
         ".claude-plugin/**",
         "README.md"
       ],
-      "specVersion": "55e8a9909b5ffe16",
+      "specVersion": "fb311da69bc03e7e",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "810d58f41fb1",
-        "README.md": "8e282796224d"
+        ".claude-plugin/marketplace.json": "6e8080568d29",
+        "README.md": "eb048a344a84"
       },
-      "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -167,11 +174,17 @@
       "syncedCommit": "02c37ade3fbe42e3337fda9666793285f65ae061"
     },
     "blueprint/tidy": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/41e43cce21f2819981f7e42c91d03fb9",
       "anchors": [
         "skills/blueprint-tidy/**",
         "skills/blueprint/references/upgrades.md"
-      ]
+      ],
+      "specVersion": "3c9410ab03d13d26",
+      "anchorsFiles": {
+        "skills/blueprint-tidy/SKILL.md": "db09a290c03e",
+        "skills/blueprint/references/upgrades.md": "4914621f1e65"
+      },
+      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     }
   },
   "changes": {
@@ -196,8 +209,9 @@
       "brief": "https://app.notion.com/p/41d43cce21f2817daf47d2a4daf27127",
       "review": "https://app.notion.com/p/41d43cce21f281c38dedc1c8950bcd98",
       "tickets": "https://app.notion.com/p/41d43cce21f281c38dedc1c8950bcd98",
-      "status": "building",
-      "baseCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
+      "status": "applied",
+      "baseCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133",
+      "branch": "kn/blueprint-domains-and-tidy-specs"
     }
   }
 }

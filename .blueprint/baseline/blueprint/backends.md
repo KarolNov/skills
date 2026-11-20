@@ -14,7 +14,7 @@ Specs and blueprints SHALL be storable in `notion`, `obsidian`, `markdown`, `lin
 
 ### Requirement: Dedicated structure, not loose pages
 
-Each backend SHALL keep specs and blueprints in a structure built for them, such as databases or folders under one root. It SHALL never add rows or properties to the team's existing databases.
+Each backend SHALL keep specs and blueprints in a structure built for them, such as databases or folders under one root. It SHALL never add rows or properties to the team's existing databases. The blueprint's own Specs database MAY gain a `Kind` property and sub-items for domains, since that structure is the blueprint's own.
 
 - **Scenario: Existing tracker database**
   - **GIVEN** the team's project database has a row for the repo
@@ -53,3 +53,19 @@ Diagrams SHALL be placed so the backend displays them as pictures. In Notion the
 - **Scenario: Review rebuilt**
   - **WHEN** a Notion review is rebuilt
   - **THEN** fresh images and embeds replace the old blocks, and a read-back confirms each one became a file block
+
+### Requirement: Domains nest like folders
+
+Each backend SHALL store a domain as an overview page that holds its capabilities like a folder: in Notion, a Specs row with `Kind = Domain` whose capability rows set it as their parent item; in Markdown, `specs/<domain>/index.md`; in Obsidian, the folder `<domain>/` with folder note `<domain>/<domain>.md`; in Confluence, a domain page with its capability pages under it. Where pages can't nest (Linear, the GitHub wiki), the overview SHALL be a page titled `Domain: <name>` that links its capabilities, whose titles keep the domain prefix.
+
+- **Scenario: Notion domain**
+  - **WHEN** a domain `board` is created in Notion
+  - **THEN** the Specs table shows `board` as an expandable row with `board/session` and `board/ops` under it, and opening it shows the overview
+
+### Requirement: Overview is not versioned
+
+A domain overview SHALL hold Purpose, Capabilities (linked, one line each) and How they connect, and SHALL have no baseline, version marker or drift check.
+
+- **Scenario: Edited overview**
+  - **WHEN** someone edits a domain overview's How they connect section
+  - **THEN** no capability reads as drifted

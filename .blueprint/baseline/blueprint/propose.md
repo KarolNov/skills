@@ -105,3 +105,21 @@ Wherever diagrams go in as images, each SHALL also get a terminal version: the s
 - **Scenario: Too wide**
   - **WHEN** a terminal version is wider than 56 columns or has a corner that joins no line
   - **THEN** `text_diagram.py` reports it, and the review is not written until it prints `ok`
+
+### Requirement: Older format points to tidy
+
+Every blueprint skill except tidy SHALL read `version` from `blueprint.json` first and, when it is older than the plugin's format version, say in one line that `/blueprint-tidy` migrates it, then continue without writing a migration.
+
+- **Scenario: Old repo**
+  - **GIVEN** a repo set up before format version 2
+  - **WHEN** the user runs `/blueprint <change>`
+  - **THEN** the first line says the repo is on format 1 and `/blueprint-tidy` upgrades it, and propose carries on
+
+### Requirement: Domain names
+
+A capability name SHALL be `<domain>/<capability>` or a bare `<capability>`, and SHALL never also be a domain name. A new capability proposed in a brief SHALL go into an existing domain when one fits.
+
+- **Scenario: New capability in a domain repo**
+  - **GIVEN** a domain `board` exists
+  - **WHEN** a brief adds a capability for pad layouts
+  - **THEN** it is proposed as `board/pads`, not `pads`

@@ -87,12 +87,15 @@ Before the last task, apply SHALL check every delta requirement and scenario aga
 
 ### Requirement: Fold the delta into specs
 
-Apply SHALL merge the delta in the order RENAMED, REMOVED, MODIFIED (replacing whole blocks by name), then ADDED. It SHALL show each merged spec as a diff and write it after approval, followed by the spec bookkeeping. It SHALL then mark the brief `applied`.
+Apply SHALL merge the delta in the order RENAMED, REMOVED, MODIFIED (replacing whole blocks by name), then ADDED. A new capability's page SHALL be created inside its domain when its name has one, after checking the name against the naming rule. Apply SHALL show each merged spec as a diff and write it after approval, followed by the spec bookkeeping. When a folded capability belongs to a domain, apply SHALL refresh that domain overview's capability list. It SHALL then mark the brief `applied`, and end its report with the `drift.py hint` line when there is one.
 
 - **Scenario: Not-yet-built marker**
   - **GIVEN** a requirement carries `Not yet built → <this blueprint>`
   - **WHEN** the delta is folded
   - **THEN** the marker line is dropped
+- **Scenario: New capability in a domain**
+  - **WHEN** a delta adds `board/pads` under domain `board`
+  - **THEN** the `board` overview's Capabilities list gains `board/pads`, and the rest of the overview is untouched
 
 ### Requirement: Pending target repo
 
