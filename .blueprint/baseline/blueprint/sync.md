@@ -23,12 +23,16 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
 
 ### Requirement: Anchor helpers
 
-`drift.py files <capability>` SHALL list the files a capability's anchors match. `drift.py unanchored [--since REF]` SHALL list changed files that no capability covers. Anchors SHALL be git-style globs with `**` and `!` exclusions.
+`drift.py files <capability> [anchor…]` SHALL list the files a capability's anchors match, or the given anchors instead, writing nothing. `drift.py unanchored [--since REF]` SHALL list changed files that no capability covers. `drift.py overlaps [--json]` SHALL list files matched by two or more capabilities, with the capabilities and the anchors that match. `drift.py rename <old> <new>` SHALL move a capability's key and baseline file, keeping its stamps, and refuse when a baseline already sits at the new name. `drift.py prune <capability>` SHALL drop the stamps of files its anchors no longer match, keeping the rest. `drift.py version` SHALL print the format version of `blueprint.json`, 1 when absent. Anchors SHALL be git-style globs with `**` and `!` exclusions.
 
 - **Scenario: Excluded tests**
   - **GIVEN** anchors `["src/auth/**", "!**/*.test.ts"]`
   - **WHEN** files are listed
   - **THEN** test files under `src/auth/` are not included
+- **Scenario: Overlap listed**
+  - **GIVEN** two capabilities whose anchors both match `worker/index.ts`
+  - **WHEN** `drift.py overlaps` runs
+  - **THEN** `worker/index.ts` is listed once with both capabilities
 
 ### Requirement: Status table
 
@@ -56,7 +60,7 @@ Sync SHALL sort each code change into behavior or internal. Internal changes SHA
 
 ### Requirement: Spec written from code
 
-For a capability with no spec, sync SHALL draft the whole spec from its anchored code, mark accidental-looking behavior with `<!-- verify: … -->`, create the page after approval, and do the bookkeeping.
+For a capability with no spec, sync SHALL draft the whole spec from its anchored code, mark accidental-looking behavior with `<!-- verify: … -->`, create the page after approval (inside its domain when its name has one), link it from that domain overview's Capabilities list, and do the bookkeeping.
 
 - **Scenario: no-spec capability named**
   - **WHEN** the user runs `/blueprint-sync <capability>` on a capability with `"ref": null`
@@ -69,3 +73,12 @@ Whenever a spec and its code are known to agree, the normalized spec SHALL be sa
 - **Scenario: Known gap left**
   - **WHEN** a capability still has a disagreement the user didn't resolve
   - **THEN** it is not stamped, so the next status shows it again
+
+### Requirement: Tidy nudge
+
+After a sync, the skill SHALL run `drift.py hint` and show its line when there is one: when more than 10 capabilities have no domain, or 3 or more capabilities without a domain share a top-level anchor folder. It SHALL never restructure anything itself.
+
+- **Scenario: Growing flat list**
+  - **GIVEN** 11 capabilities and no domains
+  - **WHEN** a sync finishes
+  - **THEN** its report ends with one line suggesting `/blueprint-tidy`

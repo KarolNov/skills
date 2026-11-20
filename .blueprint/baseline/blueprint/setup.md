@@ -31,12 +31,15 @@ Setup SHALL list the pages, databases, folders or labels it will create and wher
 
 ### Requirement: Capability map
 
-Setup SHALL propose 4 to 15 capabilities in the repo's own vocabulary, each with anchors. It SHALL show them as one table, flag observable code that no capability covers, and iterate until the user accepts.
+Setup SHALL propose 4 to 15 capabilities in the repo's own vocabulary, each with anchors. When the map has 8 or more and the repo is on the current format version, it SHALL also propose domains, each with a one-line purpose, following the domain naming rule; on an older format it SHALL propose none and leave grouping to `/blueprint-tidy`. It SHALL show them as one table, flag observable code that no capability covers, refuse a map where a name is both a domain and a capability, and iterate until the user accepts.
 
 - **Scenario: Existing OpenSpec specs**
   - **GIVEN** the repo has `openspec/specs/`
   - **WHEN** the map is proposed
   - **THEN** setup offers to import each spec as a capability spec, with scenarios turned into list items
+- **Scenario: Large repo**
+  - **WHEN** the proposed map has 8 or more capabilities
+  - **THEN** the table groups them under proposed domains, and no name is both a domain and a capability
 
 ### Requirement: Seeding is optional
 
@@ -48,12 +51,16 @@ Setup SHALL ask whether to write specs now or lazily. Lazy capabilities get `"re
 
 ### Requirement: Repo files written
 
-Setup SHALL write `.blueprint/blueprint.json`, a fresh copy of `drift.py`, a fresh copy of `notion_normalize.py` when the backend is Notion, a `baseline/` folder with a baseline for every existing spec, and a short `README.md`. It SHALL commit nothing, and SHALL only offer the `CLAUDE.md` line and a drift guard, adding them on a yes.
+Setup SHALL write `.blueprint/blueprint.json` with a `domains` map and, on a new setup, the current format `version`, a fresh copy of `drift.py`, a fresh copy of `notion_normalize.py` when the backend is Notion, a `baseline/` folder with a baseline for every existing spec, and a short `README.md`. It SHALL create an overview page for each accepted domain, listing a capability without a spec as "no spec yet". It SHALL commit nothing, and SHALL only offer the `CLAUDE.md` line and a drift guard, adding them on a yes.
 
 - **Scenario: Rerun**
   - **GIVEN** `.blueprint/` already exists
   - **WHEN** setup runs again
-  - **THEN** it updates location, capabilities, `drift.py` and `notion_normalize.py` without losing recorded specs or changes
+  - **THEN** it updates location, capabilities, `drift.py` and `notion_normalize.py` without losing recorded specs or changes, and keeps the recorded `version` exactly
+- **Scenario: Rerun on an older format**
+  - **GIVEN** `.blueprint/` is on an older format version
+  - **WHEN** setup runs again
+  - **THEN** it points to `/blueprint-tidy` for the migration instead of rewriting the format itself
 
 ### Requirement: Pending mode for repos that don't exist yet
 
