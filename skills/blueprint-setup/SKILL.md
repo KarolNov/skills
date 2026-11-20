@@ -15,7 +15,7 @@ Connect this repo to the places its team already works. Setup decides three thin
 - **Tickets**: where a blueprint's tasks become tickets: the tracker the repo already uses, or none.
 - **Project**: the existing page, row or project the specs belong to, if the team tracks projects somewhere.
 
-Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and, for Notion, `notion_normalize.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`.
+Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and, for Notion, `notion_normalize.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`. On a rerun, first read `version` from `blueprint.json` (absent means 1); when it is below the current format version in [upgrades.md](../blueprint/references/upgrades.md), say in one line that this repo's `.blueprint/` is on format <n> and `/blueprint-tidy` upgrades it, then carry on without rewriting the format yourself.
 
 ## Target repo doesn't exist yet
 

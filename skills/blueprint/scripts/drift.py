@@ -10,6 +10,10 @@ since its spec was last synced. It never talks to the spec backend.
     drift.py stamp CAPABILITY ... | --all      record the current state as synced
     drift.py files CAPABILITY                  list the files a capability's anchors match
     drift.py unanchored [--since REF]          changed files no capability covers
+    drift.py overlaps [--json]                 files two or more capabilities' anchors match
+    drift.py rename OLD NEW                    rename a capability, keeping its stamps
+    drift.py hint                              one line suggesting /blueprint-tidy, or nothing
+    drift.py version                           the format version of blueprint.json
 
 Run from anywhere inside the repository.
 """
@@ -74,6 +78,16 @@ def repo_files():
     """Tracked plus untracked-but-not-ignored files, so uncommitted work counts."""
     listed = git_paths("ls-files", "-co", "--exclude-standard")
     return sorted(f for f in listed if (ROOT / f).is_file())
+
+
+def matching_anchors(spec, path):
+    """The include anchors that match path, or [] when none does or an exclusion wins."""
+    if path.startswith(".blueprint/"):
+        return []
+    anchors = spec.get("anchors", [])
+    if any(glob_re(p[1:]).match(path) for p in anchors if p.startswith("!")):
+        return []
+    return [p for p in anchors if not p.startswith("!") and glob_re(p).match(path)]
 
 
 def matched(spec, files):
@@ -193,13 +207,126 @@ def cmd_unanchored(args):
     return 0
 
 
+def cmd_version(args):
+    print(load().get("version", 1))
+    return 0
+
+
+def cmd_overlaps(args):
+    as_json = "--json" in args
+    specs, files = load().get("specs", {}), repo_files()
+    report = []
+    for f in files:
+        hits = [{"capability": name, "anchors": anchors}
+                for name, spec in specs.items() if (anchors := matching_anchors(spec, f))]
+        if len(hits) > 1:
+            report.append({"file": f, "capabilities": hits})
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        for r in report:
+            print(r["file"])
+            width = max(len(h["capability"]) for h in r["capabilities"])
+            for h in r["capabilities"]:
+                print(f"    {h['capability']:<{width}}  {', '.join(h['anchors'])}")
+    return 0
+
+
+def collision(name, specs, domains, ignore=None):
+    """Why name can't be a capability next to the others (a name is a domain or a capability,
+    never both), or None."""
+    others = [n for n in specs if n != ignore]
+    if name in domains:
+        return f"{name} is a domain"
+    if clash := next((n for n in others if n.startswith(name + "/")), None):
+        return f"{name} would be the parent of capability {clash}"
+    if "/" in name and (parent := name.split("/")[0]) in others:
+        return f"its domain {parent} is a capability"
+    return None
+
+
+def cmd_rename(args):
+    if len(args) != 2:
+        sys.exit("rename takes OLD NEW")
+    old, new = args
+    state = load()
+    specs = state.get("specs", {})
+    if old not in specs:
+        sys.exit(f"unknown capability: {old}")
+    if new in specs:
+        sys.exit(f"capability already exists: {new}")
+    if why := collision(new, specs, state.get("domains", {}), ignore=old):
+        sys.exit(f"can't rename {old} to {new}: {why}")
+    # Rebuild in place so the key keeps its position, and with it the order of check's report.
+    state["specs"] = {(new if k == old else k): v for k, v in specs.items()}
+    moved = 0
+    for change in state.get("changes", {}).values():
+        caps = change.get("capabilities")
+        if isinstance(caps, list) and old in caps:
+            change["capabilities"] = [new if c == old else c for c in caps]
+            moved += 1
+    base = ROOT / ".blueprint" / "baseline"
+    src, dst = base / f"{old}.md", base / f"{new}.md"
+    has_baseline = src.exists()
+    if has_baseline:
+        if dst.exists():
+            sys.exit(f"baseline already exists: {dst.relative_to(ROOT)}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
+        # Drop folders the move left empty, up to baseline/ itself.
+        parent = src.parent
+        while parent != base and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+    save(state)
+    print(f"renamed {old} to {new}"
+          + ("; baseline moved" if has_baseline else "")
+          + (f"; {moved} change(s) updated" if moved else ""))
+    return 0
+
+
+def anchor_folder(anchor):
+    """The folder an anchor lives in, at most two levels deep (`src/board`), or None for a
+    root-level file or an anchor that starts with a wildcard."""
+    parts = anchor.rstrip("/").split("/")
+    if not (ROOT / anchor).is_dir():
+        parts = parts[:-1]  # a file or a glob: its folder is everything before the last part
+    literal = []
+    for part in parts:
+        if any(c in part for c in "*?["):
+            break
+        literal.append(part)
+    return "/".join(literal[:2]) or None
+
+
+def cmd_hint(args):
+    state = load()
+    specs, domains = state.get("specs", {}), state.get("domains", {})
+    loose = [n for n in specs if n.split("/")[0] not in domains or "/" not in n]
+    if len(loose) > 10:
+        print(f"{len(loose)} capabilities have no domain: /blueprint-tidy can group them.")
+        return 0
+    by_folder = {}
+    for name in loose:
+        for folder in {anchor_folder(a) for a in specs[name].get("anchors", [])
+                       if not a.startswith("!")} - {None}:
+            by_folder.setdefault(folder, []).append(name)
+    crowded = [(f, names) for f, names in sorted(by_folder.items()) if len(names) >= 3]
+    if crowded:
+        folder, names = max(crowded, key=lambda c: len(c[1]))
+        print(f"{len(names)} capabilities without a domain share {folder}/ ({', '.join(names)}): "
+              "/blueprint-tidy can group them.")
+    return 0
+
+
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print(__doc__)
         return 0
     cmd, args = sys.argv[1], sys.argv[2:]
     handlers = {"check": cmd_check, "stamp": cmd_stamp, "files": cmd_files,
-                "unanchored": cmd_unanchored}
+                "unanchored": cmd_unanchored, "overlaps": cmd_overlaps, "rename": cmd_rename,
+                "hint": cmd_hint, "version": cmd_version}
     if cmd not in handlers:
         sys.exit(f"unknown command: {cmd}")
     return handlers[cmd](args)

@@ -140,6 +140,7 @@ Each change has two documents that sit side by side in the backend and link to e
 
 ```json
 {
+  "version": 2,
   "docs": {
     "backend": "notion",
     "location": { "...": "backend-specific: database ids, vault path, project key; see the backend file" }
@@ -151,6 +152,9 @@ Each change has two documents that sit side by side in the backend and link to e
   },
   "project": "<URL of the existing project page, row or project these specs belong to, if any>",
   "targetRepo": "<only while this repo doesn't exist yet: its intended name or URL>",
+  "domains": {
+    "auth": { "ref": "<page URL or path of the domain overview>", "purpose": "<one line>" }
+  },
   "specs": {
     "auth/session": {
       "ref": "<page URL or path>",
@@ -175,6 +179,9 @@ Each change has two documents that sit side by side in the backend and link to e
 }
 ```
 
+- **version** is the format version of this file and the backend structure it describes; absent means 1. The current version and what changed in each are in [upgrades.md](upgrades.md). Only `/blueprint-tidy` migrates an older one; every other skill says so in one line and carries on.
+- **domains** maps each domain to its overview page (`ref`) and a one-line `purpose`. A domain groups capabilities; it has no anchors, baseline or version marker. Empty (`{}`) when the repo has none.
+- **Capability names** are `<domain>/<capability>` (`auth/session`, where `auth` is in `domains`) or a bare `<capability>` (`search`). A name is either a domain or a capability, never both: no capability `board` beside `board/ops`. Domains are one level deep.
 - **anchors** are git-style globs relative to the repo root. A bare directory covers everything under it; `!` excludes. Leave tests out of anchors unless the tests themselves are the contract.
 - **targetRepo** (top level, optional) is set only while the repo this file describes doesn't exist yet: its intended name or URL. The file then lives in the pending folder `blueprint-setup` names, and `apply` moves it into the new repo and drops the key.
 - **baseRepo** is set when `baseCommit` belongs to another repo (a change that creates this repo from another one's code). Without it, `baseCommit` is a commit of this repo.
