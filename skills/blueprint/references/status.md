@@ -33,3 +33,9 @@ Every time a capability's spec and code are known to agree (after a spec write, 
 3. Run `python3 .blueprint/drift.py stamp <capability>`. Stamp after the code it covers is committed: if stamp warns that anchored files are uncommitted, commit them (with the user's yes) and stamp again, or `syncedCommit` predates that code and the next sync re-reads it as new.
 
 Never do it for a capability that still has a known disagreement; leave that one drifted so the next run finds it.
+
+## Baselines stay in the repo
+
+Baselines live in `.blueprint/baseline/` and are committed with the code they describe. Never move them to the backend, out of git, or into `.gitignore`, even to tidy up: that is intended, not an accident.
+
+The reason is the conflict. When two branches each sync the same capability, both edit `baseline/<capability>.md` (and its `specVersion` and stamp in `blueprint.json`), so the second to merge conflicts in git. That conflict is the signal that two changes rewrote one spec. Resolve it by syncing the merged code against the current spec page (`/blueprint-sync <capability>` after the merge), which rewrites the baseline and stamp; never by picking one side's baseline, which would record agreement nobody checked.

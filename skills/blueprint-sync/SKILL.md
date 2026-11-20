@@ -15,7 +15,7 @@ Shared material lives in the `blueprint` skill next to this one: `../blueprint/r
 
 ## 1. Status
 
-Compute the status table as [status.md](../blueprint/references/status.md) says and show it. Nothing moved and no `--deep`: say so and stop.
+Compute the status table as [status.md](../blueprint/references/status.md) says and show it. Nothing moved and no `--deep`: say so and stop. A git conflict in `.blueprint/baseline/` means two branches synced one spec: resolve it by syncing the merged code, never by picking a side ([status.md](../blueprint/references/status.md), "Baselines stay in the repo").
 
 A capability whose **spec moved** waits: someone edited intent, and syncing would overwrite it. Leave it out, and name it as one for `blueprint-drift` first. Named `no-spec` capabilities are written from scratch in step 3.
 

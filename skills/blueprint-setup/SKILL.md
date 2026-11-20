@@ -91,7 +91,7 @@ Specs for this repo live in <docs link>; `.blueprint/blueprint.json` maps capabi
 Offer one, never install without a yes. Each runs `python3 .blueprint/drift.py check`, which exits 1 when code moved since its spec was synced:
 
 - **pre-push hook** that warns and lets the push through (`|| true`), installed via the repo's existing hook manager (husky, lefthook, pre-commit) if it has one, otherwise `.git/hooks/pre-push`.
-- **CI step** that comments or fails on drift, added to the existing workflow.
+- **CI workflow** that reports drift on every pull request: copy [templates/blueprint-drift.yml](templates/blueprint-drift.yml) to `.github/workflows/blueprint-drift.yml` rather than writing a CI step from scratch. The template is the recommended shape, not a fixed one: the repo owns its copy, so tailor it when the user asks, now or later (add a `drifted` label, request a reviewer, post to a channel, change the wording or the trigger), keeping the drift check itself. As shipped, it keeps one PR comment listing the drifted capabilities and their changed files (updated on each push, saying when everything is back in sync), always emits a warning annotation (fork PRs, whose token can't comment, still see it), and passes unless `BLUEPRINT_DRIFT_FAIL` is set to `"true"` in the file; ask whether the user wants that. It checks code-side drift only, and says so. When the repo already has a workflow the user would rather extend, add the template's steps and its `pull-requests: write` permission to that workflow instead of a new file. The repo needs GitHub Actions; for another CI, adapt the same steps.
 
 ## Done when
 
