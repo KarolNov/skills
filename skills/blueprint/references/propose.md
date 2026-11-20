@@ -55,7 +55,7 @@ Two escapes from the round, both only when needed:
 
 Write the brief in the format from [formats.md](formats.md), not yet in the backend:
 
-- **Spec delta** per capability touched. MODIFIED blocks copy the current requirement from the capability spec whole, then edit it. A new capability gets a full spec (Purpose plus ADDED) and proposed anchors. A mapped capability with `"ref": null` is not new: its code already behaves somehow, so draft its spec from the code first (as `blueprint-sync` does for a capability with no spec), show that draft with the brief, and write the delta against it.
+- **Spec delta** per capability touched. MODIFIED blocks copy the current requirement from the capability spec whole, then edit it. A new capability gets a full spec (Purpose plus ADDED) and proposed anchors. Name it by the rule in [formats.md](formats.md) (`<domain>/<capability>` or a bare `<capability>`, never also a domain's name), and put it in an existing domain from `domains` in `blueprint.json` when one fits: pad layouts in a repo with a `board` domain are `board/pads`, not `pads`. A mapped capability with `"ref": null` is not new: its code already behaves somehow, so draft its spec from the code first (as `blueprint-sync` does for a capability with no spec), show that draft with the brief, and write the delta against it.
 - **Code map**: the files and modules the build will work in, from the facts you gathered in step 1.
 - **Decisions** carry the reasons from the grilling, one line each.
 - **Tasks** are vertical slices, each one checkable on its own: usually 3 to 10. The last task is always "Update specs: fold the delta into the capability specs" (apply does this).
