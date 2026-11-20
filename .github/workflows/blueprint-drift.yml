@@ -1,0 +1,102 @@
+# Blueprint drift report, copied by /blueprint-setup (step 7, "Drift guard").
+#
+# On every pull request it runs `python3 .blueprint/drift.py check` and reports
+# capabilities whose anchored code moved since their spec was last synced:
+#   - one PR comment, updated on each push (and marked "back in sync" when fixed),
+#   - a ::warning annotation per drifted capability, which fork PRs see too
+#     (their token can't comment),
+#   - a failed job only when BLUEPRINT_DRIFT_FAIL is "true".
+# Only code-side drift is checked; spec-side drift (someone edited a spec page)
+# needs the backend, so `/blueprint-sync` and `/blueprint-drift` report it.
+# Needs only actions/checkout, python3 and gh, all on GitHub-hosted runners.
+#
+# This is the recommended shape, not a fixed one: this copy belongs to the repo.
+# Edit it to fit the team (add a "drifted" label, request a reviewer, change
+# the wording or trigger); the steps after "Check drift" read its outputs
+# (`drifted`, drift.json, drift-comment.md).
+
+name: Blueprint drift
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  # "true" fails the job when drift is found; anything else only reports it.
+  BLUEPRINT_DRIFT_FAIL: "false"
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check drift
+        id: check
+        run: |
+          set +e
+          python3 .blueprint/drift.py check --json > drift.json
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            echo "::error::drift.py check failed (exit $code)"
+            cat drift.json
+            exit "$code"
+          fi
+          python3 - <<'PY'
+          import json, os
+          report = json.load(open("drift.json"))
+          moved = [r for r in report if r["status"] == "code-moved"]
+          marker = "<!-- blueprint-drift -->"
+          if moved:
+              lines = [marker, "### Blueprint drift", "",
+                       f"{len(moved)} capabilit{'y' if len(moved) == 1 else 'ies'} changed "
+                       "since their spec was last synced:", ""]
+              for r in moved:
+                  since = (r.get("syncedCommit") or "?")[:9]
+                  lines.append(f"- **`{r['capability']}`** (since `{since}`)")
+                  lines += [f"  - `{f}`" for f in r["changed"]]
+                  print(f"::warning title=Blueprint drift::{r['capability']}: "
+                        f"{len(r['changed'])} anchored file(s) changed since {since}: "
+                        + ", ".join(r["changed"]))
+              lines += ["", "If the code is right, run `/blueprint-sync <capability>` and commit "
+                        "the updated `.blueprint/`; if the spec is right, run "
+                        "`/blueprint-drift <capability>` to fix the code."]
+          else:
+              lines = [marker, "### Blueprint drift", "",
+                       "Back in sync: no capability's code moved since its spec was synced."]
+          lines += ["", "<sub>Code-side drift only; spec pages edited outside the code are "
+                    "reported by `/blueprint-sync`.</sub>"]
+          open("drift-comment.md", "w").write("\n".join(lines) + "\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"drifted={len(moved)}\n")
+          PY
+
+      - name: Comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          DRIFTED: ${{ steps.check.outputs.drifted }}
+        run: |
+          # Find this workflow's earlier comment, if any, by its hidden marker.
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- blueprint-drift -->")) | .id' \
+                 2>/dev/null | head -n 1) || id=""
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" \
+              -F body=@drift-comment.md > /dev/null \
+              || echo "::notice::Could not update the drift comment (fork PRs can't comment); see the warnings above."
+          elif [ "$DRIFTED" != "0" ]; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+              -F body=@drift-comment.md > /dev/null \
+              || echo "::notice::Could not comment on the PR (fork PRs can't comment); see the warnings above."
+          fi
+
+      - name: Fail on drift
+        if: env.BLUEPRINT_DRIFT_FAIL == 'true' && steps.check.outputs.drifted != '0'
+        run: |
+          echo "::error::${{ steps.check.outputs.drifted }} capability(ies) drifted; BLUEPRINT_DRIFT_FAIL is \"true\"."
+          exit 1
