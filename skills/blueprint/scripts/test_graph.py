@@ -199,6 +199,18 @@ class Page(GraphTest):
         self.assertNotRegex(html, r"<script[^>]*\bsrc=")
         self.assertNotRegex(html, r"<link[^>]*\bhref=")
 
+    def test_controls_and_legend(self):
+        r = self.repo({"a.ts": ""}, self.STATE)
+        r.graph()
+        html = (r.root / ".blueprint/map.html").read_text()
+        self.assertIn('id="q"', html)  # search box
+        self.assertIn('id="files"', html)  # files-as-nodes switch
+        self.assertIn('id="panel"', html)  # details panel
+        # The legend says spec-side drift is not drawn and where it is reported.
+        legend = re.search(r'<details class="legend".*?</details>', html, re.S).group(0)
+        self.assertIn("Only code-side drift is shown", legend)
+        self.assertIn("/blueprint-sync", legend)
+
     def test_data_cannot_close_the_script(self):
         r = self.repo({"a.ts": ""}, self.STATE)
         r.graph()

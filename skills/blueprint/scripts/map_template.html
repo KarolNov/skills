@@ -6,73 +6,160 @@
 :root {
   --bg: #fbfaf8; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e4e2dd;
   --node: #ffffff; --node-line: #b9b6ae; --domain: #f1efe9; --domain-line: #d9d5cb;
-  --accent: #2f6fde; --edge: #8f8b82;
+  --accent: #2f6fde; --edge: #8f8b82; --file: #a9a59c; --ok: #2b8a3e;
+  --drift: #d93b30; --drift-bg: #fdecea; --hit: #f4b400;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #161617; --panel: #1f1f21; --ink: #ececee; --muted: #9a9aa0; --line: #333336;
     --node: #2a2a2d; --node-line: #55555a; --domain: #222225; --domain-line: #3a3a3e;
-    --accent: #6ea0ff; --edge: #77777d;
+    --accent: #6ea0ff; --edge: #77777d; --file: #6c6c72; --ok: #5cc27a;
+    --drift: #ff6b5f; --drift-bg: #3a1f1d; --hit: #f4b400;
   }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
-.app { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr; height: 100vh; }
+.app { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: auto 1fr; height: 100vh; }
 header { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; padding: 10px 16px;
   border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
 header h1 { font-size: 15px; margin: 0; font-weight: 600; }
 header .tag { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 header .spacer { flex: 1; }
-button { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
-  border-radius: 7px; padding: 5px 9px; cursor: pointer; }
-button:hover { border-color: var(--accent); }
+header label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+button, input[type=search] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 9px; }
+button { cursor: pointer; } button:hover { border-color: var(--accent); }
 #graph { position: relative; overflow: hidden; min-height: 0; }
-#graph .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
-aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px; min-height: 0; }
-aside h2 { font-size: 15px; margin: 0 0 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-aside p { margin: 6px 0; } aside .muted { color: var(--muted); }
+aside { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.search { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.search input { width: 100%; padding: 8px 10px; }
+.search .count { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 1em; }
+#panel { overflow: auto; padding: 14px; flex: 1; min-height: 0; }
+#panel h2 { font-size: 16px; margin: 0 0 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }
+#panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+#panel p { margin: 6px 0; }
+#panel .muted, #panel .empty { color: var(--muted); }
+.back { font-size: 12px; display: inline-block; margin-bottom: 8px; }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line);
+  color: var(--muted); margin: 0 4px 4px 0; }
+.pill.drift { color: var(--drift); border-color: var(--drift); background: var(--drift-bg); }
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+details.req { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+details.req summary { cursor: pointer; font-weight: 500; }
+details.req.match { border-color: var(--hit); }
+.body { font-size: 13px; margin-top: 6px; }
+.body ul { margin: 4px 0; padding-left: 18px; } .body p { margin: 4px 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--domain); padding: 0 3px; border-radius: 3px; }
+mark { background: color-mix(in srgb, var(--hit) 45%, transparent); color: inherit; border-radius: 2px; }
+ul.files { list-style: none; padding: 0; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+ul.files li { padding: 2px 0; color: var(--muted); word-break: break-all; }
+ul.files li.changed { color: var(--drift); }
+ul.files li.changed::after { content: " · changed"; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+.result { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
+.result:hover { border-color: var(--accent); }
+.result .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+.result .why { font-size: 12px; color: var(--muted); }
+a.link { color: var(--accent); cursor: pointer; text-decoration: none; }
+a.link:hover { text-decoration: underline; }
+
+.legend { position: absolute; left: 12px; bottom: 10px; max-width: min(340px, calc(100% - 24px)); font-size: 12px;
+  color: var(--muted); background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; }
+.legend summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+.legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.legend p { margin: 6px 0 2px; }
+.sw { flex: none; display: inline-block; width: 22px; height: 12px; border-radius: 3px; }
+.sw.cap { background: var(--node); border: 1.5px solid var(--node-line); }
+.sw.drift { background: var(--drift-bg); border: 2px solid var(--drift); }
+.sw.dom { background: var(--domain); border: 1.5px dashed var(--domain-line); border-radius: 6px; }
+.sw.line { height: 4px; background: var(--edge); border-radius: 2px; }
+.sw.file { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--file); }
+.legend .row.files { display: none; } .legend.files .row.files { display: flex; }
+
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
-  aside { border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh 1fr; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
 }
 
 svg { width: 100%; height: 100%; display: block; cursor: grab; }
 svg:active { cursor: grabbing; }
-.hull { fill: var(--domain); stroke: var(--domain-line); stroke-dasharray: 5 4; }
+.hull { fill: var(--domain); stroke: var(--domain-line); stroke-dasharray: 5 4; cursor: pointer; }
 .hull-label { fill: var(--muted); font-size: 13px; font-weight: 600; pointer-events: none; }
-.share { stroke: var(--edge); stroke-opacity: .7; fill: none; }
+.share { stroke: var(--edge); stroke-opacity: .7; cursor: pointer; fill: none; }
 .share-label { fill: var(--muted); font-size: 10px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.own { stroke: var(--file); stroke-opacity: .45; stroke-width: .8; fill: none; }
 .share-label.spare { opacity: 0; }
-.cap { cursor: pointer; }
-.cap rect, .share, .share-label { transition: opacity .12s, stroke-opacity .12s; }
+.cap rect, .file, .share, .own, .share-label { transition: opacity .12s, stroke-opacity .12s; }
 .focus .share:not(.on) { stroke-opacity: .06; }
 .focus .share.on { stroke-opacity: .9; }
+.focus .own:not(.on) { stroke-opacity: .05; }
 .focus .share-label:not(.on) { opacity: 0; }
 .focus .share-label.on { opacity: 1; fill: var(--ink); }
-.focus .cap:not(.on) { opacity: .3; }
+.focus .cap:not(.on), .focus .file:not(.on) { opacity: .3; }
+.cap { cursor: pointer; }
 .cap rect { fill: var(--node); stroke: var(--node-line); stroke-width: 1.5; }
 .cap text { fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
+.cap.drift rect { fill: var(--drift-bg); stroke: var(--drift); stroke-width: 2.5; }
+.cap.drift text { fill: var(--drift); }
+.cap.pinned rect { stroke-dasharray: 4 2; }
+.file { cursor: pointer; }
+.file circle { fill: var(--file); }
+.file.drift circle { fill: var(--drift); }
+.file text { fill: var(--muted); font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0; pointer-events: none;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.file:hover text, .file.sel text, .file.hit text { opacity: 1; }
+.hit rect { stroke: var(--hit) !important; stroke-width: 3.5 !important; }
+.hit circle { stroke: var(--hit); stroke-width: 2; }
+.sel rect, .sel circle { stroke: var(--accent) !important; stroke-width: 3 !important; }
+.share.sel { stroke: var(--accent); stroke-opacity: 1; }
+.hull.sel { stroke: var(--accent); stroke-dasharray: none; }
+.dim { opacity: .12; }
 </style>
 <script>/*D3*/</script>
 </head><body>
 <div class="app">
   <header><h1>Capability map</h1><span class="tag" id="repo"></span><span class="spacer"></span>
+    <label><input type="checkbox" id="files"> files as nodes</label>
     <button id="fit">Fit</button></header>
-  <div id="graph"><div class="hint">scroll to zoom · drag to pan · hover or tap a capability for its lines</div></div>
-  <aside id="panel"></aside>
+  <div id="graph">
+    <details class="legend" id="legend" open><summary>Legend</summary>
+      <div class="row"><span class="sw cap"></span>capability</div>
+      <div class="row"><span class="sw drift"></span>code drifted: anchored files changed since its last sync</div>
+      <div class="row"><span class="sw dom"></span>domain</div>
+      <div class="row"><span class="sw line"></span>shares files; the label says how many, and lines between domains run bundled</div>
+      <div class="row files"><span class="sw file"></span>anchored file</div>
+      <p>Only code-side drift is shown. A spec edited since its last sync is not: <code>/blueprint-sync</code> reports that.</p>
+      <p>Hover or select a capability to bring its lines forward · scroll to zoom · drag the background to pan · drag a node to pin it · double-click to free it.</p>
+    </details>
+  </div>
+  <aside>
+    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files…" autocomplete="off">
+      <div class="count" id="count"></div></div>
+    <div id="panel"></div>
+  </aside>
 </div>
 <script>
 const DATA = /*DATA*/;
 
 // ---- data → graph -------------------------------------------------------
-// Turns graph.py's output into what the canvas draws: capability nodes, one line per
-// pair of capabilities sharing files (weighted by the count), and one outline per domain.
-function toGraph(d) {
+// Turns graph.py's output into what the canvas draws: capability nodes, one line per pair of
+// capabilities sharing files (weighted by the count), one outline per domain and, with files on,
+// a small node per anchored file tied to every capability that matches it.
+const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
+const fileOwners = {};
+for (const n of DATA.nodes) for (const f of n.files) (fileOwners[f] = fileOwners[f] || []).push(n.id);
+const fileChanged = (f) => fileOwners[f].some((id) => byId[id].changed.includes(f));
+
+function toGraph(d, showFiles) {
+  const files = showFiles ? Object.keys(fileOwners).sort().map((f) => ({
+    id: "file:" + f, path: f, label: f.split("/").pop(), owners: fileOwners[f], drift: fileChanged(f) })) : [];
   return {
     domains: d.domains.filter((dom) => d.nodes.some((n) => n.domain === dom.id)),
-    caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain })),
+    caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain, drift: n.status === "code-moved" })),
+    files,
     links: d.edges.map((e) => ({ id: e.source + "~" + e.target, source: e.source, target: e.target, count: e.count })),
+    fileLinks: files.flatMap((f) => f.owners.map((c) => ({ id: c + ">" + f.id, source: c, target: f.id }))),
   };
 }
 
@@ -81,6 +168,7 @@ const lineWidth = (count) => Math.min(12, 1.2 + 1.6 * Math.sqrt(count));
 
 // Keeps the boxes themselves apart, not circles around them: a long name is wide but only
 // 26px tall, so a circle of half its width would push neighbours far away above and below.
+// File dots (files as nodes) are small boxes with little room around them.
 function rectCollide(pad) {
   let nodes = [];
   function force(alpha) {
@@ -88,7 +176,8 @@ function rectCollide(pad) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
         const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy - a.y - a.vy;
-        const ox = (a.w + b.w) / 2 + pad - Math.abs(dx), oy = 26 + pad - Math.abs(dy);
+        const gap = a.kind === "file" || b.kind === "file" ? 3 : pad;
+        const ox = (a.w + b.w) / 2 + gap - Math.abs(dx), oy = (a.h + b.h) / 2 + gap - Math.abs(dy);
         if (ox <= 0 || oy <= 0) continue;
         // Separate along the axis that needs the smaller move.
         if (ox < oy) { const m = (dx < 0 ? -1 : 1) * ox * 0.5 * Math.min(1, alpha * 4); a.vx -= m; b.vx += m; }
@@ -227,6 +316,30 @@ function linkedOrder(groups, size, between) {
   return order;
 }
 
+// The forces, for the off-screen starts and the live simulation alike. A file (files as nodes)
+// is tied tightly to each capability matching it and feels no pull toward a slot.
+function applyForces(sim, links, plan, at) {
+  const own = (l) => l.kind === "own", inside = (l) => groupOf(l.source) === groupOf(l.target);
+  return sim
+    .force("link", d3.forceLink(links).id((d) => d.id)
+      .distance((l) => own(l) ? 24 : (l.source.w + l.target.w) / 2 + (inside(l) ? 40 : 90))
+      .strength((l) => own(l) ? 0.9 : inside(l) ? 0.15 + 0.35 * weightOf(l.count, plan.max) : 0.04))
+    .force("charge", d3.forceManyBody().strength((d) => (d.kind === "file" ? -18 : -380)).distanceMax(400))
+    .force("collide", rectCollide(12))
+    .force("x", d3.forceX((d) => at(d).x).strength((d) => (d.kind === "file" ? 0 : 0.12)))
+    .force("y", d3.forceY((d) => at(d).y).strength((d) => (d.kind === "file" ? 0 : 0.12)));
+}
+
+// Each cluster's centre as it is now (it moves when nodes are dragged), with its rough radius:
+// where a bundle's ports sit.
+function centres(nodes, radius) {
+  const out = {};
+  for (const [g, pts] of d3.group(nodes.filter((n) => n.kind !== "file"), groupOf)) {
+    out[g] = { x: d3.mean(pts, (p) => p.x), y: d3.mean(pts, (p) => p.y), r: radius[g] ?? 40 };
+  }
+  return out;
+}
+
 function settle(base, rawLinks, plan, seed) {
   const rand = d3.randomLcg(seed / 101);
   const ringed = plan.order;  // domains only; no-domain capabilities sit in the middle
@@ -238,18 +351,8 @@ function settle(base, rawLinks, plan, seed) {
     const r = seed ? 300 * Math.sqrt(rand()) : 10 * Math.sqrt(i + 0.5), a = seed ? rand() * 2 * Math.PI : i * 2.4;
     n.x = at(n).x + r * Math.cos(a); n.y = at(n).y + r * Math.sin(a);
   });
-  const inside = (l) => groupOf(l.source) === groupOf(l.target);
-  d3.forceSimulation(nodes).randomSource(rand)
-    .force("link", d3.forceLink(links).id((d) => d.id)
-      .distance((l) => (l.source.w + l.target.w) / 2 + (inside(l) ? 40 : 90))
-      .strength((l) => inside(l) ? 0.15 + 0.35 * weightOf(l.count, plan.max) : 0.04))
-    .force("charge", d3.forceManyBody().strength(-380).distanceMax(400))
-    .force("collide", rectCollide(12))
-    .force("x", d3.forceX((d) => at(d).x).strength(0.12))
-    .force("y", d3.forceY((d) => at(d).y).strength(0.12))
-    .stop()
-    .tick(400);
-  return { nodes, links, slot, score: tangle(nodes, links, slot, plan.max) };
+  applyForces(d3.forceSimulation(nodes).randomSource(rand), links, plan, at).stop().tick(400);
+  return { nodes, links, slot, score: tangle(nodes, links, centres(nodes, plan.radius), plan.max) };
 }
 
 // Stops at a clean layout, or when the work budget runs out: each start costs about
@@ -276,8 +379,9 @@ function layout(base, links) {
     const c = settle(base, links, plan, seed);
     if (!best || c.score < best.score) best = c;
   }
-  best.max = plan.max;
-  return best;
+  // The live simulation keeps pulling toward the slots of the start that won.
+  plan.at = (n) => best.slot[groupOf(n)] || { x: 0, y: 0 };
+  return { ...best, plan };
 }
 
 // Counts are placed heaviest first; one that would sit on a box or another count is held
@@ -293,10 +397,16 @@ function placeCounts(links, nodes) {
   }
 }
 
+
 // ---- canvas -------------------------------------------------------------
+// Steady, not fluid: the layout is chosen and settled before it is drawn, friction is high, and a
+// drag runs the simulation barely warm, so the dragged node (and its own files) moves and the rest
+// hardly do. A dropped node stays where it was dropped until it is double-clicked.
 const Canvas = (function () {
-  let el, svg, root, zoom, nodes = [], moved = false;
+  let el, svg, root, zoom, sim, onSelect, plan, nodes = [], links = [], moved = false;
+  let nodeSel, linkSel, labelSel, hullSel, hovered = null, selectedId = null;
   const W = () => el.clientWidth, H = () => el.clientHeight;
+  const sid = (end) => (typeof end === "object" ? end.id : end);
 
   // A domain's outline: a smooth hull around its ring of points, so even a one-capability
   // domain gets a rounded blob.
@@ -304,78 +414,186 @@ const Canvas = (function () {
     const h = d3.polygonHull(ringAround(pts));
     return h ? d3.line().curve(d3.curveCatmullRomClosed.alpha(0.6))(h) : "";
   }
+  const capsIn = (dom) => nodes.filter((n) => n.kind === "cap" && n.domain === dom);
+
+  function draw() {
+    // Shared-file lines: straight inside a cluster, bundled between clusters (ports follow the
+    // clusters as nodes are dragged); counts that would sit on a box or another count wait for focus.
+    const slot = centres(nodes, plan.radius), shares = links.filter((l) => l.kind === "share");
+    shares.forEach((l) => Object.assign(l, route(l, slot)));
+    placeCounts(shares, nodes.filter((n) => n.kind === "cap"));
+    linkSel.attr("d", (d) => d.kind === "share" ? d.d : `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`);
+    labelSel.attr("x", (d) => d.mid[0]).attr("y", (d) => d.mid[1] + 3).classed("spare", (d) => d.spare);
+    nodeSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
+    hullSel.each(function (d) {
+      const pts = capsIn(d.id);
+      d3.select(this).select("path").attr("d", hullPath(pts));
+      d3.select(this).select("text").attr("x", d3.mean(pts, (p) => p.x)).attr("y", d3.min(pts, (p) => p.y) - 38);
+    });
+  }
+
+  // Hover a node, or select it, to bring its lines, counts and neighbours forward and dim the rest.
+  function focus() {
+    let f = hovered || nodes.find((n) => n.id === selectedId) || null;
+    const near = new Set(f ? [f] : []);
+    links.forEach((l) => { if (l.source === f) near.add(l.target); if (l.target === f) near.add(l.source); });
+    if (near.size === 1) f = null;  // nothing linked: dimming the rest would only hide the map
+    const on = (l) => !!f && (l.source === f || l.target === f);
+    svg.classed("focus", !!f);
+    linkSel.classed("on", on);
+    labelSel.classed("on", on);
+    nodeSel.classed("on", (n) => near.has(n));
+  }
+
+  const drag = () => d3.drag()
+    .on("start", (e, d) => { d.moved = false; })
+    .on("drag", (e, d) => {
+      if (!d.moved) { d.moved = true; sim.alphaTarget(0.02).restart(); }
+      const dx = e.x - (d.fx ?? d.x), dy = e.y - (d.fy ?? d.y);
+      // A capability's own files (matched by no other capability) ride along with it.
+      for (const f of d.ownFiles || []) {
+        f.x += dx; f.y += dy;
+        if (f.fx != null) { f.fx += dx; f.fy += dy; }
+      }
+      d.fx = d.x = e.x; d.fy = d.y = e.y;
+      draw();
+    })
+    .on("end", (e, d) => {
+      sim.alphaTarget(0);
+      if (d.moved) nodeSel.filter((n) => n === d).classed("pinned", true);
+    });
+
+  function centre(x, y) { moved = true; svg.transition().duration(350).call(zoom.translateTo, x, y); }
 
   return {
-    mount(container) {
-      el = container;
-      svg = d3.select(el).append("svg");
+    mount(container, select) {
+      el = container; onSelect = select;
+      svg = d3.select(el).insert("svg", ":first-child");
       root = svg.append("g");
       zoom = d3.zoom().scaleExtent([0.15, 3]).on("zoom", (e) => {
         root.attr("transform", e.transform);
         if (e.sourceEvent) moved = true;  // the user panned or zoomed, not fit()
       });
       svg.call(zoom).on("dblclick.zoom", null);
+      svg.on("click", (e) => { if (e.target === svg.node()) onSelect(null); });
     },
     render(g) {
+      if (sim) sim.stop();
+      // Keep where nodes already are (and what is pinned) when redrawing, e.g. after the files switch.
+      const prev = new Map(nodes.map((n) => [n.id, n]));
       root.selectAll("*").remove();
-      // Settle the layout before showing it, so nothing drifts into place on screen.
-      const best = layout(g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 })), g.links);
-      nodes = best.nodes;
-      const links = best.links;
-      links.forEach((d) => Object.assign(d, route(d, best.slot)));
-      placeCounts(links, nodes);
+
+      const caps = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26, ownFiles: [] }));
+      if (!plan || caps.some((c) => !prev.has(c.id))) {
+        // First draw: pick the least tangled of several seeded layouts of the capabilities.
+        const best = layout(caps.map((c) => ({ ...c })), g.links);
+        plan = best.plan;
+        caps.forEach((c, i) => { c.x = best.nodes[i].x; c.y = best.nodes[i].y; });
+      }
+      const files = g.files.map((f) => ({ ...f, kind: "file", w: 7, h: 7 }));
+      nodes = [...caps, ...files];
+      for (const n of nodes) {
+        const p = prev.get(n.id);
+        if (p) Object.assign(n, { x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      }
+      const byNode = new Map(nodes.map((n) => [n.id, n]));
+      const fresh = files.filter((f) => f.x == null);
+      fresh.forEach((f, i) => {
+        const owner = byNode.get(f.owners[0]), a = i * 2.4;
+        // A new file node starts beside its capability rather than wherever d3 would put it.
+        f.x = owner.x + 20 * Math.cos(a); f.y = owner.y + 20 * Math.sin(a);
+      });
+      for (const f of files) if (f.owners.length === 1) byNode.get(f.owners[0]).ownFiles.push(f);
+      links = [
+        ...g.links.map((l) => ({ ...l, kind: "share" })),
+        ...g.fileLinks.map((l) => ({ ...l, kind: "own" })),
+      ];
 
       const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g"), labelG = root.append("g");
-      const hulls = hullG.selectAll("g").data(g.domains).join("g");
-      hulls.append("path").attr("class", "hull");
-      hulls.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
+      hullSel = hullG.selectAll("g").data(g.domains).join("g");
+      hullSel.append("path").attr("class", "hull").on("click", (e, d) => { e.stopPropagation(); onSelect("dom:" + d.id); });
+      hullSel.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
 
-      // Lines run between box edges; light ones fade back so the heavy ones carry the picture.
-      const link = linkG.selectAll("path").data(links).join("path")
-        .attr("class", "share").attr("stroke-width", (d) => lineWidth(d.count))
-        .attr("stroke-opacity", (d) => 0.25 + 0.55 * weightOf(d.count, best.max))
-        .attr("d", (d) => d.d);
-      const linkLabel = labelG.selectAll("text").data(links).join("text")
-        .attr("class", (d) => "share-label" + (d.spare ? " spare" : "")).attr("text-anchor", "middle")
-        .attr("x", (d) => d.mid[0]).attr("y", (d) => d.mid[1] + 3).text((d) => d.count);
+      // Light lines fade back so the heavy ones carry the picture.
+      linkSel = linkG.selectAll("path").data(links).join("path")
+        .attr("class", (d) => d.kind)
+        .attr("stroke-width", (d) => (d.kind === "share" ? lineWidth(d.count) : null))
+        .attr("stroke-opacity", (d) => (d.kind === "share" ? 0.25 + 0.55 * weightOf(d.count, plan.max) : null))
+        .on("click", (e, d) => { if (d.kind === "share") { e.stopPropagation(); onSelect("edge:" + d.id); } });
+      labelSel = labelG.selectAll("text").data(links.filter((l) => l.kind === "share")).join("text")
+        .attr("class", "share-label").attr("text-anchor", "middle").text((d) => d.count);
 
-      const node = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g").attr("class", "cap")
-        .attr("transform", (d) => `translate(${d.x},${d.y})`);
-      node.append("rect").attr("rx", 6).attr("height", 26).attr("y", -13)
+      nodeSel = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g")
+        .attr("class", (d) => d.kind + (d.drift ? " drift" : "") + (d.fx != null ? " pinned" : ""))
+        .on("click", (e, d) => { e.stopPropagation(); onSelect(d.id); })
+        .on("dblclick", (e, d) => {
+          e.stopPropagation();
+          d.fx = d.fy = null;
+          d3.select(e.currentTarget).classed("pinned", false);
+          sim.alpha(0.05).restart();
+        })
+        .on("mouseenter", (e, d) => { hovered = d; focus(); })
+        .on("mouseleave", () => { hovered = null; focus(); })
+        .call(drag());
+      const capSel = nodeSel.filter((d) => d.kind === "cap"), fileSel = nodeSel.filter((d) => d.kind === "file");
+      capSel.append("rect").attr("rx", 6).attr("height", 26).attr("y", -13)
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
-      node.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
+      capSel.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
+      fileSel.append("circle").attr("r", 3.5);
+      fileSel.append("text").attr("text-anchor", "middle").attr("dy", 14).text((d) => d.label);
+      fileSel.append("title").text((d) => d.path);
 
-      hulls.each(function (d) {
-        const pts = nodes.filter((n) => n.domain === d.id);
-        d3.select(this).select("path").attr("d", hullPath(pts));
-        d3.select(this).select("text").attr("x", d3.mean(pts, (p) => p.x)).attr("y", d3.min(pts, (p) => p.y) - 38);
-      });
-
-      // Hover a capability (or tap it, to keep it) to bring its lines and counts forward.
-      let pinned = null;
-      const focus = (f) => {
-        const near = new Set(f ? [f] : []);
-        links.forEach((l) => { if (l.source === f) near.add(l.target); if (l.target === f) near.add(l.source); });
-        if (near.size === 1) f = null;  // nothing linked: dimming the rest would only hide the map
-        const on = (l) => !!f && (l.source === f || l.target === f);
-        svg.classed("focus", !!f);
-        link.classed("on", on);
-        linkLabel.classed("on", on);
-        node.classed("on", (n) => near.has(n));
-      };
-      node.on("mouseenter", (e, d) => focus(d)).on("mouseleave", () => focus(pinned))
-        .on("click", (e, d) => { e.stopPropagation(); pinned = pinned === d ? null : d; focus(pinned); });
-      svg.on("click", () => { pinned = null; focus(null); });
-      this.fit(0);
+      sim = applyForces(d3.forceSimulation(nodes).randomSource(d3.randomLcg(0.5)), links, plan, plan.at)
+        .velocityDecay(0.65).alphaDecay(0.05)
+        .on("tick", draw)
+        .stop();
+      // Settle new file nodes before showing them, with the capabilities held where they are,
+      // so turning files on doesn't reshuffle the map.
+      if (fresh.length) {
+        const held = caps.filter((c) => c.fx == null);
+        held.forEach((c) => { c.fx = c.x; c.fy = c.y; });
+        sim.alpha(1).tick(300);
+        held.forEach((c) => { c.fx = c.fy = null; });
+      }
+      sim.alpha(0);
+      hovered = null;
+      draw();
+      focus();
     },
+    // ids: null for no search, else the matching capability and file ids. The rest are dimmed.
+    dim(ids) {
+      const off = (id) => ids && !ids.has(id);
+      nodeSel.classed("dim", (d) => off(d.id)).classed("hit", (d) => !!ids && ids.has(d.id));
+      linkSel.classed("dim", (d) => off(sid(d.source)) || off(sid(d.target)));
+      labelSel.classed("dim", (d) => off(sid(d.source)) || off(sid(d.target)));
+    },
+    select(id, centreOn) {
+      selectedId = id;
+      nodeSel.classed("sel", (d) => d.id === id);
+      linkSel.classed("sel", (d) => "edge:" + d.id === id);
+      hullSel.select("path").classed("sel", (d) => "dom:" + d.id === id);
+      focus();
+      if (!centreOn || !id) return;
+      const n = nodes.find((d) => d.id === id);
+      if (n) return centre(n.x, n.y);
+      const l = links.find((d) => "edge:" + d.id === id);
+      if (l) return centre(...l.mid);
+      if (id.startsWith("dom:")) {
+        const pts = capsIn(id.slice(4));
+        if (pts.length) centre(d3.mean(pts, (p) => p.x), d3.mean(pts, (p) => p.y));
+      }
+    },
+    // Fit the map into the canvas, beside the open legend when there is room for both.
     fit(ms = 450) {
       moved = false;
       if (!nodes.length || !W() || !H()) return;
+      const legend = el.querySelector(".legend[open]");
+      const left = legend && W() > 700 ? legend.offsetWidth + 12 : 0, w = W() - left;
       // Box edges, not centres, so a long name at the side isn't cut off.
       const x0 = d3.min(nodes, (d) => d.x - d.w / 2), x1 = d3.max(nodes, (d) => d.x + d.w / 2);
       const [y0, y1] = d3.extent(nodes, (d) => d.y);
-      const pad = 60, k = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / W(), (y1 - y0 + pad * 2) / H())));
-      const t = d3.zoomIdentity.translate(W() / 2, H() / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
+      const pad = 60, k = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / w, (y1 - y0 + pad * 2) / H())));
+      const t = d3.zoomIdentity.translate(left + w / 2, H() / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
       (ms ? svg.transition().duration(ms) : svg).call(zoom.transform, t);
     },
     // On resize, refit only while the user hasn't moved the view themselves.
@@ -383,22 +601,212 @@ const Canvas = (function () {
   };
 })();
 
-// ---- page ---------------------------------------------------------------
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// ---- search -------------------------------------------------------------
+// A capability matches when every typed word appears somewhere in its name, purpose, requirements
+// (title, text and scenarios) or file paths. What matched is the fields holding the most words.
+const Search = {
+  terms: [],
+  set(q) { this.terms = q.toLowerCase().split(/\s+/).filter(Boolean); },
+  score(text) { const t = text.toLowerCase(); return this.terms.filter((w) => t.includes(w)).length; },
+  reqText: (r) => r.title + "\n" + r.body,
+  run() {
+    if (!this.terms.length) return null;
+    const out = [];
+    for (const n of DATA.nodes) {
+      const fields = [
+        { kind: "name", label: "name", text: n.id },
+        { kind: "purpose", label: "purpose", text: n.purpose },
+        ...n.requirements.map((r) => ({ kind: "req", label: "“" + r.title + "”", text: this.reqText(r) })),
+        ...n.files.map((f) => ({ kind: "file", label: f, text: f })),
+      ];
+      const all = fields.map((f) => f.text).join("\n").toLowerCase();
+      if (!this.terms.every((w) => all.includes(w))) continue;
+      const scored = fields.map((f) => ({ ...f, s: this.score(f.text) })).filter((f) => f.s);
+      const best = Math.max(...scored.map((f) => f.s));
+      const why = scored.filter((f) => f.s === best);
+      out.push({ id: n.id, why, files: why.filter((f) => f.kind === "file").map((f) => f.text) });
+    }
+    return out;
+  },
+  // Wrap every typed word inside el's text in <mark>, leaving the markup alone.
+  highlight(el) {
+    if (!this.terms.length) return;
+    const re = new RegExp(this.terms.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), texts = [];
+    while (walk.nextNode()) texts.push(walk.currentNode);
+    for (const t of texts) {
+      const s = t.nodeValue;
+      re.lastIndex = 0;
+      if (!re.test(s)) continue;
+      re.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0, m;
+      while ((m = re.exec(s))) {
+        frag.append(s.slice(last, m.index));
+        const mk = document.createElement("mark");
+        mk.textContent = m[0];
+        frag.append(mk);
+        last = m.index + m[0].length;
+      }
+      frag.append(s.slice(last));
+      t.replaceWith(frag);
+    }
+  },
+};
 
-function summary(d) {
-  // Domains with no capabilities draw no outline, so they aren't counted either.
-  const n = d.nodes.length, doms = toGraph(d).domains.length, links = d.edges.length;
-  return `<h2>${esc(d.repo)}</h2>
-    <p>${n} capabilit${n === 1 ? "y" : "ies"} · ${doms} domain${doms === 1 ? "" : "s"} · ${links} shared-file link${links === 1 ? "" : "s"}</p>
-    <p class="muted">Outlines are domains. A line joins two capabilities whose anchors match the same files; its label is how many, and it is thicker for more.</p>`;
+// ---- panel --------------------------------------------------------------
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const capLink = (id) => `<a class="link" data-id="${esc(id)}">${esc(id)}</a>`;
+const STATUS = {
+  "in-sync": ["in sync", "ok"], "code-moved": ["code drifted", "drift"],
+  "no-spec": ["no spec yet", ""], "no-anchors": ["no anchors", ""],
+};
+
+// The small markdown a requirement body holds: paragraphs, nested bullet lists, `code` and **bold**.
+function md(text) {
+  const out = [];
+  let depth = 0, para = [];
+  const flush = () => { if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`); para = []; };
+  const close = (to) => { while (depth > to) { out.push("</ul>"); depth--; } };
+  for (const line of String(text || "").split("\n")) {
+    const li = /^(\s*)[-*] (.*)$/.exec(line), h = /^#+\s+(.*)$/.exec(line);
+    if (li) {
+      flush();
+      const lvl = Math.floor(li[1].length / 2) + 1;
+      close(lvl);
+      while (depth < lvl) { out.push("<ul>"); depth++; }
+      out.push(`<li>${inline(li[2])}</li>`);
+    } else if (h) { flush(); close(0); out.push(`<p><b>${inline(h[1])}</b></p>`); }
+    else if (!line.trim()) { flush(); close(0); }
+    else { close(0); para.push(line.trim()); }
+  }
+  flush(); close(0);
+  return out.join("");
 }
 
+const Page = {
+  selected: null, results: null,
+
+  overview() {
+    const d = DATA, drifted = d.nodes.filter((n) => n.status === "code-moved");
+    return `<h2>${esc(d.repo)}</h2>
+      <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(toGraph(d, false).domains.length, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
+      ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
+      ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
+      <p class="empty">Click a capability, line, file or domain outline for its details. Search covers names, purposes, requirements, scenarios and file paths.</p>`;
+  },
+
+  resultList(res) {
+    if (!res.length) return `<p class="empty">Nothing matches every word.</p>`;
+    return res.map((r) => `<div class="result" data-id="${esc(r.id)}">
+      <div class="name">${esc(r.id)}</div>
+      <div class="why">${r.why.slice(0, 4).map((f) => esc(f.label)).join(" · ")}${r.why.length > 4 ? ` · +${r.why.length - 4}` : ""}</div></div>`).join("");
+  },
+
+  capability(n) {
+    const [label, cls] = STATUS[n.status] || [n.status, ""];
+    const neighbours = DATA.edges.filter((e) => e.source === n.id || e.target === n.id)
+      .map((e) => ({ id: e.source === n.id ? e.target : e.source, count: e.count }));
+    // With a search on, the requirements holding the most typed words are opened and marked.
+    const scores = n.requirements.map((r) => Search.score(Search.reqText(r))), best = Math.max(0, ...scores);
+    const reqs = n.requirements.map((r, i) => {
+      const hit = best > 0 && scores[i] === best;
+      return `<details class="req${hit ? " match" : ""}"${hit ? " open" : ""}><summary>${inline(r.title)}</summary><div class="body">${md(r.body)}</div></details>`;
+    }).join("");
+    return `<h2>${esc(n.id)}</h2>
+      <span class="pill ${cls}">${label}</span>${n.domain ? `<a class="pill link" data-id="dom:${esc(n.domain)}">${esc(n.domain)}</a>` : ""}
+      ${n.ref ? `<a class="link" href="${esc(n.ref)}" target="_blank" rel="noopener">open spec ↗</a>` : ""}
+      ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
+      ${n.status === "code-moved" ? `<p class="muted">${plural(n.changed.length, "anchored file changed", "anchored files changed")} since the last sync (marked below). <code>/blueprint-sync ${esc(n.id)}</code> settles it.</p>` : ""}
+      ${neighbours.length ? `<h3>Shares files with</h3>${neighbours.map((x) => `<p>${capLink(x.id)} <a class="pill link" data-id="edge:${esc([n.id, x.id].sort().join("~"))}">${plural(x.count, "file", "files")}</a></p>`).join("")}` : ""}
+      ${n.hasBaseline ? `<h3>Requirements (${n.requirements.length})</h3>${reqs || `<p class="muted">None.</p>`}` : ""}
+      <h3>Files (${n.files.length})</h3>
+      <ul class="files">${n.files.map((f) => `<li class="${n.changed.includes(f) ? "changed" : ""}"><a class="link" data-id="file:${esc(f)}">${esc(f)}</a></li>`).join("")}</ul>
+      ${n.changed.filter((f) => !n.files.includes(f)).length ? `<p class="muted">Removed since the last sync:</p><ul class="files">${n.changed.filter((f) => !n.files.includes(f)).map((f) => `<li class="changed">${esc(f)}</li>`).join("")}</ul>` : ""}`;
+  },
+
+  edge(id) {
+    const e = DATA.edges.find((x) => x.source + "~" + x.target === id);
+    if (!e) return this.overview();
+    return `<h2>${esc(e.source)} ↔ ${esc(e.target)}</h2>
+      <p>${plural(e.count, "shared file", "shared files")}</p>
+      <ul class="files">${e.files.map((f) => `<li class="${fileChanged(f) ? "changed" : ""}"><a class="link" data-id="file:${esc(f)}">${esc(f)}</a></li>`).join("")}</ul>
+      <h3>Capabilities</h3><p>${capLink(e.source)}</p><p>${capLink(e.target)}</p>`;
+  },
+
+  file(path) {
+    const owners = fileOwners[path] || [];
+    return `<h2>${esc(path)}</h2>
+      ${fileChanged(path) ? `<span class="pill drift">changed since the last sync</span>` : ""}
+      <h3>Anchored by</h3>${owners.map((id) => `<p>${capLink(id)}</p>`).join("")}`;
+  },
+
+  domain(id) {
+    const dom = DATA.domains.find((x) => x.id === id) || { id, purpose: "" };
+    const caps = DATA.nodes.filter((n) => n.domain === id);
+    return `<h2>${esc(id)}</h2><span class="pill">domain</span>
+      ${dom.purpose ? `<p>${inline(dom.purpose)}</p>` : ""}
+      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">code drifted</span>` : ""}</p>`).join("")}`;
+  },
+
+  draw() {
+    const el = document.getElementById("panel"), s = this.selected, res = this.results;
+    document.getElementById("count").textContent = res ? `${plural(res.length, "capability matches", "capabilities match")}` : "";
+    let html;
+    if (!s) html = res ? this.resultList(res) : this.overview();
+    else {
+      const back = `<a class="link back" data-id="">← ${res ? "results" : "overview"}</a>`;
+      if (s.startsWith("edge:")) html = back + this.edge(s.slice(5));
+      else if (s.startsWith("file:")) html = back + this.file(s.slice(5));
+      else if (s.startsWith("dom:")) html = back + this.domain(s.slice(4));
+      else if (byId[s]) html = back + this.capability(byId[s]);
+      else html = this.overview();
+    }
+    el.innerHTML = html;
+    el.scrollTop = 0;
+    el.querySelectorAll("[data-id]").forEach((a) => a.addEventListener("click", () => this.choose(a.dataset.id || null, true)));
+    Search.highlight(el);
+  },
+
+  choose(id, focus) {
+    this.selected = id;
+    Canvas.select(id, focus);
+    this.draw();
+  },
+
+  search(q) {
+    Search.set(q);
+    this.results = Search.run();
+    const ids = this.results && new Set(this.results.flatMap((r) => [r.id, ...r.files.map((f) => "file:" + f)]));
+    Canvas.dim(ids);
+    this.choose(null);
+  },
+};
+
 window.addEventListener("DOMContentLoaded", () => {
+  const graph = document.getElementById("graph"), q = document.getElementById("q");
+  const files = document.getElementById("files"), legend = document.getElementById("legend");
   document.getElementById("repo").textContent = DATA.repo;
-  document.getElementById("panel").innerHTML = summary(DATA);
-  Canvas.mount(document.getElementById("graph"));
-  Canvas.render(toGraph(DATA));
+  files.checked = !!DATA.filesDefault;
+  legend.classList.toggle("files", files.checked);
+
+  Canvas.mount(graph, (id) => Page.choose(id, false));
+  const redraw = () => {
+    Canvas.render(toGraph(DATA, files.checked));
+    Page.search(q.value);
+  };
+  redraw();
+  Canvas.fit(0);
+
+  files.onchange = () => { legend.classList.toggle("files", files.checked); redraw(); Canvas.fit(); };
+  q.oninput = () => Page.search(q.value);
+  q.onkeydown = (e) => { if (e.key === "Escape") { q.value = ""; Page.search(""); } };
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== q) { e.preventDefault(); q.focus(); }
+  });
+  legend.addEventListener("toggle", () => Canvas.fit());
   document.getElementById("fit").onclick = () => Canvas.fit();
   window.addEventListener("resize", () => Canvas.refit());
 });
