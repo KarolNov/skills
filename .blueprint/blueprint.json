@@ -34,9 +34,9 @@
         "skills/blueprint/scripts/text_diagram.py",
         "skills/blueprint/examples/**"
       ],
-      "specVersion": "0cd57ea1dafc51c6",
+      "specVersion": "69d237c3b2db6f4f",
       "anchorsFiles": {
-        "skills/blueprint/SKILL.md": "b1fea20e34a2",
+        "skills/blueprint/SKILL.md": "ce83009d6f73",
         "skills/blueprint/examples/fictional-yjs-provider/brief.md": "9ec2d1b8408a",
         "skills/blueprint/examples/fictional-yjs-provider/playground.html": "4c2bf54894f3",
         "skills/blueprint/examples/fictional-yjs-provider/review.html": "de95a652c7ee",
@@ -46,7 +46,7 @@
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7"
       },
-      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
+      "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
     },
     "blueprint/apply": {
       "ref": "https://app.notion.com/p/41c43cce21f281bbb3fef91cff515a26",
@@ -84,11 +84,12 @@
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "5351059ba18210fc",
+      "specVersion": "c8aa35a8fa4e9895",
       "anchorsFiles": {
-        "skills/blueprint-setup/SKILL.md": "ecc57a6ea5d8"
+        "skills/blueprint-setup/SKILL.md": "ff9320e9546f",
+        "skills/blueprint-setup/templates/blueprint-drift.yml": "c8cba7568695"
       },
-      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
+      "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
     },
     "blueprint/sync": {
       "ref": "https://app.notion.com/p/41c43cce21f281ef9bfcf823c8b351e2",
@@ -97,13 +98,13 @@
         "skills/blueprint/scripts/drift.py",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "9cc207094e4f5122",
+      "specVersion": "ebb3fd547e431fc2",
       "anchorsFiles": {
-        "skills/blueprint-sync/SKILL.md": "c12fda4b9bdc",
-        "skills/blueprint/references/status.md": "ffef668275ad",
-        "skills/blueprint/scripts/drift.py": "841945b7bc5c"
+        "skills/blueprint-sync/SKILL.md": "fbdc154533cd",
+        "skills/blueprint/references/status.md": "a7f94fed610e",
+        "skills/blueprint/scripts/drift.py": "e4009ab12547"
       },
-      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
+      "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
@@ -124,10 +125,10 @@
       ],
       "specVersion": "fb311da69bc03e7e",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "6e8080568d29",
-        "README.md": "eb048a344a84"
+        ".claude-plugin/marketplace.json": "3164ae04a8a1",
+        "README.md": "9d7d3e61e163"
       },
-      "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
+      "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -187,12 +188,23 @@
       "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
     },
     "blueprint/map": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/41e43cce21f281799c04c08c812c0e01",
       "anchors": [
         "skills/blueprint/scripts/graph.py",
+        "skills/blueprint/scripts/test_graph.py",
+        "skills/blueprint/scripts/map_template.html",
         "skills/blueprint/scripts/vendor/**",
         "skills/blueprint/references/map.md"
-      ]
+      ],
+      "specVersion": "57b30edce22b9c7e",
+      "anchorsFiles": {
+        "skills/blueprint/references/map.md": "a050acf8b253",
+        "skills/blueprint/scripts/graph.py": "ff283619bd45",
+        "skills/blueprint/scripts/map_template.html": "1801adb0a0e3",
+        "skills/blueprint/scripts/test_graph.py": "5d74ccbb063c",
+        "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
+      },
+      "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
     }
   },
   "changes": {
@@ -224,8 +236,9 @@
     "capability-map-and-ci-drift": {
       "brief": "https://app.notion.com/p/41e43cce21f281e9910dfb7204f07258",
       "review": "https://app.notion.com/p/41e43cce21f281acb29cec1bb3066e4a",
-      "status": "building",
-      "baseCommit": "9b41921b690996696b6fbf11def92ae163842a82"
+      "status": "applied",
+      "baseCommit": "9b41921b690996696b6fbf11def92ae163842a82",
+      "branch": "kn/blueprint-map-specs"
     }
   }
 }

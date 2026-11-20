@@ -69,3 +69,28 @@ When the target repo doesn't exist yet, setup SHALL still decide docs, tickets a
 - **Scenario: Extraction**
   - **WHEN** a change will create a new repo
   - **THEN** the setup is pending in the home folder until apply's first task creates the repo
+
+### Requirement: Drift guard from a template
+
+When the user accepts a CI drift guard, setup SHALL copy the skill's `blueprint-drift.yml` template to `.github/workflows/blueprint-drift.yml`, or, when the repo already has a workflow the user prefers, add the same steps there. The workflow SHALL run `python3 .blueprint/drift.py check` on every pull request. When anything drifted, it SHALL keep one PR comment listing the drifted capabilities and their changed files, updated on each push and marked back in sync once fixed, and emit a warning annotation for each drifted capability; a PR that never drifted gets neither. It SHALL fail only when `BLUEPRINT_DRIFT_FAIL` is `"true"`, and SHALL say that only code-side drift is checked. The template SHALL be presented as the recommended shape: the repo owns its copy, and setup SHALL tailor it when the user asks (for example adding a `drifted` label), keeping the drift check.
+
+- **Scenario: Team tailors it**
+  - **WHEN** the user asks for a `drifted` label on PRs with drift
+  - **THEN** the repo's copy gains a step that adds the label, and the comment, annotations and fail switch keep working
+- **Scenario: Drift on a PR**
+  - **GIVEN** the template is installed with its defaults
+  - **WHEN** a PR changes an anchored file without a sync
+  - **THEN** the PR gets one comment naming the capability and file, a warning annotation, and the check passes
+- **Scenario: Second push**
+  - **WHEN** a later push to the same PR changes the drift
+  - **THEN** the same comment is updated, not a new one added
+- **Scenario: Back in sync**
+  - **WHEN** a later push to the same PR leaves nothing drifted
+  - **THEN** the same comment says everything is back in sync
+- **Scenario: Fork PR**
+  - **WHEN** the workflow can't comment because the PR comes from a fork
+  - **THEN** the warning annotations still report the drift and the job doesn't fail for that reason
+- **Scenario: Strict mode**
+  - **GIVEN** `BLUEPRINT_DRIFT_FAIL: "true"`
+  - **WHEN** drift is found
+  - **THEN** the job fails
