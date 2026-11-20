@@ -125,10 +125,10 @@
       ],
       "specVersion": "fb311da69bc03e7e",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "3164ae04a8a1",
+        ".claude-plugin/marketplace.json": "24c0704d4ec9",
         "README.md": "9d7d3e61e163"
       },
-      "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
+      "syncedCommit": "5f34b126d67d4ee05ed7b04a0808e482ee28b0b4"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
