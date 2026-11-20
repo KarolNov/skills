@@ -41,8 +41,16 @@ svg { width: 100%; height: 100%; display: block; cursor: grab; }
 svg:active { cursor: grabbing; }
 .hull { fill: var(--domain); stroke: var(--domain-line); stroke-dasharray: 5 4; }
 .hull-label { fill: var(--muted); font-size: 13px; font-weight: 600; pointer-events: none; }
-.share { stroke: var(--edge); stroke-opacity: .7; }
+.share { stroke: var(--edge); stroke-opacity: .7; fill: none; }
 .share-label { fill: var(--muted); font-size: 10px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.share-label.spare { opacity: 0; }
+.cap { cursor: pointer; }
+.cap rect, .share, .share-label { transition: opacity .12s, stroke-opacity .12s; }
+.focus .share:not(.on) { stroke-opacity: .06; }
+.focus .share.on { stroke-opacity: .9; }
+.focus .share-label:not(.on) { opacity: 0; }
+.focus .share-label.on { opacity: 1; fill: var(--ink); }
+.focus .cap:not(.on) { opacity: .3; }
 .cap rect { fill: var(--node); stroke: var(--node-line); stroke-width: 1.5; }
 .cap text { fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
 </style>
@@ -51,7 +59,7 @@ svg:active { cursor: grabbing; }
 <div class="app">
   <header><h1>Capability map</h1><span class="tag" id="repo"></span><span class="spacer"></span>
     <button id="fit">Fit</button></header>
-  <div id="graph"><div class="hint">scroll to zoom · drag to pan</div></div>
+  <div id="graph"><div class="hint">scroll to zoom · drag to pan · hover or tap a capability for its lines</div></div>
   <aside id="panel"></aside>
 </div>
 <script>
@@ -93,16 +101,46 @@ function rectCollide(pad) {
 }
 
 // ---- layout -------------------------------------------------------------
-// A force layout settles wherever its start lands, and one start can leave lines crossing or
-// running behind boxes. So several starts are settled off screen and the least tangled is drawn.
-// Seeded, so the same data always gives the same picture.
+// Each domain is a cluster with a slot of its own; capabilities outside any domain share one
+// more slot. Lines inside a cluster pull firmly, lines between clusters only lightly, so
+// cross-domain sharing doesn't drag the clusters into one another. A force layout settles
+// wherever its start lands, so several seeded starts (each also trying another order of the
+// slots) are settled off screen and the least tangled is drawn. Same data, same picture.
 
-// Where a line between two boxes leaves each box, so lines and their counts sit in the gap.
-function clip(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const cut = (n) => Math.min(dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? 13 / Math.abs(dy) : Infinity);
-  const s = Math.min(0.5, cut(a)), t = Math.max(0.5, 1 - cut(b));
-  return { x1: a.x + dx * s, y1: a.y + dy * s, x2: a.x + dx * t, y2: a.y + dy * t };
+const BARE = "\u0000bare";
+const groupOf = (n) => n.domain || BARE;
+
+// Where a line from a box's centre toward (tx, ty) leaves the box.
+function edgePoint(n, tx, ty) {
+  const dx = tx - n.x, dy = ty - n.y;
+  const s = Math.min(0.5, dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? 13 / Math.abs(dy) : Infinity);
+  return [n.x + dx * s, n.y + dy * s];
+}
+
+// A line's path. Inside a cluster it is straight. Between clusters it leaves through a port
+// on its cluster's edge facing the other cluster and enters the other through the matching
+// port, so every line between the same two clusters shares one band instead of fanning out.
+// Ends stop at the box edges; segs (a polyline along the path) is what crossings are checked on.
+function route(l, slot) {
+  const a = l.source, b = l.target, ga = groupOf(a), gb = groupOf(b);
+  const bundle = ga < gb ? ga + "|" + gb : gb + "|" + ga;
+  if (ga === gb) {
+    const p1 = edgePoint(a, b.x, b.y), p2 = edgePoint(b, a.x, a.y);
+    const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    return { d: `M${p1}L${p2}`, mid: [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2], bundle, curved: false, length: len,
+             segs: [{ x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1] }] };
+  }
+  const sa = slot[ga], sb = slot[gb], d = Math.hypot(sb.x - sa.x, sb.y - sa.y) || 1;
+  const ux = (sb.x - sa.x) / d, uy = (sb.y - sa.y) / d;
+  const qa = [sa.x + ux * sa.r * 0.8, sa.y + uy * sa.r * 0.8], qb = [sb.x - ux * sb.r * 0.8, sb.y - uy * sb.r * 0.8];
+  const p1 = edgePoint(a, ...qa), p2 = edgePoint(b, ...qb);
+  const pts = [p1, qa, qb, p2];
+  const segs = pts.slice(1).map((q, i) => ({ x1: pts[i][0], y1: pts[i][1], x2: q[0], y2: q[1] }));
+  return {
+    d: d3.line().curve(d3.curveBundle.beta(0.9))(pts),
+    mid: [(qa[0] + qb[0]) / 2, (qa[1] + qb[1]) / 2], bundle, curved: true,
+    length: d3.sum(segs, (q) => Math.hypot(q.x2 - q.x1, q.y2 - q.y1)), segs,
+  };
 }
 
 function crosses(p, q) {
@@ -125,60 +163,134 @@ function throughBox(l, n, pad) {
   return t0 < t1;
 }
 
-// Lower is cleaner: crossings, lines behind boxes, counts on boxes or squeezed between them, boxes on boxes;
-// then, between equally clean layouts, shorter lines.
-function tangle(nodes, links) {
-  const segs = links.map((l) => ({ ...clip(l.source, l.target), l }));
+// The points a domain's outline wraps: a ring around each capability box.
+function ringAround(pts) {
+  return pts.flatMap((p) => d3.range(10).map((i) => [
+    p.x + (p.w / 2 + 16) * Math.cos(i / 10 * 2 * Math.PI),
+    p.y + 30 * Math.sin(i / 10 * 2 * Math.PI)]));
+}
+
+// How much a line matters to the eye, 0..1: heavier lines are drawn stronger.
+const weightOf = (count, max) => Math.sqrt(count / max);
+
+// Lower is cleaner. Counted, each weighted by how heavy the lines involved are: crossings
+// (lines in one bundle may meet, that is the bundle), lines behind boxes, lines too short to
+// hold their count, capabilities inside another domain's outline, boxes on boxes; then,
+// between equally clean layouts, shorter lines.
+function tangle(nodes, links, slot, max) {
+  const rs = links.map((l) => ({ l, r: route(l, slot), wt: weightOf(l.count, max) }));
   let score = 0, length = 0;
-  segs.forEach((p, i) => {
-    const visible = Math.hypot(p.x2 - p.x1, p.y2 - p.y1);
-    length += visible;
-    if (visible < 44) score += 0.5;  // too short to show its count clear of the boxes
-    const mid = { x: (p.x1 + p.x2) / 2, y: (p.y1 + p.y2) / 2, w: 14 };
-    for (const q of segs.slice(i + 1)) {
+  rs.forEach((p, i) => {
+    length += p.r.length;
+    if (p.r.length < 44) score += 0.3 * p.wt;
+    for (const q of rs.slice(i + 1)) {
       const shared = [q.l.source, q.l.target].some((n) => n === p.l.source || n === p.l.target);
-      if (!shared && crosses(p, q)) score += 1;
+      if (shared || (p.r.curved && p.r.bundle === q.r.bundle)) continue;
+      if (p.r.segs.some((ps) => q.r.segs.some((qs) => crosses(ps, qs)))) score += 0.3 + 0.7 * Math.sqrt(p.wt * q.wt);
     }
     for (const n of nodes) {
-      if (n === p.l.source || n === p.l.target) continue;
-      if (throughBox(p, n, 6)) score += 1;
-      if (Math.abs(mid.x - n.x) < n.w / 2 + 8 && Math.abs(mid.y - n.y) < 20) score += 0.5;
+      if (n !== p.l.source && n !== p.l.target && p.r.segs.some((ps) => throughBox(ps, n, 6))) score += 0.5 + 0.5 * p.wt;
     }
   });
+  for (const [dom, pts] of d3.group(nodes.filter((n) => n.domain), (n) => n.domain)) {
+    const hull = d3.polygonHull(ringAround(pts));
+    for (const n of nodes) if (n.domain !== dom && hull && d3.polygonContains(hull, [n.x, n.y])) score += 3;
+  }
   nodes.forEach((a, i) => nodes.slice(i + 1).forEach((b) => {
     if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < 26) score += 1;
   }));
   return score + length / 1e5;
 }
 
-function settle(base, rawLinks, at, seed) {
+// Slot centres. Capabilities outside any domain (often shared infrastructure, linked to
+// everything) sit in the middle, so their lines run out like spokes; domains go round them on
+// a circle, far enough apart that neighbouring clusters, and the middle, don't touch.
+function slotsFor(order, radius) {
+  const hub = radius[BARE] !== undefined && order.length ? radius[BARE] : null;
+  const slot = hub !== null ? { [BARE]: { x: 0, y: 0, r: hub } } : {};
+  const k = order.length;
+  if (k === 1 && hub === null) return { [order[0]]: { x: 0, y: 0, r: radius[order[0]] || 0 } };
+  const ring = k > 1 ? (d3.max(order, (g, i) => radius[g] + radius[order[(i + 1) % k]]) + 50) / (2 * Math.sin(Math.PI / k)) : 0;
+  const R = Math.max(ring, hub !== null ? d3.max(order, (g) => radius[g]) + hub + 50 : 0);
+  order.forEach((g, i) => { slot[g] = { r: radius[g], x: Math.cos(i / k * 2 * Math.PI - Math.PI / 2) * R, y: Math.sin(i / k * 2 * Math.PI - Math.PI / 2) * R }; });
+  return slot;
+}
+
+// The first order to try: biggest cluster first, then each next to the one it shares most with.
+function linkedOrder(groups, size, between) {
+  const left = new Set(groups), order = [];
+  let cur = d3.greatest(groups, (g) => size[g]);
+  while (cur !== undefined) {
+    order.push(cur); left.delete(cur);
+    cur = d3.greatest([...left], (g) => (between.get(cur + "|" + g) || 0) * 1000 + size[g]);
+  }
+  return order;
+}
+
+function settle(base, rawLinks, plan, seed) {
   const rand = d3.randomLcg(seed / 101);
+  const ringed = plan.order;  // domains only; no-domain capabilities sit in the middle
+  const order = seed ? d3.shuffler(rand)(ringed.slice()) : ringed;
+  const slot = slotsFor(order, plan.radius), at = (n) => slot[groupOf(n)];
   const nodes = base.map((n) => ({ ...n })), links = rawLinks.map((l) => ({ ...l }));
-  // Start 0 is d3's own spiral; the others scatter capabilities around their anchors.
-  if (seed) nodes.forEach((n) => { n.x = at(n).x + (rand() - 0.5) * 500; n.y = at(n).y + (rand() - 0.5) * 500; });
+  // Start 0 is d3's own spiral; the others scatter capabilities around their slots.
+  nodes.forEach((n, i) => {
+    const r = seed ? 300 * Math.sqrt(rand()) : 10 * Math.sqrt(i + 0.5), a = seed ? rand() * 2 * Math.PI : i * 2.4;
+    n.x = at(n).x + r * Math.cos(a); n.y = at(n).y + r * Math.sin(a);
+  });
+  const inside = (l) => groupOf(l.source) === groupOf(l.target);
   d3.forceSimulation(nodes).randomSource(rand)
     .force("link", d3.forceLink(links).id((d) => d.id)
-      .distance((l) => (l.source.w + l.target.w) / 2 + 50).strength(0.25))
-    .force("charge", d3.forceManyBody().strength(-380))
+      .distance((l) => (l.source.w + l.target.w) / 2 + (inside(l) ? 40 : 90))
+      .strength((l) => inside(l) ? 0.15 + 0.35 * weightOf(l.count, plan.max) : 0.04))
+    .force("charge", d3.forceManyBody().strength(-380).distanceMax(400))
     .force("collide", rectCollide(12))
-    .force("x", d3.forceX((d) => at(d).x).strength(0.14))
-    .force("y", d3.forceY((d) => at(d).y).strength(0.14))
+    .force("x", d3.forceX((d) => at(d).x).strength(0.12))
+    .force("y", d3.forceY((d) => at(d).y).strength(0.12))
     .stop()
     .tick(400);
-  return { nodes, links, score: tangle(nodes, links) };
+  return { nodes, links, slot, score: tangle(nodes, links, slot, plan.max) };
 }
 
 // Stops at a clean layout, or when the work budget runs out: each start costs about
-// nodes² + links² (collisions and crossing checks), so big maps get fewer starts and the
-// page still opens at once. A budget of work, not time, keeps the picture the same everywhere.
-function layout(base, links, at) {
-  const starts = Math.max(1, Math.min(24, Math.floor(60000 / (base.length ** 2 + links.length ** 2 + 1))));
+// nodes² + links² + nodes·links, so big maps get fewer starts and the page still opens at
+// once. A budget of work, not time, keeps the picture the same on every machine.
+function layout(base, links) {
+  const groups = [...new Set(base.map(groupOf))];
+  const size = Object.fromEntries(groups.map((g) => [g, d3.sum(base, (n) => groupOf(n) === g ? 1 : 0)]));
+  // A cluster's rough radius, from the area its boxes need with room around them.
+  const radius = Object.fromEntries(groups.map((g) => [g,
+    30 + 1.3 * Math.sqrt(d3.sum(base, (n) => groupOf(n) === g ? (n.w + 30) * 70 : 0) / Math.PI)]));
+  const byId = new Map(base.map((n) => [n.id, n])), between = new Map();
+  for (const l of links) {
+    const a = groupOf(byId.get(l.source)), b = groupOf(byId.get(l.target));
+    if (a !== b) for (const k of [a + "|" + b, b + "|" + a]) between.set(k, (between.get(k) || 0) + l.count);
+  }
+  const ringed = groups.filter((g) => g !== BARE || groups.length === 1);
+  if (groups.length === 1) delete radius[BARE];  // a lone group, bare or not, just sits in the middle
+  const plan = { radius, order: linkedOrder(ringed, size, between), max: d3.max(links, (l) => l.count) || 1 };
+  const n = base.length, m = links.length;
+  const starts = Math.max(1, Math.min(24, Math.floor(80000 / (n * n + m * m + n * m + 1))));
   let best = null;
   for (let seed = 0; seed < starts && (!best || best.score >= 1); seed++) {
-    const c = settle(base, links, at, seed);
+    const c = settle(base, links, plan, seed);
     if (!best || c.score < best.score) best = c;
   }
+  best.max = plan.max;
   return best;
+}
+
+// Counts are placed heaviest first; one that would sit on a box or another count is held
+// back until its capability is hovered, so the default view never stacks text.
+function placeCounts(links, nodes) {
+  const placed = [];
+  for (const l of [...links].sort((a, b) => b.count - a.count)) {
+    const [x, y] = l.mid, w = 7 * String(l.count).length + 6;
+    const hitsBox = nodes.some((n) => Math.abs(x - n.x) < n.w / 2 + w / 2 + 2 && Math.abs(y - n.y) < 13 + 8);
+    const hitsCount = placed.some((p) => Math.abs(x - p.x) < (w + p.w) / 2 && Math.abs(y - p.y) < 13);
+    l.spare = hitsBox || hitsCount;
+    if (!l.spare) placed.push({ x, y, w });
+  }
 }
 
 // ---- canvas -------------------------------------------------------------
@@ -186,13 +298,10 @@ const Canvas = (function () {
   let el, svg, root, zoom, nodes = [], moved = false;
   const W = () => el.clientWidth, H = () => el.clientHeight;
 
-  // A domain's outline: a ring of points around each capability, wrapped in a smooth hull,
-  // so even a one-capability domain gets a rounded blob.
+  // A domain's outline: a smooth hull around its ring of points, so even a one-capability
+  // domain gets a rounded blob.
   function hullPath(pts) {
-    const ring = pts.flatMap((p) => d3.range(10).map((i) => [
-      p.x + (p.w / 2 + 16) * Math.cos(i / 10 * 2 * Math.PI),
-      p.y + 30 * Math.sin(i / 10 * 2 * Math.PI)]));
-    const h = d3.polygonHull(ring);
+    const h = d3.polygonHull(ringAround(pts));
     return h ? d3.line().curve(d3.curveCatmullRomClosed.alpha(0.6))(h) : "";
   }
 
@@ -209,47 +318,54 @@ const Canvas = (function () {
     },
     render(g) {
       root.selectAll("*").remove();
-      // Each domain pulls its capabilities toward a point on a circle. Capabilities outside any
-      // domain get a point of their own, so they never settle inside a domain's outline.
-      const BARE = "\u0000bare";
-      const slots = g.domains.map((d) => d.id);
-      if (g.caps.some((c) => !c.domain)) slots.push(BARE);
-      const spread = slots.length > 1 ? 120 + 40 * slots.length : 0;
-      const anchor = Object.fromEntries(slots.map((id, i) => [id, {
-        x: Math.cos(i / slots.length * 2 * Math.PI) * spread,
-        y: Math.sin(i / slots.length * 2 * Math.PI) * spread }]));
-      const at = (d) => anchor[d.domain || BARE];
       // Settle the layout before showing it, so nothing drifts into place on screen.
-      const base = g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 }));
-      const best = layout(base, g.links, at);
+      const best = layout(g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 })), g.links);
       nodes = best.nodes;
       const links = best.links;
+      links.forEach((d) => Object.assign(d, route(d, best.slot)));
+      placeCounts(links, nodes);
 
       const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g"), labelG = root.append("g");
       const hulls = hullG.selectAll("g").data(g.domains).join("g");
       hulls.append("path").attr("class", "hull");
       hulls.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
 
-      const link = linkG.selectAll("line").data(links).join("line")
-        .attr("class", "share").attr("stroke-width", (d) => lineWidth(d.count));
+      // Lines run between box edges; light ones fade back so the heavy ones carry the picture.
+      const link = linkG.selectAll("path").data(links).join("path")
+        .attr("class", "share").attr("stroke-width", (d) => lineWidth(d.count))
+        .attr("stroke-opacity", (d) => 0.25 + 0.55 * weightOf(d.count, best.max))
+        .attr("d", (d) => d.d);
       const linkLabel = labelG.selectAll("text").data(links).join("text")
-        .attr("class", "share-label").attr("text-anchor", "middle").text((d) => d.count);
+        .attr("class", (d) => "share-label" + (d.spare ? " spare" : "")).attr("text-anchor", "middle")
+        .attr("x", (d) => d.mid[0]).attr("y", (d) => d.mid[1] + 3).text((d) => d.count);
 
-      const node = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g").attr("class", "cap");
+      const node = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g").attr("class", "cap")
+        .attr("transform", (d) => `translate(${d.x},${d.y})`);
       node.append("rect").attr("rx", 6).attr("height", 26).attr("y", -13)
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
       node.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
 
-      // Lines run between box edges, and the count sits mid-way along the visible part.
-      links.forEach((d) => Object.assign(d, clip(d.source, d.target)));
-      link.attr("x1", (d) => d.x1).attr("y1", (d) => d.y1).attr("x2", (d) => d.x2).attr("y2", (d) => d.y2);
-      linkLabel.attr("x", (d) => (d.x1 + d.x2) / 2).attr("y", (d) => (d.y1 + d.y2) / 2 + 3);
-      node.attr("transform", (d) => `translate(${d.x},${d.y})`);
       hulls.each(function (d) {
         const pts = nodes.filter((n) => n.domain === d.id);
         d3.select(this).select("path").attr("d", hullPath(pts));
         d3.select(this).select("text").attr("x", d3.mean(pts, (p) => p.x)).attr("y", d3.min(pts, (p) => p.y) - 38);
       });
+
+      // Hover a capability (or tap it, to keep it) to bring its lines and counts forward.
+      let pinned = null;
+      const focus = (f) => {
+        const near = new Set(f ? [f] : []);
+        links.forEach((l) => { if (l.source === f) near.add(l.target); if (l.target === f) near.add(l.source); });
+        if (near.size === 1) f = null;  // nothing linked: dimming the rest would only hide the map
+        const on = (l) => !!f && (l.source === f || l.target === f);
+        svg.classed("focus", !!f);
+        link.classed("on", on);
+        linkLabel.classed("on", on);
+        node.classed("on", (n) => near.has(n));
+      };
+      node.on("mouseenter", (e, d) => focus(d)).on("mouseleave", () => focus(pinned))
+        .on("click", (e, d) => { e.stopPropagation(); pinned = pinned === d ? null : d; focus(pinned); });
+      svg.on("click", () => { pinned = null; focus(null); });
       this.fit(0);
     },
     fit(ms = 450) {
