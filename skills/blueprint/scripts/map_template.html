@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capability map</title>
+<!-- Written by skills/blueprint/scripts/graph.py: d3 and the data are inlined at the two markers below. -->
+<style>
+:root {
+  --bg: #fbfaf8; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e4e2dd;
+  --node: #ffffff; --node-line: #b9b6ae; --domain: #f1efe9; --domain-line: #d9d5cb;
+  --accent: #2f6fde; --edge: #8f8b82;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161617; --panel: #1f1f21; --ink: #ececee; --muted: #9a9aa0; --line: #333336;
+    --node: #2a2a2d; --node-line: #55555a; --domain: #222225; --domain-line: #3a3a3e;
+    --accent: #6ea0ff; --edge: #77777d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+.app { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr; height: 100vh; }
+header { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+header .tag { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+header .spacer { flex: 1; }
+button { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+#graph { position: relative; overflow: hidden; min-height: 0; }
+#graph .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px; min-height: 0; }
+aside h2 { font-size: 15px; margin: 0 0 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+aside p { margin: 6px 0; } aside .muted { color: var(--muted); }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  aside { border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }
+}
+
+svg { width: 100%; height: 100%; display: block; cursor: grab; }
+svg:active { cursor: grabbing; }
+.hull { fill: var(--domain); stroke: var(--domain-line); stroke-dasharray: 5 4; }
+.hull-label { fill: var(--muted); font-size: 13px; font-weight: 600; pointer-events: none; }
+.share { stroke: var(--edge); stroke-opacity: .7; }
+.share-label { fill: var(--muted); font-size: 10px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.cap rect { fill: var(--node); stroke: var(--node-line); stroke-width: 1.5; }
+.cap text { fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
+</style>
+<script>/*D3*/</script>
+</head><body>
+<div class="app">
+  <header><h1>Capability map</h1><span class="tag" id="repo"></span><span class="spacer"></span>
+    <button id="fit">Fit</button></header>
+  <div id="graph"><div class="hint">scroll to zoom · drag to pan</div></div>
+  <aside id="panel"></aside>
+</div>
+<script>
+const DATA = /*DATA*/;
+
+// ---- data → graph -------------------------------------------------------
+// Turns graph.py's output into what the canvas draws: capability nodes, one line per
+// pair of capabilities sharing files (weighted by the count), and one outline per domain.
+function toGraph(d) {
+  return {
+    domains: d.domains.filter((dom) => d.nodes.some((n) => n.domain === dom.id)),
+    caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain })),
+    links: d.edges.map((e) => ({ id: e.source + "~" + e.target, source: e.source, target: e.target, count: e.count })),
+  };
+}
+
+// Line width grows with the number of shared files, with a ceiling so big overlaps stay readable.
+const lineWidth = (count) => Math.min(12, 1.2 + 1.6 * Math.sqrt(count));
+
+// ---- canvas -------------------------------------------------------------
+const Canvas = (function () {
+  let el, svg, root, zoom, nodes = [];
+  const W = () => el.clientWidth, H = () => el.clientHeight;
+
+  // A domain's outline: a ring of points around each capability, wrapped in a smooth hull,
+  // so even a one-capability domain gets a rounded blob.
+  function hullPath(pts) {
+    const ring = pts.flatMap((p) => d3.range(10).map((i) => [
+      p.x + (p.w / 2 + 16) * Math.cos(i / 10 * 2 * Math.PI),
+      p.y + 30 * Math.sin(i / 10 * 2 * Math.PI)]));
+    const h = d3.polygonHull(ring);
+    return h ? d3.line().curve(d3.curveCatmullRomClosed.alpha(0.6))(h) : "";
+  }
+
+  return {
+    mount(container) {
+      el = container;
+      svg = d3.select(el).append("svg");
+      root = svg.append("g");
+      zoom = d3.zoom().scaleExtent([0.15, 3]).on("zoom", (e) => root.attr("transform", e.transform));
+      svg.call(zoom).on("dblclick.zoom", null);
+    },
+    render(g) {
+      root.selectAll("*").remove();
+      // Each domain pulls its capabilities toward a point on a circle; bare ones drift to the centre.
+      const ids = g.domains.map((d) => d.id), spread = ids.length > 1 ? 180 : 0;
+      const anchor = Object.fromEntries(ids.map((id, i) => [id, {
+        x: Math.cos(i / ids.length * 2 * Math.PI) * spread,
+        y: Math.sin(i / ids.length * 2 * Math.PI) * spread }]));
+      nodes = g.caps.map((c) => ({ ...c, w: c.label.length * 6.8 + 20 }));
+      const links = g.links.map((l) => ({ ...l }));
+
+      const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g");
+      const hulls = hullG.selectAll("g").data(g.domains).join("g");
+      hulls.append("path").attr("class", "hull");
+      hulls.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
+
+      const link = linkG.selectAll("line").data(links).join("line")
+        .attr("class", "share").attr("stroke-width", (d) => lineWidth(d.count));
+      const linkLabel = linkG.selectAll("text").data(links).join("text")
+        .attr("class", "share-label").attr("text-anchor", "middle").text((d) => d.count);
+
+      const node = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g").attr("class", "cap");
+      node.append("rect").attr("rx", 6).attr("height", 26).attr("y", -13)
+        .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
+      node.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
+
+      // Settle the layout before showing it, so nothing drifts into place on screen.
+      d3.forceSimulation(nodes)
+        .force("link", d3.forceLink(links).id((d) => d.id).distance(110).strength(0.25))
+        .force("charge", d3.forceManyBody().strength(-380))
+        .force("collide", d3.forceCollide((d) => d.w / 2 + 6))
+        .force("x", d3.forceX((d) => d.domain ? anchor[d.domain].x : 0).strength((d) => d.domain ? 0.14 : 0.04))
+        .force("y", d3.forceY((d) => d.domain ? anchor[d.domain].y : 0).strength((d) => d.domain ? 0.14 : 0.04))
+        .stop()
+        .tick(400);
+
+      link.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
+        .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
+      linkLabel.attr("x", (d) => (d.source.x + d.target.x) / 2).attr("y", (d) => (d.source.y + d.target.y) / 2 + 3);
+      node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+      hulls.each(function (d) {
+        const pts = nodes.filter((n) => n.domain === d.id);
+        d3.select(this).select("path").attr("d", hullPath(pts));
+        d3.select(this).select("text").attr("x", d3.mean(pts, (p) => p.x)).attr("y", d3.min(pts, (p) => p.y) - 38);
+      });
+      this.fit(0);
+    },
+    fit(ms = 450) {
+      if (!nodes.length) return;
+      const [x0, x1] = d3.extent(nodes, (d) => d.x), [y0, y1] = d3.extent(nodes, (d) => d.y);
+      const pad = 60, k = Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / W(), (y1 - y0 + pad * 2) / H()));
+      const t = d3.zoomIdentity.translate(W() / 2, H() / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
+      (ms ? svg.transition().duration(ms) : svg).call(zoom.transform, t);
+    },
+  };
+})();
+
+// ---- page ---------------------------------------------------------------
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function summary(d) {
+  const n = d.nodes.length, doms = d.domains.length, links = d.edges.length;
+  return `<h2>${esc(d.repo)}</h2>
+    <p>${n} capabilit${n === 1 ? "y" : "ies"} · ${doms} domain${doms === 1 ? "" : "s"} · ${links} shared-file link${links === 1 ? "" : "s"}</p>
+    <p class="muted">Outlines are domains. A line joins two capabilities whose anchors match the same files; its label is how many, and it is thicker for more.</p>`;
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("repo").textContent = DATA.repo;
+  document.getElementById("panel").innerHTML = summary(DATA);
+  Canvas.mount(document.getElementById("graph"));
+  Canvas.render(toGraph(DATA));
+  document.getElementById("fit").onclick = () => Canvas.fit();
+  window.addEventListener("resize", () => Canvas.fit(0));
+});
+</script>
+</body></html>
