@@ -11,7 +11,7 @@ Arguments: `$ARGUMENTS`: capability names (default: every capability whose spec 
 
 The **spec is the intent** and is right; the question is whether the code still honors it. You change code here, never a requirement. If the user decides the code is right after all, that capability belongs to `blueprint-sync` instead: say so and leave it.
 
-Shared material lives in the `blueprint` skill next to this one: `../blueprint/references/`. If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here before continuing.
+Shared material lives in the `blueprint` skill next to this one: `../blueprint/references/`. If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here before continuing. Then check the format: read `version` from `blueprint.json` (absent means 1); when it is below the current format version in [upgrades.md](../blueprint/references/upgrades.md), say in one line that this repo's `.blueprint/` is on format <n> and `/blueprint-tidy` upgrades it, then carry on without migrating.
 
 ## 1. Status
 

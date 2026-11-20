@@ -1,6 +1,6 @@
 # Formats
 
-Three shapes: the capability spec, the blueprint (a brief and its review), and `.blueprint/blueprint.json`. Backends render them in their own way (Notion blocks, Markdown files, issue bodies), but the sections and their order are the same everywhere, so any of them can be read back and diffed as Markdown.
+Four shapes: the capability spec, the domain overview, the blueprint (a brief and its review), and `.blueprint/blueprint.json`. Backends render them in their own way (Notion blocks, Markdown files, issue bodies), but the sections and their order are the same everywhere, so any of them can be read back and diffed as Markdown.
 
 ## Capability spec
 
@@ -28,6 +28,28 @@ Headings stop at level 4 everywhere, because Notion and Confluence have no deepe
 - One behavior per requirement; edge cases go in scenarios, not in the requirement text.
 - Every requirement has at least one scenario, and every scenario a WHEN and a THEN.
 - The requirement name is its identity. Sync and deltas match on it, so rename only through a delta's RENAMED section.
+
+## Domain overview
+
+The page a domain lives on. It holds the domain's capabilities like a folder (how each backend nests them is in its **Domains** section) and tells a reader what the group is for before they open any spec.
+
+```markdown
+# <domain name, e.g. auth>
+
+## Purpose
+<one or two sentences: what this group of capabilities is for; the same line as `purpose` in blueprint.json>
+
+## Capabilities
+- <capability name, linked to its spec>: <its Purpose, shortened to one line>
+- <capability with no spec yet>: <one line> (no spec yet)
+
+## How they connect
+<a few sentences or bullets: which capability calls or feeds which, what they share, the order a request passes through them>
+```
+
+- An overview is **not a spec**: no requirements, no baseline, no version marker, no drift check. People edit it freely, and editing it never makes a capability read as drifted.
+- Only the **Capabilities** list is maintained by the skills: setup writes it, `apply` and `/blueprint-tidy` refresh it when a capability in the domain is added, renamed, removed or changes its Purpose. They leave Purpose and How they connect as people wrote them.
+- List capabilities in name order, each with its full name (`auth/session`), so the list reads the same in backends that keep the prefix in titles.
 
 ## Blueprint: a brief and a review
 
@@ -140,6 +162,7 @@ Each change has two documents that sit side by side in the backend and link to e
 
 ```json
 {
+  "version": 2,
   "docs": {
     "backend": "notion",
     "location": { "...": "backend-specific: database ids, vault path, project key; see the backend file" }
@@ -151,6 +174,9 @@ Each change has two documents that sit side by side in the backend and link to e
   },
   "project": "<URL of the existing project page, row or project these specs belong to, if any>",
   "targetRepo": "<only while this repo doesn't exist yet: its intended name or URL>",
+  "domains": {
+    "auth": { "ref": "<page URL or path of the domain overview>", "purpose": "<one line>" }
+  },
   "specs": {
     "auth/session": {
       "ref": "<page URL or path>",
@@ -175,8 +201,11 @@ Each change has two documents that sit side by side in the backend and link to e
 }
 ```
 
+- **version** is the format version of this file and the backend structure it describes; absent means 1. The current version and what changed in each are in [upgrades.md](upgrades.md). Only `/blueprint-tidy` migrates an older one; every other skill says so in one line and carries on.
+- **domains** maps each domain to its overview page (`ref`) and a one-line `purpose`. A domain groups capabilities; it has no anchors, baseline or version marker. Empty (`{}`) when the repo has none.
+- **Capability names** are `<domain>/<capability>` (`auth/session`, where `auth` is in `domains`) or a bare `<capability>` (`search`). A name is either a domain or a capability, never both: no capability `board` beside `board/ops`. Domains are one level deep.
 - **anchors** are git-style globs relative to the repo root. A bare directory covers everything under it; `!` excludes. Leave tests out of anchors unless the tests themselves are the contract.
 - **targetRepo** (top level, optional) is set only while the repo this file describes doesn't exist yet: its intended name or URL. The file then lives in the pending folder `blueprint-setup` names, and `apply` moves it into the new repo and drops the key.
 - **baseRepo** is set when `baseCommit` belongs to another repo (a change that creates this repo from another one's code). Without it, `baseCommit` is a commit of this repo.
 - **specVersion** is whatever the backend offers as a cheap "has this page changed" marker (see the backend file). When it differs from the backend's current marker, the spec moved.
-- `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp`; never edit them by hand. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.
+- `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp` (and `anchorsFiles` trimmed by `drift.py prune`); never edit them by hand. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.

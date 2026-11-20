@@ -22,6 +22,13 @@ Ask for the Jira project and the Confluence space. Find or create a parent page 
 - **Blueprint**: a Jira epic, summary = change title; its description is the **review**. The **brief** is a Confluence page titled `<change>: brief` under a `<repo> blueprints` parent next to the specs, and the epic links it as a remote link, so it shows in the epic's sidebar. Status lives on the epic and maps to the project's workflow.
 - **Tasks**: tickets per [../tickets.md](../tickets.md); with the `jira` tracker they become the epic's children.
 
+## Domains
+
+- **Overview**: a Confluence page under `specsParent`, titled `Domain: <name>` (titles must be unique within a space, and a bare `auth` may already exist), whose body is the overview ([../formats.md](../formats.md), "Domain overview"). Its page id or URL is the domain's `ref`.
+- **Nesting**: a capability in a domain is a child page of its domain page, still titled with the full capability name (`auth/session`), because Confluence titles must be unique within a space. A bare capability stays directly under `specsParent`.
+- **Move**: change the page's parent to the domain page (or back to `specsParent`). **Rename**: change the title. Both keep the page id and its history.
+- A title change bumps `version.number`. Before renaming, note whether the page is in sync (its current marker equals `specVersion`). Change the spec's `# <capability name>` heading to the new name, and the heading in `baseline/<new name>.md` the same way. After the rename, read the page back, and when it was in sync, record the new number as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
+
 ## Version marker
 
 The Confluence page's version number (`version.number`). It increments on every save, including yours; read it after the last write.

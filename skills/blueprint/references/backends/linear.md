@@ -22,6 +22,15 @@ Ask which team and which project the specs belong to; offer to create a project 
 - **Blueprint**: an issue labelled `blueprint`, titled with the change; its description is the **review**. The **brief** is a document in the same project titled `<change>: brief`, linked from the issue's description and as an issue link, so the two are one click apart. Status lives on the issue and maps to the team's workflow states (draft → Backlog, approved → Todo, building → In Progress, applied → Done, abandoned → Canceled).
 - **Tasks**: tickets per [../tickets.md](../tickets.md); with the `linear` tracker they become sub-issues of the blueprint issue.
 
+## Domains
+
+Linear documents can't nest, so the domain is a document of its own and the capability titles keep the prefix:
+
+- **Overview**: a document in the project titled `Domain: <name>`, whose body is the overview ([../formats.md](../formats.md), "Domain overview"), linking each capability document. Its URL is the domain's `ref`.
+- **Nesting**: capability documents stay flat in the project, titled with the full name (`auth/session`), so they sort together under their domain's prefix.
+- **Rename**: change the document's title; its URL and history stay. Then update the links in the overview and in open blueprints' briefs.
+- A title change bumps `updatedAt`. Before renaming, note whether the page is in sync (its current marker equals `specVersion`). Change the spec's `# <capability name>` heading to the new name, and the heading in `baseline/<new name>.md` the same way. After the rename, read the document back, and when it was in sync, record the new `updatedAt` as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
+
 ## Version marker
 
 The document's `updatedAt`. Your own writes bump it; read it after the last write and record that.

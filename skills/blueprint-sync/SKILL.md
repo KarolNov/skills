@@ -11,7 +11,7 @@ Arguments: `$ARGUMENTS`: capability names (default: every capability whose code 
 
 The **code is right**; the question is whether the spec still describes it. You change the spec here, never the code. If a code change looks like a mistake, that row belongs to `blueprint-drift`: say so and leave it.
 
-Shared material lives in the `blueprint` skill next to this one: `../blueprint/references/`. If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here before continuing.
+Shared material lives in the `blueprint` skill next to this one: `../blueprint/references/`. If `.blueprint/blueprint.json` is missing, the repo isn't set up yet: say so in one line, then read [../blueprint-setup/SKILL.md](../blueprint-setup/SKILL.md) and follow it here before continuing. Then check the format: read `version` from `blueprint.json` (absent means 1); when it is below the current format version in [upgrades.md](../blueprint/references/upgrades.md), say in one line that this repo's `.blueprint/` is on format <n> and `/blueprint-tidy` upgrades it, then carry on without migrating.
 
 ## 1. Status
 
@@ -35,8 +35,8 @@ With `--deep`, also compare the whole spec with the code: requirements that desc
 
 For each capability, show the result as a delta (ADDED / MODIFIED / REMOVED, [formats.md](../blueprint/references/formats.md)) with one line per item naming the code that motivates it. Write it after the user's yes, then do the spec bookkeeping from [status.md](../blueprint/references/status.md).
 
-For a capability with no spec yet, draft the whole spec from its anchored code: what the code does today, including behavior that looks accidental, marked `<!-- verify: … -->` for the user to decide. Create the page as the backend file says, set `ref`, and do the bookkeeping.
+For a capability with no spec yet, draft the whole spec from its anchored code: what the code does today, including behavior that looks accidental, marked `<!-- verify: … -->` for the user to decide. Create the page as the backend file says (inside its domain, when its name has one in `domains`), set `ref`, link it from that domain overview's Capabilities list (link its existing "no spec yet" line and drop the marker; add a line only if it isn't listed), and do the bookkeeping.
 
 ## Done when
 
-Every capability in scope is `in-sync` in `drift.py check` with its `specVersion` and baseline matching the page, apart from those handed to `blueprint-drift`. Report one line per capability: what changed in the code, what changed in the spec (linked), and which capabilities to run `blueprint-drift` on.
+Every capability in scope is `in-sync` in `drift.py check` with its `specVersion` and baseline matching the page, apart from those handed to `blueprint-drift`. Report one line per capability: what changed in the code, what changed in the spec (linked), and which capabilities to run `blueprint-drift` on. Then run `python3 .blueprint/drift.py hint` and end the report with its line when it prints one (more than 10 capabilities without a domain, or 3 or more sharing a top-level folder without one). Never regroup or rename anything here; that is `/blueprint-tidy`, run when the user chooses.

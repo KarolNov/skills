@@ -15,7 +15,7 @@ Connect this repo to the places its team already works. Setup decides three thin
 - **Tickets**: where a blueprint's tasks become tickets: the tracker the repo already uses, or none.
 - **Project**: the existing page, row or project the specs belong to, if the team tracks projects somewhere.
 
-Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and, for Notion, `notion_normalize.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`.
+Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and, for Notion, `notion_normalize.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`. On a rerun, first read `version` from `blueprint.json` (absent means 1); when it is below the current format version in [upgrades.md](../blueprint/references/upgrades.md), say in one line that this repo's `.blueprint/` is on format <n> and `/blueprint-tidy` upgrades it, then carry on without rewriting the format yourself.
 
 ## Target repo doesn't exist yet
 
@@ -55,9 +55,13 @@ Show what will be created and where (a short list of pages, databases or folders
 
 ## 4. Map the capabilities
 
-Survey the repo with a subagent: entry points, top-level modules, public APIs, routes, jobs, and any existing spec material. From that, propose a **capability map**: 4 to 15 capabilities, each a durable behavior boundary named in the repo's own vocabulary (`billing/invoices`, not `invoice-service-refactor`), each with its anchors.
+Survey the repo with a subagent: entry points, top-level modules, public APIs, routes, jobs, and any existing spec material. From that, propose a **capability map**: 4 to 15 capabilities, each a durable behavior boundary named in the repo's own vocabulary (`invoices`, not `invoice-service-refactor`; `billing/invoices` only once `billing` is a domain), each with its anchors.
 
-Present it as one table: capability, one-line purpose, anchors. Flag code that no capability covers; that is fine for glue, build config and tests, and worth a capability for anything a user can observe. The user edits the table; iterate until they accept it.
+**Domains**, when the map has 8 or more capabilities and the repo is on the current format version (a new setup, or a rerun whose `version` is current; on an older one propose none and leave grouping to `/blueprint-tidy`): also propose domains, each grouping capabilities that share a name prefix or a top-level code folder, each with a one-line purpose, one level deep. Name capabilities by the rule in [formats.md](../blueprint/references/formats.md) (`<domain>/<capability>` or a bare `<capability>`): a name is either a domain or a capability, never both, so instead of `board` beside `board/ops`, propose a domain `board` and a new name for the leaf (`board/session`), and let the user pick it. Under 8, propose no domains unless the user asks, and use bare names: a `/` only appears in a name whose first part is a domain.
+
+Present it as one table: capability, one-line purpose, anchors, grouped under each domain's name and purpose when there are domains. Flag code that no capability covers; that is fine for glue, build config and tests, and worth a capability for anything a user can observe. The user edits the table; iterate until they accept it. Refuse a map where a name is both a domain and a capability, and say which name to change.
+
+Once it is accepted, create an overview page for each domain as the backend file's **Domains** section says, in the overview format ([formats.md](../blueprint/references/formats.md), "Domain overview"): Purpose from the table, the Capabilities list (unlinked and marked "no spec yet" while a capability has no page), and How they connect drafted from the survey. Record each as `domains.<name>` with its `ref` and `purpose`.
 
 If the repo already has OpenSpec specs, offer to import them: each `openspec/specs/<path>/spec.md` becomes a capability spec page with the same requirements, its `#### Scenario:` headings turned into scenario list items, and the user picks anchors for each.
 
@@ -66,11 +70,11 @@ If the repo already has OpenSpec specs, offer to import them: each `openspec/spe
 Ask whether to write the capability specs now or lazily:
 
 - **Lazily** (the default): capabilities get `"ref": null`. A spec page is created the first time a blueprint or sync touches that capability.
-- **Now**, for all or selected capabilities: for each, read its anchored code and draft the spec **from the code** (as the `blueprint-sync` skill does for a capability with no spec), describing what the code does today, including behavior that looks accidental; mark those with `<!-- verify: … -->` so the user can decide. Show each draft, write it after approval, and do the spec bookkeeping from [../blueprint/references/status.md](../blueprint/references/status.md).
+- **Now**, for all or selected capabilities: for each, read its anchored code and draft the spec **from the code**, creating its page inside its domain as the backend file says (as the `blueprint-sync` skill does for a capability with no spec), describing what the code does today, including behavior that looks accidental; mark those with `<!-- verify: … -->` so the user can decide. Show each draft, write it after approval, link it from its domain overview's Capabilities list, and do the spec bookkeeping from [../blueprint/references/status.md](../blueprint/references/status.md).
 
 ## 6. Write `.blueprint/`
 
-- `blueprint.json` in the shape from [../blueprint/references/formats.md](../blueprint/references/formats.md), with the `docs`, `tickets` and `project` choices.
+- `blueprint.json` in the shape from [../blueprint/references/formats.md](../blueprint/references/formats.md), with `version` set to the current format version in [upgrades.md](../blueprint/references/upgrades.md) on a new setup, the `docs`, `tickets` and `project` choices, and `domains` (`{}` when there are none). On a rerun keep the recorded `version` exactly (absent stays absent, meaning 1), and the specs, domains and changes; never raise `version` yourself (that is `/blueprint-tidy`'s migration).
 - `drift.py`: copy `../blueprint/scripts/drift.py` (overwrite an older copy).
 - `notion_normalize.py`, when the backend is Notion: copy `../blueprint/scripts/notion_normalize.py` (overwrite an older copy). The `blueprint-ui` review pane runs this copy to clean the pages it shows, so they read as the baselines do.
 - `baseline/`: create it, with a baseline for every spec that exists.
@@ -91,4 +95,4 @@ Offer one, never install without a yes. Each runs `python3 .blueprint/drift.py c
 
 ## Done when
 
-`blueprint.json` records docs, tickets and project, and lists every accepted capability with anchors; `python3 .blueprint/drift.py check` runs clean; and the user has seen where everything lives. Report: the docs location and ticket tracker (linked), the capability table, what was seeded, and the optional pieces that were added. Nothing is committed; tell the user which files to commit. Then suggest `/blueprint <the change you have in mind>`.
+`blueprint.json` records the format `version`, docs, tickets and project, lists every accepted domain with its overview page and every accepted capability with anchors; `python3 .blueprint/drift.py check` runs clean; and the user has seen where everything lives. Report: the docs location and ticket tracker (linked), the capability table with its domains (overviews linked), what was seeded, and the optional pieces that were added. Nothing is committed; tell the user which files to commit. Then suggest `/blueprint <the change you have in mind>`.
