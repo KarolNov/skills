@@ -48,7 +48,7 @@ Content read back from a backend SHALL be normalized to the formats Markdown bef
 
 ### Requirement: Visuals placed where the backend renders them
 
-Diagrams SHALL be placed so the backend displays them as pictures. In Notion they are uploaded SVG images with their Mermaid source in a toggle, and the playground is an embedded HTML file in the review.
+Diagrams SHALL be placed so the backend displays them as pictures. In Notion they are uploaded SVG images with a toggle under each holding the Mermaid source and the diagram's terminal version as a `text` code block, which the `blueprint-ui` pane shows in a terminal in place of the image. The playground is an embedded HTML file in the review.
 
 - **Scenario: Review rebuilt**
   - **WHEN** a Notion review is rebuilt

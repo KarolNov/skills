@@ -96,4 +96,12 @@ Diagrams and playgrounds SHALL appear only in reviews, never in briefs or capabi
 
 - **Scenario: Backend shows Mermaid as code**
   - **WHEN** the backend can't render Mermaid
-  - **THEN** each diagram is placed as an SVG image with its Mermaid source in a collapsed toggle
+  - **THEN** each diagram is placed as an SVG image, with its Mermaid source and a terminal version in a collapsed toggle
+
+### Requirement: Terminal version of each diagram
+
+Wherever diagrams go in as images, each SHALL also get a terminal version: the same diagram drawn by hand in box-drawing characters, at most 56 columns wide and laid out top to bottom. Fan-outs and decisions SHALL be drawn as lists, not rows of boxes or diamonds. It SHALL use the image's words, say in words what color would show, and contain no tabs, emoji or wide characters. Each SHALL pass `scripts/text_diagram.py` before the review is written.
+
+- **Scenario: Too wide**
+  - **WHEN** a terminal version is wider than 56 columns or has a corner that joins no line
+  - **THEN** `text_diagram.py` reports it, and the review is not written until it prints `ok`
