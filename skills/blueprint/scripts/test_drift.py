@@ -233,5 +233,32 @@ class Hint(DriftTest):
         self.assertEqual(r.drift("hint").stdout, "")
 
 
+class FilesAndPrune(DriftTest):
+    FILES = {"shared/board/ops.ts": "o", "shared/util.ts": "u", "shared/gone.ts": "g"}
+    STATE = {"specs": {"jams": spec("shared/**")}}
+
+    def test_files_with_proposed_anchors_writes_nothing(self):
+        r = self.repo(self.FILES, self.STATE)
+        before = r.state()
+        out = r.drift("files", "jams", "shared/**", "!shared/board/**").stdout.split()
+        self.assertEqual(out, ["shared/gone.ts", "shared/util.ts"])
+        self.assertEqual(r.state(), before)
+
+    def test_prune_keeps_synced_commit_and_real_removals(self):
+        r = self.repo(self.FILES, self.STATE)
+        r.drift("stamp", "jams")
+        (r.root / "shared/gone.ts").unlink()
+        state = r.state()
+        synced = state["specs"]["jams"]["syncedCommit"]
+        state["specs"]["jams"]["anchors"] = ["shared/**", "!shared/board/**"]
+        r.write(".blueprint/blueprint.json", json.dumps(state))
+        self.assertEqual(r.drift("prune", "jams").returncode, 0)
+        jams = r.state()["specs"]["jams"]
+        self.assertEqual(sorted(jams["anchorsFiles"]), ["shared/gone.ts", "shared/util.ts"])
+        self.assertEqual(jams["syncedCommit"], synced)
+        check = json.loads(r.drift("check", "--json").stdout)[0]
+        self.assertEqual(check["changed"], ["shared/gone.ts"])
+
+
 if __name__ == "__main__":
     unittest.main()

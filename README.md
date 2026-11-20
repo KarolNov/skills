@@ -98,10 +98,10 @@ notes tool, builds it, and keeps the specs and the code honest in both direction
 | `/blueprint apply [change]` | Builds the blueprint task by task, verifies each requirement against the code, then folds the delta into the capability specs. |
 | `/blueprint-drift [capability]` | **Intent drift**: the spec is right. Judges the code against it requirement by requirement, including spec edits people made outside the code, and fixes the code or turns the gap into a blueprint or tickets. |
 | `/blueprint-sync [capability]` | **Spec sync**: the code is right. Reads what the code changed since the spec last matched it and updates the spec, or writes a spec from the code for a capability that has none. |
-| `/blueprint-tidy [--dry-run]` | **Tidy**, on demand: migrates `.blueprint/` to the current format, groups capabilities into **domains** (each with an overview page that holds its specs like a folder), renames a name that is both a domain and a capability, and reports anchors that overlap through broad globs. Shows one move table and writes nothing until you approve it; renames keep each page and its history, so nothing reads as drift. |
+| `/blueprint-tidy [--dry-run]` | **Tidy**, on demand: migrates `.blueprint/` to the current format, groups capabilities into **domains** (each with an overview page that holds its specs like a folder), renames a name that is both a domain and a capability, and reports anchors that overlap through broad globs. Shows one move table and writes nothing until you approve it (a migration asks first on its own); renames keep each page and its history, so nothing reads as drift. |
 
 **Upgrading from 0.5.0:** 0.6.0 moves the blueprint format to version 2 (domains). Repos set up
-before it keep working; each blueprint skill says in one line that the repo is on format 1. Run
+before it keep working; `/blueprint` says in one line that the repo is on format 1. Run
 `/blueprint-tidy` once per repo to migrate: it adds `version` and `domains` to `blueprint.json`,
 refreshes `.blueprint/drift.py`, and updates the backend's structure (in Notion a `Kind` property and
 sub-items on Specs; in Obsidian, specs move from `domain__capability.md` into domain folders). It then
