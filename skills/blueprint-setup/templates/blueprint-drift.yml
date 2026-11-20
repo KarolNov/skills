@@ -9,6 +9,11 @@
 # Only code-side drift is checked; spec-side drift (someone edited a spec page)
 # needs the backend, so `/blueprint-sync` and `/blueprint-drift` report it.
 # Needs only actions/checkout, python3 and gh, all on GitHub-hosted runners.
+#
+# This is the recommended shape, not a fixed one: this copy belongs to the repo.
+# Edit it to fit the team (add a "drifted" label, request a reviewer, change
+# the wording or trigger); the steps after "Check drift" read its outputs
+# (`drifted`, drift.json, drift-comment.md).
 
 name: Blueprint drift
 
