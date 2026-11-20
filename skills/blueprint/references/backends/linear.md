@@ -29,7 +29,7 @@ Linear documents can't nest, so the domain is a document of its own and the capa
 - **Overview**: a document in the project titled `Domain: <name>`, whose body is the overview ([../formats.md](../formats.md), "Domain overview"), linking each capability document. Its URL is the domain's `ref`.
 - **Nesting**: capability documents stay flat in the project, titled with the full name (`auth/session`), so they sort together under their domain's prefix.
 - **Rename**: change the document's title; its URL and history stay. Then update the links in the overview and in open blueprints' briefs.
-- A title change bumps `updatedAt`. After a rename, read the document back, and when its body still matches the baseline, record the new `updatedAt` as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
+- A title change bumps `updatedAt`. Before renaming, note whether the page is in sync (its current marker equals `specVersion`). Change the spec's `# <capability name>` heading to the new name, and the heading in `baseline/<new name>.md` the same way. After the rename, read the document back, and when it was in sync, record the new `updatedAt` as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
 
 ## Version marker
 

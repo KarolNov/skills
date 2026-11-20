@@ -30,7 +30,7 @@ If `root` is itself a git repository, commit there after each approved write (`b
 - **Overview**: `specs/<domain>/index.md`, in the overview format ([../formats.md](../formats.md), "Domain overview"), so the folder that holds the domain's capability files opens on it. Its path relative to `root` is the domain's `ref`.
 - **Nesting**: the capability files already sit in the folder (`specs/auth/session.md`); a bare capability stays at `specs/<capability>.md`. No capability may be named `<domain>/index`.
 - **Move or rename**: move the file (`git mv` when `root` is a git repo, so history follows), then update its `ref` and the relative links that point to it: `index.md`, the domain overviews, and briefs and reviews of open blueprints. Commit the move on its own, before any content edit.
-- The file's content doesn't change on a move, so its version marker (a content hash) carries over and a rename never reads as drift. An overview has no marker or baseline.
+- A move alone keeps the content, so the version marker (a content hash) carries over. A rename also changes the content. Before renaming, note whether the page is in sync (its current marker equals `specVersion`). Change the spec's `# <capability name>` heading to the new name, and the heading in `baseline/<new name>.md` the same way. When the page was in sync, record the new hash as `specVersion`, so the rename never reads as drift. An overview has no marker or baseline.
 
 ## Version marker
 

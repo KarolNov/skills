@@ -55,9 +55,9 @@ Show what will be created and where (a short list of pages, databases or folders
 
 ## 4. Map the capabilities
 
-Survey the repo with a subagent: entry points, top-level modules, public APIs, routes, jobs, and any existing spec material. From that, propose a **capability map**: 4 to 15 capabilities, each a durable behavior boundary named in the repo's own vocabulary (`billing/invoices`, not `invoice-service-refactor`), each with its anchors.
+Survey the repo with a subagent: entry points, top-level modules, public APIs, routes, jobs, and any existing spec material. From that, propose a **capability map**: 4 to 15 capabilities, each a durable behavior boundary named in the repo's own vocabulary (`invoices`, not `invoice-service-refactor`; `billing/invoices` only once `billing` is a domain), each with its anchors.
 
-**Domains**, when the map has 8 or more capabilities: also propose domains, each grouping capabilities that share a name prefix or a top-level code folder, each with a one-line purpose, one level deep. Name capabilities by the rule in [formats.md](../blueprint/references/formats.md) (`<domain>/<capability>` or a bare `<capability>`): a name is either a domain or a capability, never both, so instead of `board` beside `board/ops`, propose a domain `board` and a new name for the leaf (`board/session`), and let the user pick it. Under 8, propose no domains unless the user asks.
+**Domains**, when the map has 8 or more capabilities and the repo is on the current format version (a new setup, or a rerun whose `version` is current; on an older one propose none and leave grouping to `/blueprint-tidy`): also propose domains, each grouping capabilities that share a name prefix or a top-level code folder, each with a one-line purpose, one level deep. Name capabilities by the rule in [formats.md](../blueprint/references/formats.md) (`<domain>/<capability>` or a bare `<capability>`): a name is either a domain or a capability, never both, so instead of `board` beside `board/ops`, propose a domain `board` and a new name for the leaf (`board/session`), and let the user pick it. Under 8, propose no domains unless the user asks, and use bare names: a `/` only appears in a name whose first part is a domain.
 
 Present it as one table: capability, one-line purpose, anchors, grouped under each domain's name and purpose when there are domains. Flag code that no capability covers; that is fine for glue, build config and tests, and worth a capability for anything a user can observe. The user edits the table; iterate until they accept it. Refuse a map where a name is both a domain and a capability, and say which name to change.
 
@@ -74,7 +74,7 @@ Ask whether to write the capability specs now or lazily:
 
 ## 6. Write `.blueprint/`
 
-- `blueprint.json` in the shape from [../blueprint/references/formats.md](../blueprint/references/formats.md), with `version` set to the current format version in [upgrades.md](../blueprint/references/upgrades.md), the `docs`, `tickets` and `project` choices, and `domains` (`{}` when there are none). On a rerun keep the recorded `version`, specs, domains and changes; never raise `version` yourself (that is `/blueprint-tidy`'s migration).
+- `blueprint.json` in the shape from [../blueprint/references/formats.md](../blueprint/references/formats.md), with `version` set to the current format version in [upgrades.md](../blueprint/references/upgrades.md) on a new setup, the `docs`, `tickets` and `project` choices, and `domains` (`{}` when there are none). On a rerun keep the recorded `version` exactly (absent stays absent, meaning 1), and the specs, domains and changes; never raise `version` yourself (that is `/blueprint-tidy`'s migration).
 - `drift.py`: copy `../blueprint/scripts/drift.py` (overwrite an older copy).
 - `notion_normalize.py`, when the backend is Notion: copy `../blueprint/scripts/notion_normalize.py` (overwrite an older copy). The `blueprint-ui` review pane runs this copy to clean the pages it shows, so they read as the baselines do.
 - `baseline/`: create it, with a baseline for every spec that exists.

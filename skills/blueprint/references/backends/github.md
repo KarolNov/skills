@@ -27,9 +27,9 @@ Check `gh auth status`. The wiki must be enabled and have at least one page befo
 Wiki pages can't nest, so the domain is a page of its own and the capability pages keep the prefix:
 
 - **Overview**: the wiki page `Domain:-<name>.md`, whose body is the overview ([../formats.md](../formats.md), "Domain overview"), linking each capability page. Its file name is the domain's `ref`.
-- **Nesting**: capability pages keep `Spec:-<domain>-<capability>.md`. `Specs.md` lists each domain (linking its overview) with its capabilities indented under it, then the bare capabilities.
+- **Nesting**: capability pages keep `Spec:-<domain>-<capability>.md`. Because `/` becomes `-`, two names can map to one page (`board/ops` and a bare `board-ops`); before creating or renaming a page, refuse a name whose page file already belongs to another capability, and have the user rename one. `Specs.md` lists each domain (linking its overview) with its capabilities indented under it, then the bare capabilities.
 - **Rename**: `git mv` the page in the wiki clone, update the links in `Specs.md`, the overview and open blueprints' briefs, commit and push. Use `git log --follow` for the page's history afterwards.
-- A rename is a new commit touching the page. After it, when the body still matches the baseline, record that commit as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
+- A rename is a new commit touching the page. Before renaming, note whether the page is in sync (its current marker equals `specVersion`). Change the spec's `# <capability name>` heading to the new name, and the heading in `baseline/<new name>.md` the same way. Commit that with the move; when the page was in sync, record that commit as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
 
 ## Version marker
 

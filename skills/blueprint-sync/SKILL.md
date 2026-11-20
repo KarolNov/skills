@@ -35,7 +35,7 @@ With `--deep`, also compare the whole spec with the code: requirements that desc
 
 For each capability, show the result as a delta (ADDED / MODIFIED / REMOVED, [formats.md](../blueprint/references/formats.md)) with one line per item naming the code that motivates it. Write it after the user's yes, then do the spec bookkeeping from [status.md](../blueprint/references/status.md).
 
-For a capability with no spec yet, draft the whole spec from its anchored code: what the code does today, including behavior that looks accidental, marked `<!-- verify: … -->` for the user to decide. Create the page as the backend file says (inside its domain, when its name has one in `domains`), set `ref`, add it to that domain overview's Capabilities list, and do the bookkeeping.
+For a capability with no spec yet, draft the whole spec from its anchored code: what the code does today, including behavior that looks accidental, marked `<!-- verify: … -->` for the user to decide. Create the page as the backend file says (inside its domain, when its name has one in `domains`), set `ref`, link it from that domain overview's Capabilities list (link its existing "no spec yet" line and drop the marker; add a line only if it isn't listed), and do the bookkeeping.
 
 ## Done when
 

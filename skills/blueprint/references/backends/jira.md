@@ -24,10 +24,10 @@ Ask for the Jira project and the Confluence space. Find or create a parent page 
 
 ## Domains
 
-- **Overview**: a Confluence page under `specsParent`, titled with the domain name, whose body is the overview ([../formats.md](../formats.md), "Domain overview"). Its page id or URL is the domain's `ref`.
+- **Overview**: a Confluence page under `specsParent`, titled `Domain: <name>` (titles must be unique within a space, and a bare `auth` may already exist), whose body is the overview ([../formats.md](../formats.md), "Domain overview"). Its page id or URL is the domain's `ref`.
 - **Nesting**: a capability in a domain is a child page of its domain page, still titled with the full capability name (`auth/session`), because Confluence titles must be unique within a space. A bare capability stays directly under `specsParent`.
 - **Move**: change the page's parent to the domain page (or back to `specsParent`). **Rename**: change the title. Both keep the page id and its history.
-- A title change bumps `version.number`. After a rename, read the page back, and when its body still matches the baseline, record the new number as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
+- A title change bumps `version.number`. Before renaming, note whether the page is in sync (its current marker equals `specVersion`). Change the spec's `# <capability name>` heading to the new name, and the heading in `baseline/<new name>.md` the same way. After the rename, read the page back, and when it was in sync, record the new number as `specVersion`, so the rename never reads as drift. An overview has no version marker or baseline.
 
 ## Version marker
 

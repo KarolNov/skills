@@ -78,7 +78,7 @@ On approval:
 3. Build the review from the brief (format in [formats.md](formats.md)) next to it, linking the brief and the playground, and add the review's link to the brief. Read the review back to check the diagrams render.
 4. Create the tickets, one per task, as [tickets.md](tickets.md) says for the configured tracker, after listing them for the user; link each from its task line in the brief and set the docs side's tickets link. Skip this for `none`.
 5. Add the change to `blueprint.json` under `changes` with its `brief`, `review` and `playground` links, `status: approved`, and `baseCommit` set to the current `HEAD`. When the change targets a repo that doesn't exist yet (see `blueprint-setup`, "Target repo doesn't exist yet"), `baseCommit` is the source repo's `HEAD` and `baseRepo` names that repo.
-6. For each new capability, add it to `specs` with its anchors and `"ref": null`; its spec page is created when the blueprint is applied.
+6. For each new capability, add it to `specs` with its anchors and `"ref": null`, named by the rule in [formats.md](formats.md): `<domain>/<capability>` only when that domain is in `domains`, otherwise a bare name, and never a name that is a domain, the parent of another capability, or under a bare capability; its spec page is created when the blueprint is applied.
 
 The capability specs themselves are **not** edited now: the delta lives on the brief until the code exists. That is what keeps specs describing the system as built.
 
