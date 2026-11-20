@@ -185,6 +185,14 @@
         "skills/blueprint/references/upgrades.md": "4914621f1e65"
       },
       "syncedCommit": "01393227ad341141ade6628eeece21bd2eb12747"
+    },
+    "blueprint/map": {
+      "ref": null,
+      "anchors": [
+        "skills/blueprint/scripts/graph.py",
+        "skills/blueprint/scripts/vendor/**",
+        "skills/blueprint/references/map.md"
+      ]
     }
   },
   "changes": {
@@ -212,6 +220,12 @@
       "status": "applied",
       "baseCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133",
       "branch": "kn/blueprint-domains-and-tidy-specs"
+    },
+    "capability-map-and-ci-drift": {
+      "brief": "https://app.notion.com/p/41e43cce21f281e9910dfb7204f07258",
+      "review": "https://app.notion.com/p/41e43cce21f281acb29cec1bb3066e4a",
+      "status": "approved",
+      "baseCommit": "9b41921b690996696b6fbf11def92ae163842a82"
     }
   }
 }
