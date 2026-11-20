@@ -75,6 +75,7 @@ a.link:hover { text-decoration: underline; }
 .sw.dom { background: var(--domain); border: 1.5px dashed var(--domain-line); border-radius: 6px; }
 .sw.line { height: 4px; background: var(--edge); border-radius: 2px; }
 .sw.file { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--file); }
+.sw.bubble { width: 16px; height: 16px; margin: 0 3px; border-radius: 50%; background: var(--panel); border: 1.5px solid var(--file); }
 .legend .row.files { display: none; } .legend.files .row.files { display: flex; }
 
 @media (max-width: 760px) {
@@ -88,15 +89,15 @@ svg:active { cursor: grabbing; }
 .hull-label { fill: var(--muted); font-size: 13px; font-weight: 600; pointer-events: none; }
 .share { stroke: var(--edge); stroke-opacity: .7; cursor: pointer; fill: none; }
 .share-label { fill: var(--muted); font-size: 10px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
-.own { stroke: var(--file); stroke-opacity: .45; stroke-width: .8; fill: none; }
+.tie { stroke: var(--file); stroke-opacity: .45; stroke-width: .8; fill: none; }
 .share-label.spare { opacity: 0; }
-.cap rect, .file, .share, .own, .share-label { transition: opacity .12s, stroke-opacity .12s; }
+.cap rect, .fgroup, .file, .share, .tie, .share-label { transition: opacity .12s, stroke-opacity .12s; }
 .focus .share:not(.on) { stroke-opacity: .06; }
 .focus .share.on { stroke-opacity: .9; }
-.focus .own:not(.on) { stroke-opacity: .05; }
+.focus .tie:not(.on) { stroke-opacity: .05; }
 .focus .share-label:not(.on) { opacity: 0; }
 .focus .share-label.on { opacity: 1; fill: var(--ink); }
-.focus .cap:not(.on), .focus .file:not(.on) { opacity: .3; }
+.focus .cap:not(.on), .focus .fgroup:not(.on) { opacity: .3; }
 .cap { cursor: pointer; }
 .cap rect { fill: var(--node); stroke: var(--node-line); stroke-width: 1.5; }
 .cap text { fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
@@ -106,15 +107,27 @@ svg:active { cursor: grabbing; }
 .file { cursor: pointer; }
 .file circle { fill: var(--file); }
 .file.drift circle { fill: var(--drift); }
-.file text { fill: var(--muted); font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0; pointer-events: none;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
-.file:hover text, .file.sel text, .file.hit text { opacity: 1; }
+/* Zoomed out, a big group is one bubble with its count; zoomed in, each file is a dot. */
+.fgroup .file, .fgroup.split .bubble, .fgroup.split .count { display: none; }
+.fgroup.split .file { display: inline; }
+.bubble { fill: var(--panel); stroke: var(--file); stroke-width: 1.5; cursor: zoom-in; }
+.bubble.drift { stroke: var(--drift); }
+.bubble.hit { stroke: var(--hit); stroke-width: 2.5; }
+.bubble.sel { stroke: var(--accent); stroke-width: 3; }
+.count { fill: var(--muted); font: 600 9px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
+/* The hovered (or selected) file's name, drawn above everything on a backing so dots don't cross it. */
+.file-tip { pointer-events: none; }
+.file circle.pad { fill: transparent; stroke: none !important; }
+.file-tip rect { fill: var(--panel); stroke: var(--line); }
+.file-tip text { fill: var(--ink); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .hit rect { stroke: var(--hit) !important; stroke-width: 3.5 !important; }
+.cap.drift.hit rect { stroke: var(--drift) !important; }  /* a match is already lit by the rest being dimmed */
 .hit circle { stroke: var(--hit); stroke-width: 2; }
 .sel rect, .sel circle { stroke: var(--accent) !important; stroke-width: 3 !important; }
 .share.sel { stroke: var(--accent); stroke-opacity: 1; }
 .hull.sel { stroke: var(--accent); stroke-dasharray: none; }
-.dim { opacity: .12; }
+/* Search dimming wins over hover focus. */
+.dim, .focus .cap.dim, .focus .fgroup.dim, .focus .share-label.on.dim { opacity: .12; }
 </style>
 <script>/*D3*/</script>
 </head><body>
@@ -128,9 +141,10 @@ svg:active { cursor: grabbing; }
       <div class="row"><span class="sw drift"></span>code drifted: anchored files changed since its last sync</div>
       <div class="row"><span class="sw dom"></span>domain</div>
       <div class="row"><span class="sw line"></span>shares files; the label says how many, and lines between domains run bundled</div>
-      <div class="row files"><span class="sw file"></span>anchored file</div>
+      <div class="row files"><span class="sw file"></span>anchored file: a capability's own files sit under it, shared ones between the capabilities, tied by thin lines</div>
+      <div class="row files"><span class="sw bubble"></span>a group of files, with its count: zoom in or click it to see each</div>
       <p>Only code-side drift is shown. A spec edited since its last sync is not: <code>/blueprint-sync</code> reports that.</p>
-      <p>Hover or select a capability to bring its lines forward · scroll to zoom · drag the background to pan · drag a node to pin it · double-click to free it.</p>
+      <p>Hover or select a capability to bring its lines forward · scroll to zoom · drag the background to pan · drag a capability to pin it · double-click to free it.</p>
     </details>
   </div>
   <aside>
@@ -145,7 +159,7 @@ const DATA = /*DATA*/;
 // ---- data → graph -------------------------------------------------------
 // Turns graph.py's output into what the canvas draws: capability nodes, one line per pair of
 // capabilities sharing files (weighted by the count), one outline per domain and, with files on,
-// a small node per anchored file tied to every capability that matches it.
+// the anchored files in groups: the files matched by the same capabilities go together.
 const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
 const fileOwners = {};
 for (const n of DATA.nodes) for (const f of n.files) (fileOwners[f] = fileOwners[f] || []).push(n.id);
@@ -159,8 +173,18 @@ function toGraph(d, showFiles) {
     caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain, drift: n.status === "code-moved" })),
     files,
     links: d.edges.map((e) => ({ id: e.source + "~" + e.target, source: e.source, target: e.target, count: e.count })),
-    fileLinks: files.flatMap((f) => f.owners.map((c) => ({ id: c + ">" + f.id, source: c, target: f.id }))),
+    groups: groupFiles(files),
   };
+}
+
+function groupFiles(files) {
+  const byKey = new Map();
+  for (const f of files) {
+    const key = [...f.owners].sort().join("|");
+    if (!byKey.has(key)) byKey.set(key, { id: "grp:" + key, owners: f.owners, files: [] });
+    byKey.get(key).files.push(f);
+  }
+  return [...byKey.values()];
 }
 
 // Line width grows with the number of shared files, with a ceiling so big overlaps stay readable.
@@ -168,16 +192,16 @@ const lineWidth = (count) => Math.min(12, 1.2 + 1.6 * Math.sqrt(count));
 
 // Keeps the boxes themselves apart, not circles around them: a long name is wide but only
 // 26px tall, so a circle of half its width would push neighbours far away above and below.
-// File dots (files as nodes) are small boxes with little room around them.
+// With files on, a box also holds the block of its own files drawn under it (blockH).
 function rectCollide(pad) {
   let nodes = [];
   function force(alpha) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
-        const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy - a.y - a.vy;
-        const gap = a.kind === "file" || b.kind === "file" ? 3 : pad;
-        const ox = (a.w + b.w) / 2 + gap - Math.abs(dx), oy = (a.h + b.h) / 2 + gap - Math.abs(dy);
+        const ah = a.h + (a.blockH || 0), bh = b.h + (b.blockH || 0);
+        const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy + (bh - b.h) / 2 - a.y - a.vy - (ah - a.h) / 2;
+        const ox = (a.w + b.w) / 2 + pad - Math.abs(dx), oy = (ah + bh) / 2 + pad - Math.abs(dy);
         if (ox <= 0 || oy <= 0) continue;
         // Separate along the axis that needs the smaller move.
         if (ox < oy) { const m = (dx < 0 ? -1 : 1) * ox * 0.5 * Math.min(1, alpha * 4); a.vx -= m; b.vx += m; }
@@ -252,11 +276,11 @@ function throughBox(l, n, pad) {
   return t0 < t1;
 }
 
-// The points a domain's outline wraps: a ring around each capability box.
+// The points a domain's outline wraps: a ring around each capability box and its files.
 function ringAround(pts) {
   return pts.flatMap((p) => d3.range(10).map((i) => [
     p.x + (p.w / 2 + 16) * Math.cos(i / 10 * 2 * Math.PI),
-    p.y + 30 * Math.sin(i / 10 * 2 * Math.PI)]));
+    p.y + (p.blockH || 0) / 2 + (30 + (p.blockH || 0) / 2) * Math.sin(i / 10 * 2 * Math.PI)]));
 }
 
 // How much a line matters to the eye, 0..1: heavier lines are drawn stronger.
@@ -316,25 +340,25 @@ function linkedOrder(groups, size, between) {
   return order;
 }
 
-// The forces, for the off-screen starts and the live simulation alike. A file (files as nodes)
-// is tied tightly to each capability matching it and feels no pull toward a slot.
+// The forces, for the off-screen starts and the live simulation alike. Only capabilities are
+// simulated: files are placed from where their capabilities are (placeFiles).
 function applyForces(sim, links, plan, at) {
-  const own = (l) => l.kind === "own", inside = (l) => groupOf(l.source) === groupOf(l.target);
+  const inside = (l) => groupOf(l.source) === groupOf(l.target);
   return sim
     .force("link", d3.forceLink(links).id((d) => d.id)
-      .distance((l) => own(l) ? 24 : (l.source.w + l.target.w) / 2 + (inside(l) ? 40 : 90))
-      .strength((l) => own(l) ? 0.9 : inside(l) ? 0.15 + 0.35 * weightOf(l.count, plan.max) : 0.04))
-    .force("charge", d3.forceManyBody().strength((d) => (d.kind === "file" ? -18 : -380)).distanceMax(400))
+      .distance((l) => (l.source.w + l.target.w) / 2 + (inside(l) ? 40 : 90))
+      .strength((l) => inside(l) ? 0.15 + 0.35 * weightOf(l.count, plan.max) : 0.04))
+    .force("charge", d3.forceManyBody().strength(-380).distanceMax(400))
     .force("collide", rectCollide(12))
-    .force("x", d3.forceX((d) => at(d).x).strength((d) => (d.kind === "file" ? 0 : 0.12)))
-    .force("y", d3.forceY((d) => at(d).y).strength((d) => (d.kind === "file" ? 0 : 0.12)));
+    .force("x", d3.forceX((d) => at(d).x).strength(0.12))
+    .force("y", d3.forceY((d) => at(d).y).strength(0.12));
 }
 
 // Each cluster's centre as it is now (it moves when nodes are dragged), with its rough radius:
 // where a bundle's ports sit.
 function centres(nodes, radius) {
   const out = {};
-  for (const [g, pts] of d3.group(nodes.filter((n) => n.kind !== "file"), groupOf)) {
+  for (const [g, pts] of d3.group(nodes, groupOf)) {
     out[g] = { x: d3.mean(pts, (p) => p.x), y: d3.mean(pts, (p) => p.y), r: radius[g] ?? 40 };
   }
   return out;
@@ -398,15 +422,71 @@ function placeCounts(links, nodes) {
 }
 
 
+// ---- files ----------------------------------------------------------------
+// Files matched by the same capabilities form one group. A capability's own files (no other
+// capability matches them) sit in a tidy block under its box, so they need no lines. A group
+// shared by several capabilities sits between them as a small sunflower, tied to each by one
+// thin line, on the nearest spot clear of boxes and other groups. Zoomed out, a group of more
+// than FEW files is a single bubble with its count; zooming in past SPLIT_AT, or clicking the
+// bubble, shows each file.
+const DOT = 9, FEW = 3, SPLIT_AT = 1.3;
+const blockCols = (cap) => Math.max(6, Math.floor((cap.w - 6) / DOT));
+const bubbleR = (n) => 6 + 1.5 * Math.sqrt(n);
+const sunflowerR = (n) => DOT * 0.6 * Math.sqrt(n) + 4;
+// The room a capability's own files take under its box, split or not.
+const blockHeight = (cap, n) => (n ? Math.max(8 + Math.ceil(n / blockCols(cap)) * DOT, 2 * bubbleR(n) + 6) : 0);
+
+function placeFiles(groups, capById, caps) {
+  const taken = [];
+  for (const g of groups) {
+    const owners = g.owners.map((id) => capById.get(id)), n = g.files.length;
+    if (owners.length === 1) {
+      const c = owners[0], cols = blockCols(c);
+      g.files.forEach((f, i) => {
+        const row = Math.floor(i / cols), inRow = Math.min(cols, n - row * cols);
+        f.x = c.x + (i % cols - (inRow - 1) / 2) * DOT; f.y = c.y + 13 + 8 + row * DOT;
+      });
+      g.r = bubbleR(n); g.x = c.x; g.y = c.y + 13 + 4 + g.r;
+      continue;
+    }
+    g.r = Math.max(sunflowerR(n), n > FEW ? bubbleR(n) : 0);
+    let cx = d3.mean(owners, (o) => o.x), cy = d3.mean(owners, (o) => o.y);
+    if (owners.length === 2) {
+      // Beside the line between the two, not on it, so the line and its count stay readable.
+      const dx = owners[1].x - owners[0].x, dy = owners[1].y - owners[0].y, d = Math.hypot(dx, dy) || 1;
+      cx += -dy / d * (g.r + 8); cy += dx / d * (g.r + 8);
+    }
+    const clear = (x, y) =>
+      !caps.some((c) => Math.abs(x - c.x) < c.w / 2 + g.r + 4 && y > c.y - 13 - g.r - 4 && y < c.y + 13 + c.blockH + g.r + 4)
+      && !taken.some((t) => Math.hypot(x - t.x, y - t.y) < t.r + g.r + 4);
+    // The middle of its capabilities, or the nearest clear spot on rings around it.
+    let at = [cx, cy];
+    find: for (let ring = 1; ring <= 6 && !clear(...at); ring++) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8 + ring / 16) * 2 * Math.PI, p = [cx + Math.cos(a) * ring * (g.r + 10), cy + Math.sin(a) * ring * (g.r + 10)];
+        if (clear(...p)) { at = p; break find; }
+      }
+    }
+    [g.x, g.y] = at;
+    taken.push(g);
+    g.files.forEach((f, i) => {
+      const r = DOT * 0.6 * Math.sqrt(i + 0.5), a = i * 2.39996;
+      f.x = g.x + r * Math.cos(a); f.y = g.y + r * Math.sin(a);
+    });
+  }
+}
+
 // ---- canvas -------------------------------------------------------------
 // Steady, not fluid: the layout is chosen and settled before it is drawn, friction is high, and a
-// drag runs the simulation barely warm, so the dragged node (and its own files) moves and the rest
-// hardly do. A dropped node stays where it was dropped until it is double-clicked.
+// drag runs the simulation barely warm, so the dragged capability (and its files) moves and the
+// rest hardly do. A dropped capability stays where it was dropped until it is double-clicked.
 const Canvas = (function () {
-  let el, svg, root, zoom, sim, onSelect, plan, nodes = [], links = [], moved = false;
-  let nodeSel, linkSel, labelSel, hullSel, hovered = null, selectedId = null;
+  let el, svg, root, zoom, sim, onSelect, plan, k = 1, moved = false;
+  let caps = [], capById = new Map(), shares = [], groups = [], files = [], ties = [];
+  let capSel, shareSel, labelSel, hullSel, groupSel, fileSel, tieSel, tipSel, hovered = null, hoveredFile = null, selectedId = null;
   const W = () => el.clientWidth, H = () => el.clientHeight;
   const sid = (end) => (typeof end === "object" ? end.id : end);
+  const split = (g) => g.files.length <= FEW || k >= SPLIT_AT;
 
   // A domain's outline: a smooth hull around its ring of points, so even a one-capability
   // domain gets a rounded blob.
@@ -414,56 +494,80 @@ const Canvas = (function () {
     const h = d3.polygonHull(ringAround(pts));
     return h ? d3.line().curve(d3.curveCatmullRomClosed.alpha(0.6))(h) : "";
   }
-  const capsIn = (dom) => nodes.filter((n) => n.kind === "cap" && n.domain === dom);
+  const capsIn = (dom) => caps.filter((n) => n.domain === dom);
 
   function draw() {
     // Shared-file lines: straight inside a cluster, bundled between clusters (ports follow the
     // clusters as nodes are dragged); counts that would sit on a box or another count wait for focus.
-    const slot = centres(nodes, plan.radius), shares = links.filter((l) => l.kind === "share");
+    const slot = centres(caps, plan.radius);
     shares.forEach((l) => Object.assign(l, route(l, slot)));
-    placeCounts(shares, nodes.filter((n) => n.kind === "cap"));
-    linkSel.attr("d", (d) => d.kind === "share" ? d.d : `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`);
+    placeCounts(shares, caps);
+    shareSel.attr("d", (d) => d.d);
     labelSel.attr("x", (d) => d.mid[0]).attr("y", (d) => d.mid[1] + 3).classed("spare", (d) => d.spare);
-    nodeSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
+    capSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
     hullSel.each(function (d) {
       const pts = capsIn(d.id);
       d3.select(this).select("path").attr("d", hullPath(pts));
       d3.select(this).select("text").attr("x", d3.mean(pts, (p) => p.x)).attr("y", d3.min(pts, (p) => p.y) - 38);
     });
+    if (!groups.length) return;
+    placeFiles(groups, capById, caps);
+    tieSel.attr("d", (t) => `M${edgePoint(t.cap, t.group.x, t.group.y)}L${t.group.x},${t.group.y}`);
+    fileSel.attr("transform", (f) => `translate(${f.x},${f.y})`);
+    tip();
+    groupSel.select(".bubble").attr("cx", (g) => g.x).attr("cy", (g) => g.y).attr("r", (g) => g.r);
+    groupSel.select(".count").attr("x", (g) => g.x).attr("y", (g) => g.y + 3);
   }
 
-  // Hover a node, or select it, to bring its lines, counts and neighbours forward and dim the rest.
+  // One name at a time: the hovered file, else the selected one while its dots are shown.
+  function tip() {
+    const sel = files.find((f) => f.id === selectedId);
+    const f = hoveredFile || (sel && split(sel.group) ? sel : null);
+    tipSel.attr("display", f ? null : "none");
+    if (!f) return;
+    const text = tipSel.select("text").text(f.label), w = text.node().getComputedTextLength() + 10;
+    tipSel.attr("transform", `translate(${f.x},${f.y - 10})`);
+    tipSel.select("rect").attr("x", -w / 2).attr("y", -13).attr("width", w).attr("height", 16);
+  }
+
+  const selectedThing = () => capById.get(selectedId) || files.find((f) => f.id === selectedId)?.group || null;
+
+  // Hover a capability or a file group, or select one, to bring its lines, counts and neighbours
+  // forward and dim the rest.
   function focus() {
-    let f = hovered || nodes.find((n) => n.id === selectedId) || null;
+    let f = hovered || selectedThing();
     const near = new Set(f ? [f] : []);
-    links.forEach((l) => { if (l.source === f) near.add(l.target); if (l.target === f) near.add(l.source); });
+    if (f && f.kind === "cap") {
+      shares.forEach((l) => { if (l.source === f) near.add(l.target); if (l.target === f) near.add(l.source); });
+      groups.forEach((g) => { if (g.owners.includes(f.id)) near.add(g); });
+    } else if (f) f.owners.forEach((id) => near.add(capById.get(id)));
     if (near.size === 1) f = null;  // nothing linked: dimming the rest would only hide the map
     const on = (l) => !!f && (l.source === f || l.target === f);
     svg.classed("focus", !!f);
-    linkSel.classed("on", on);
+    shareSel.classed("on", on);
     labelSel.classed("on", on);
-    nodeSel.classed("on", (n) => near.has(n));
+    tieSel.classed("on", (t) => !!f && (t.cap === f || t.group === f));
+    capSel.classed("on", (n) => near.has(n));
+    groupSel.classed("on", (g) => near.has(g));
   }
 
   const drag = () => d3.drag()
     .on("start", (e, d) => { d.moved = false; })
     .on("drag", (e, d) => {
       if (!d.moved) { d.moved = true; sim.alphaTarget(0.02).restart(); }
-      const dx = e.x - (d.fx ?? d.x), dy = e.y - (d.fy ?? d.y);
-      // A capability's own files (matched by no other capability) ride along with it.
-      for (const f of d.ownFiles || []) {
-        f.x += dx; f.y += dy;
-        if (f.fx != null) { f.fx += dx; f.fy += dy; }
-      }
-      d.fx = d.x = e.x; d.fy = d.y = e.y;
-      draw();
+      d.fx = d.x = e.x; d.fy = d.y = e.y;  // the running simulation's tick redraws, files included
     })
     .on("end", (e, d) => {
       sim.alphaTarget(0);
-      if (d.moved) nodeSel.filter((n) => n === d).classed("pinned", true);
+      if (d.moved) capSel.filter((n) => n === d).classed("pinned", true);
     });
 
-  function centre(x, y) { moved = true; svg.transition().duration(350).call(zoom.translateTo, x, y); }
+  // Pan to (x, y), zooming in to at least minK.
+  function centre(x, y, minK = 0) {
+    moved = true;
+    const s = Math.max(k, minK);
+    svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity.translate(W() / 2, H() / 2).scale(s).translate(-x, -y));
+  }
 
   return {
     mount(container, select) {
@@ -473,58 +577,61 @@ const Canvas = (function () {
       zoom = d3.zoom().scaleExtent([0.15, 3]).on("zoom", (e) => {
         root.attr("transform", e.transform);
         if (e.sourceEvent) moved = true;  // the user panned or zoomed, not fit()
+        const crossed = (e.transform.k >= SPLIT_AT) !== (k >= SPLIT_AT);
+        k = e.transform.k;
+        if (crossed && groupSel) { groupSel.classed("split", split); tip(); }
       });
       svg.call(zoom).on("dblclick.zoom", null);
       svg.on("click", (e) => { if (e.target === svg.node()) onSelect(null); });
     },
     render(g) {
       if (sim) sim.stop();
-      // Keep where nodes already are (and what is pinned) when redrawing, e.g. after the files switch.
-      const prev = new Map(nodes.map((n) => [n.id, n]));
+      // Keep where capabilities already are (and what is pinned) when redrawing, e.g. after the files switch.
+      const prev = new Map(caps.map((n) => [n.id, n]));
       root.selectAll("*").remove();
 
-      const caps = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26, ownFiles: [] }));
-      if (!plan || caps.some((c) => !prev.has(c.id))) {
+      const ownCount = new Map(g.groups.filter((x) => x.owners.length === 1).map((x) => [x.owners[0], x.files.length]));
+      const next = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26 }));
+      next.forEach((c) => { c.blockH = blockHeight(c, ownCount.get(c.id) || 0); });
+      const fresh = !plan || next.some((c) => !prev.has(c.id));
+      if (fresh) {
         // First draw: pick the least tangled of several seeded layouts of the capabilities.
-        const best = layout(caps.map((c) => ({ ...c })), g.links);
+        const best = layout(next.map((c) => ({ ...c })), g.links);
         plan = best.plan;
-        caps.forEach((c, i) => { c.x = best.nodes[i].x; c.y = best.nodes[i].y; });
+        next.forEach((c, i) => { c.x = best.nodes[i].x; c.y = best.nodes[i].y; });
+      } else {
+        next.forEach((c) => { const p = prev.get(c.id); Object.assign(c, { x: p.x, y: p.y, fx: p.fx, fy: p.fy }); });
+        // Files switched on: the blocks under the boxes may now overlap a neighbour. Push apart
+        // only what overlaps, so the map keeps its shape.
+        if (next.some((c) => c.blockH > prev.get(c.id).blockH)) {
+          d3.forceSimulation(next).force("collide", rectCollide(12)).velocityDecay(0.6).stop().tick(80);
+          next.forEach((c) => { c.vx = c.vy = 0; });
+        }
       }
-      const files = g.files.map((f) => ({ ...f, kind: "file", w: 7, h: 7 }));
-      nodes = [...caps, ...files];
-      for (const n of nodes) {
-        const p = prev.get(n.id);
-        if (p) Object.assign(n, { x: p.x, y: p.y, fx: p.fx, fy: p.fy });
-      }
-      const byNode = new Map(nodes.map((n) => [n.id, n]));
-      const fresh = files.filter((f) => f.x == null);
-      fresh.forEach((f, i) => {
-        const owner = byNode.get(f.owners[0]), a = i * 2.4;
-        // A new file node starts beside its capability rather than wherever d3 would put it.
-        f.x = owner.x + 20 * Math.cos(a); f.y = owner.y + 20 * Math.sin(a);
-      });
-      for (const f of files) if (f.owners.length === 1) byNode.get(f.owners[0]).ownFiles.push(f);
-      links = [
-        ...g.links.map((l) => ({ ...l, kind: "share" })),
-        ...g.fileLinks.map((l) => ({ ...l, kind: "own" })),
-      ];
+      caps = next;
+      capById = new Map(caps.map((c) => [c.id, c]));
+      shares = g.links.map((l) => ({ ...l, kind: "share" }));
+      groups = g.groups;
+      files = groups.flatMap((x) => x.files.map((f) => Object.assign(f, { group: x })));
+      ties = groups.filter((x) => x.owners.length > 1).flatMap((x) => x.owners.map((id) => ({ cap: capById.get(id), group: x })));
 
-      const hullG = root.append("g"), linkG = root.append("g"), nodeG = root.append("g"), labelG = root.append("g");
+      const hullG = root.append("g"), linkG = root.append("g"), capG = root.append("g"), fileG = root.append("g"), labelG = root.append("g");
       hullSel = hullG.selectAll("g").data(g.domains).join("g");
       hullSel.append("path").attr("class", "hull").on("click", (e, d) => { e.stopPropagation(); onSelect("dom:" + d.id); });
       hullSel.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
 
+      tieSel = linkG.append("g").selectAll("path").data(ties).join("path").attr("class", "tie");
       // Light lines fade back so the heavy ones carry the picture.
-      linkSel = linkG.selectAll("path").data(links).join("path")
-        .attr("class", (d) => d.kind)
-        .attr("stroke-width", (d) => (d.kind === "share" ? lineWidth(d.count) : null))
-        .attr("stroke-opacity", (d) => (d.kind === "share" ? 0.25 + 0.55 * weightOf(d.count, plan.max) : null))
-        .on("click", (e, d) => { if (d.kind === "share") { e.stopPropagation(); onSelect("edge:" + d.id); } });
-      labelSel = labelG.selectAll("text").data(links.filter((l) => l.kind === "share")).join("text")
+      shareSel = linkG.append("g").selectAll("path").data(shares).join("path")
+        .attr("class", "share")
+        .attr("stroke-width", (d) => lineWidth(d.count))
+        .attr("stroke-opacity", (d) => 0.25 + 0.55 * weightOf(d.count, plan.max))
+        .on("click", (e, d) => { e.stopPropagation(); onSelect("edge:" + d.id); });
+      labelSel = labelG.selectAll("text").data(shares).join("text")
         .attr("class", "share-label").attr("text-anchor", "middle").text((d) => d.count);
 
-      nodeSel = nodeG.selectAll("g").data(nodes, (d) => d.id).join("g")
-        .attr("class", (d) => d.kind + (d.drift ? " drift" : "") + (d.fx != null ? " pinned" : ""))
+      capSel = capG.selectAll("g").data(caps, (d) => d.id).join("g")
+        .attr("class", (d) => "cap" + (d.drift ? " drift" : "") + (d.fx != null ? " pinned" : ""))
         .on("click", (e, d) => { e.stopPropagation(); onSelect(d.id); })
         .on("dblclick", (e, d) => {
           e.stopPropagation();
@@ -535,48 +642,66 @@ const Canvas = (function () {
         .on("mouseenter", (e, d) => { hovered = d; focus(); })
         .on("mouseleave", () => { hovered = null; focus(); })
         .call(drag());
-      const capSel = nodeSel.filter((d) => d.kind === "cap"), fileSel = nodeSel.filter((d) => d.kind === "file");
       capSel.append("rect").attr("rx", 6).attr("height", 26).attr("y", -13)
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
       capSel.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
-      fileSel.append("circle").attr("r", 3.5);
-      fileSel.append("text").attr("text-anchor", "middle").attr("dy", 14).text((d) => d.label);
-      fileSel.append("title").text((d) => d.path);
 
-      sim = applyForces(d3.forceSimulation(nodes).randomSource(d3.randomLcg(0.5)), links, plan, plan.at)
+      groupSel = fileG.selectAll("g").data(groups).join("g").attr("class", "fgroup")
+        .on("mouseenter", (e, d) => { hovered = d; focus(); })
+        .on("mouseleave", () => { hovered = null; focus(); });
+      groupSel.append("circle").attr("class", (d) => "bubble" + (d.files.some((f) => f.drift) ? " drift" : ""))
+        .on("click", (e, d) => { e.stopPropagation(); centre(d.x, d.y, SPLIT_AT * 1.15); });
+      groupSel.append("text").attr("class", "count").attr("text-anchor", "middle").text((d) => d.files.length);
+      groupSel.append("title").text((d) => `${plural(d.files.length, "file", "files")} · ${d.owners.join(", ")}`);
+      fileSel = groupSel.selectAll("g.file").data((d) => d.files).join("g")
+        .attr("class", (d) => "file" + (d.drift ? " drift" : ""))
+        .on("click", (e, d) => { e.stopPropagation(); onSelect(d.id); });
+      fileSel.append("circle").attr("class", "pad").attr("r", DOT / 2);  // an easier target than the dot
+      fileSel.append("circle").attr("r", 3.5);
+      fileSel.append("title").text((d) => d.path);
+      fileSel.on("mouseenter", (e, d) => { hoveredFile = d; tip(); }).on("mouseleave", () => { hoveredFile = null; tip(); });
+      tipSel = labelG.append("g").attr("class", "file-tip").attr("display", "none");
+      tipSel.append("rect").attr("rx", 4);
+      tipSel.append("text").attr("text-anchor", "middle").attr("y", -2);
+      hoveredFile = null;
+
+      sim = applyForces(d3.forceSimulation(caps).randomSource(d3.randomLcg(0.5)), shares, plan, plan.at)
         .velocityDecay(0.65).alphaDecay(0.05)
         .on("tick", draw)
         .stop();
-      // Settle new file nodes before showing them, with the capabilities held where they are,
-      // so turning files on doesn't reshuffle the map.
-      if (fresh.length) {
-        const held = caps.filter((c) => c.fx == null);
-        held.forEach((c) => { c.fx = c.x; c.fy = c.y; });
-        sim.alpha(1).tick(300);
-        held.forEach((c) => { c.fx = c.fy = null; });
-      }
       sim.alpha(0);
       hovered = null;
       draw();
+      groupSel.classed("split", split);
       focus();
     },
-    // ids: null for no search, else the matching capability and file ids. The rest are dimmed.
+    // ids: null for no search, else the matching capability and file ids. The rest are dimmed;
+    // a file group stays lit while one of its files or capabilities matched.
     dim(ids) {
-      const off = (id) => ids && !ids.has(id);
-      nodeSel.classed("dim", (d) => off(d.id)).classed("hit", (d) => !!ids && ids.has(d.id));
-      linkSel.classed("dim", (d) => off(sid(d.source)) || off(sid(d.target)));
+      const off = (id) => !!ids && !ids.has(id), hit = (id) => !!ids && ids.has(id);
+      capSel.classed("dim", (d) => off(d.id)).classed("hit", (d) => hit(d.id));
+      fileSel.classed("dim", (d) => off(d.id)).classed("hit", (d) => hit(d.id));
+      groupSel.classed("dim", (x) => x.files.every((f) => off(f.id)) && x.owners.every(off))
+        .select(".bubble").classed("hit", (x) => x.files.some((f) => hit(f.id)));
+      tieSel.classed("dim", (t) => off(t.cap.id) && t.group.files.every((f) => off(f.id)));
+      shareSel.classed("dim", (d) => off(sid(d.source)) || off(sid(d.target)));
       labelSel.classed("dim", (d) => off(sid(d.source)) || off(sid(d.target)));
     },
     select(id, centreOn) {
       selectedId = id;
-      nodeSel.classed("sel", (d) => d.id === id);
-      linkSel.classed("sel", (d) => "edge:" + d.id === id);
+      capSel.classed("sel", (d) => d.id === id);
+      fileSel.classed("sel", (d) => d.id === id);
+      if (tipSel) tip();
+      groupSel.select(".bubble").classed("sel", (x) => x.files.some((f) => f.id === id));
+      shareSel.classed("sel", (d) => "edge:" + d.id === id);
       hullSel.select("path").classed("sel", (d) => "dom:" + d.id === id);
       focus();
       if (!centreOn || !id) return;
-      const n = nodes.find((d) => d.id === id);
+      const n = capById.get(id);
       if (n) return centre(n.x, n.y);
-      const l = links.find((d) => "edge:" + d.id === id);
+      const f = files.find((d) => d.id === id);
+      if (f) return centre(f.x, f.y, split(f.group) ? 0 : SPLIT_AT * 1.15);
+      const l = shares.find((d) => "edge:" + d.id === id);
       if (l) return centre(...l.mid);
       if (id.startsWith("dom:")) {
         const pts = capsIn(id.slice(4));
@@ -586,14 +711,16 @@ const Canvas = (function () {
     // Fit the map into the canvas, beside the open legend when there is room for both.
     fit(ms = 450) {
       moved = false;
-      if (!nodes.length || !W() || !H()) return;
+      if (!caps.length || !W() || !H()) return;
       const legend = el.querySelector(".legend[open]");
       const left = legend && W() > 700 ? legend.offsetWidth + 12 : 0, w = W() - left;
-      // Box edges, not centres, so a long name at the side isn't cut off.
-      const x0 = d3.min(nodes, (d) => d.x - d.w / 2), x1 = d3.max(nodes, (d) => d.x + d.w / 2);
-      const [y0, y1] = d3.extent(nodes, (d) => d.y);
-      const pad = 60, k = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / w, (y1 - y0 + pad * 2) / H())));
-      const t = d3.zoomIdentity.translate(left + w / 2, H() / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
+      // Box edges (with the files under them, and shared groups), so nothing at the side is cut off.
+      const boxes = [...caps.map((d) => [d.x - d.w / 2, d.y - 13, d.x + d.w / 2, d.y + 13 + d.blockH]),
+        ...groups.filter((x) => x.owners.length > 1).map((x) => [x.x - x.r, x.y - x.r, x.x + x.r, x.y + x.r])];
+      const x0 = d3.min(boxes, (b) => b[0]), x1 = d3.max(boxes, (b) => b[2]);
+      const y0 = d3.min(boxes, (b) => b[1]), y1 = d3.max(boxes, (b) => b[3]);
+      const pad = 40, s = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / w, (y1 - y0 + pad * 2) / H())));
+      const t = d3.zoomIdentity.translate(left + w / 2, H() / 2).scale(s).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
       (ms ? svg.transition().duration(ms) : svg).call(zoom.transform, t);
     },
     // On resize, refit only while the user hasn't moved the view themselves.
@@ -624,7 +751,8 @@ const Search = {
       const scored = fields.map((f) => ({ ...f, s: this.score(f.text) })).filter((f) => f.s);
       const best = Math.max(...scored.map((f) => f.s));
       const why = scored.filter((f) => f.s === best);
-      out.push({ id: n.id, why, files: why.filter((f) => f.kind === "file").map((f) => f.text) });
+      // Every file holding a typed word stays lit on the canvas, not only the best-scoring ones.
+      out.push({ id: n.id, why, files: scored.filter((f) => f.kind === "file").map((f) => f.text) });
     }
     return out;
   },
@@ -680,6 +808,8 @@ function md(text) {
       out.push(`<li>${inline(li[2])}</li>`);
     } else if (h) { flush(); close(0); out.push(`<p><b>${inline(h[1])}</b></p>`); }
     else if (!line.trim()) { flush(); close(0); }
+    // An indented line under a bullet continues that bullet.
+    else if (depth && /^\s/.test(line) && !para.length) out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, ` ${inline(line.trim())}</li>`);
     else { close(0); para.push(line.trim()); }
   }
   flush(); close(0);
@@ -692,7 +822,7 @@ const Page = {
   overview() {
     const d = DATA, drifted = d.nodes.filter((n) => n.status === "code-moved");
     return `<h2>${esc(d.repo)}</h2>
-      <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(toGraph(d, false).domains.length, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
+      <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(new Set(d.nodes.map((n) => n.domain).filter(Boolean)).size, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
       ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
       ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
       <p class="empty">Click a capability, line, file or domain outline for its details. Search covers names, purposes, requirements, scenarios and file paths.</p>`;
@@ -707,6 +837,7 @@ const Page = {
 
   capability(n) {
     const [label, cls] = STATUS[n.status] || [n.status, ""];
+    const removed = n.changed.filter((f) => !n.files.includes(f));
     const neighbours = DATA.edges.filter((e) => e.source === n.id || e.target === n.id)
       .map((e) => ({ id: e.source === n.id ? e.target : e.source, count: e.count }));
     // With a search on, the requirements holding the most typed words are opened and marked.
@@ -717,14 +848,15 @@ const Page = {
     }).join("");
     return `<h2>${esc(n.id)}</h2>
       <span class="pill ${cls}">${label}</span>${n.domain ? `<a class="pill link" data-id="dom:${esc(n.domain)}">${esc(n.domain)}</a>` : ""}
-      ${n.ref ? `<a class="link" href="${esc(n.ref)}" target="_blank" rel="noopener">open spec ↗</a>` : ""}
+      ${/^https?:\/\//i.test(n.ref || "") ? `<a class="link" href="${esc(n.ref)}" target="_blank" rel="noopener">open spec ↗</a>`
+        : n.ref ? `<p class="muted">Spec: <code>${esc(n.ref)}</code></p>` : ""}
       ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
       ${n.status === "code-moved" ? `<p class="muted">${plural(n.changed.length, "anchored file changed", "anchored files changed")} since the last sync (marked below). <code>/blueprint-sync ${esc(n.id)}</code> settles it.</p>` : ""}
       ${neighbours.length ? `<h3>Shares files with</h3>${neighbours.map((x) => `<p>${capLink(x.id)} <a class="pill link" data-id="edge:${esc([n.id, x.id].sort().join("~"))}">${plural(x.count, "file", "files")}</a></p>`).join("")}` : ""}
       ${n.hasBaseline ? `<h3>Requirements (${n.requirements.length})</h3>${reqs || `<p class="muted">None.</p>`}` : ""}
       <h3>Files (${n.files.length})</h3>
       <ul class="files">${n.files.map((f) => `<li class="${n.changed.includes(f) ? "changed" : ""}"><a class="link" data-id="file:${esc(f)}">${esc(f)}</a></li>`).join("")}</ul>
-      ${n.changed.filter((f) => !n.files.includes(f)).length ? `<p class="muted">Removed since the last sync:</p><ul class="files">${n.changed.filter((f) => !n.files.includes(f)).map((f) => `<li class="changed">${esc(f)}</li>`).join("")}</ul>` : ""}`;
+      ${removed.length ? `<p class="muted">Removed since the last sync:</p><ul class="files">${removed.map((f) => `<li class="changed">${esc(f)}</li>`).join("")}</ul>` : ""}`;
   },
 
   edge(id) {
@@ -776,12 +908,13 @@ const Page = {
     this.draw();
   },
 
-  search(q) {
+  // keep: re-apply the search without dropping the selection (after a redraw).
+  search(q, keep) {
     Search.set(q);
     this.results = Search.run();
     const ids = this.results && new Set(this.results.flatMap((r) => [r.id, ...r.files.map((f) => "file:" + f)]));
     Canvas.dim(ids);
-    this.choose(null);
+    this.choose(keep ? this.selected : null);
   },
 };
 
@@ -795,7 +928,7 @@ window.addEventListener("DOMContentLoaded", () => {
   Canvas.mount(graph, (id) => Page.choose(id, false));
   const redraw = () => {
     Canvas.render(toGraph(DATA, files.checked));
-    Page.search(q.value);
+    Page.search(q.value, true);
   };
   redraw();
   Canvas.fit(0);
@@ -806,7 +939,7 @@ window.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "/" && document.activeElement !== q) { e.preventDefault(); q.focus(); }
   });
-  legend.addEventListener("toggle", () => Canvas.fit());
+  legend.addEventListener("toggle", () => Canvas.refit());
   document.getElementById("fit").onclick = () => Canvas.fit();
   window.addEventListener("resize", () => Canvas.refit());
 });
