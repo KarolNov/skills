@@ -82,3 +82,12 @@ After a sync, the skill SHALL run `drift.py hint` and show its line when there i
   - **GIVEN** 11 capabilities and no domains
   - **WHEN** a sync finishes
   - **THEN** its report ends with one line suggesting `/blueprint-tidy`
+
+### Requirement: Baselines stay in the repo
+
+Baselines SHALL live in `.blueprint/baseline/` and be committed with the code they describe, never moved to the backend or out of git. When two branches change the same spec, their baselines SHALL conflict in git; that conflict is intended, and it SHALL be resolved by syncing the merged code against the current spec, never by picking one side's baseline.
+
+- **Scenario: Two PRs change one spec**
+  - **GIVEN** two open PRs that each synced `auth/session`
+  - **WHEN** the second is merged after the first
+  - **THEN** git reports a conflict in `baseline/auth/session.md`, and it is resolved by running `/blueprint-sync auth/session` on the merged code

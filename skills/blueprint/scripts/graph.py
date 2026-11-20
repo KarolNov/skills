@@ -140,25 +140,32 @@ def main(argv):
         return 0
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(data), encoding="utf-8")
-    if out == drift.ROOT / ".blueprint" / "map.html":
-        ignore_map(out.parent / ".gitignore")
+    added = out == drift.ROOT / ".blueprint" / "map.html" and ignore_map(out.parent / ".gitignore")
     print(out)
     print(summary(data))
+    if added:
+        print("added map.html to .blueprint/.gitignore, so the page stays out of git")
     return 0
 
 
 def ignore_map(path):
-    """Keep the generated page out of git with .blueprint/.gitignore, so the repo root's is never touched."""
+    """Keep the generated page out of git with .blueprint/.gitignore, so the repo root's is never touched.
+
+    Returns whether it added the line, so the caller can say so.
+    """
     lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    if "map.html" not in (l.strip() for l in lines):
-        path.write_text("".join(l + "\n" for l in lines + ["map.html"]), encoding="utf-8")
+    if "map.html" in (l.strip() for l in lines):
+        return False
+    path.write_text("".join(l + "\n" for l in lines + ["map.html"]), encoding="utf-8")
+    return True
 
 
 def summary(data):
     """One line for the report: counts, and the capabilities whose code moved."""
     moved = [n["id"] for n in data["nodes"] if n["status"] == "code-moved"]
     shared = "" if data["edges"] else "; no shared files, so files start as nodes"
-    return (f"{len(data['nodes'])} capabilities, {len(data['domains'])} domains; "
+    n, d = len(data["nodes"]), len(data["domains"])
+    return (f"{n} capabilit{'y' if n == 1 else 'ies'}, {d} domain{'' if d == 1 else 's'}; "
             f"code-drifted: {', '.join(moved) or 'none'}{shared}")
 
 

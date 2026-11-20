@@ -190,12 +190,15 @@ class Page(GraphTest):
         out = r.graph()
         self.assertEqual(out.returncode, 0, out.stderr)
         page = r.root / ".blueprint/map.html"
-        path, summary = out.stdout.strip().splitlines()
+        path, summary, told = out.stdout.strip().splitlines()
         self.assertEqual(path, str(page))
-        self.assertEqual(summary, "2 capabilities, 1 domains; code-drifted: none")
-        # The page keeps itself out of git, once, without touching the root .gitignore.
+        self.assertEqual(summary, "2 capabilities, 1 domain; code-drifted: none")
+        # The page keeps itself out of git, once, without touching the root .gitignore,
+        # and says so the time it adds the line.
+        self.assertIn(".blueprint/.gitignore", told)
         self.assertEqual((r.root / ".blueprint/.gitignore").read_text(), "map.html\n")
-        r.graph()
+        again = r.graph()
+        self.assertEqual(len(again.stdout.strip().splitlines()), 2)
         self.assertEqual((r.root / ".blueprint/.gitignore").read_text(), "map.html\n")
         html = page.read_text()
         self.assertIn("https://d3js.org v7.9.0", html)
