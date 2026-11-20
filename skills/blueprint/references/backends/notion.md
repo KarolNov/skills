@@ -18,7 +18,7 @@ The location comes from `blueprint-setup`: usually a new subpage of the repo's o
 
 - **Root page** `Specs & blueprints` under that parent, with two lines saying what the databases hold, that the row page is the review and the brief is its subpage, and where tickets live (linked).
 - **Specs** database under the root:
-  `CREATE TABLE ("Capability" TITLE, "Purpose" RICH_TEXT, "Last edited" LAST_EDITED_TIME)`
+  `CREATE TABLE ("Capability" TITLE, "Kind" SELECT('Capability':gray, 'Domain':blue), "Purpose" RICH_TEXT, "Last edited" LAST_EDITED_TIME)`, then turn on sub-items (a `Parent item` self-relation), so a domain row can hold capability rows.
 - **Blueprints** database under the root:
   `CREATE TABLE ("Change" TITLE, "Status" STATUS('Draft':gray:to_do, 'Approved':blue:to_do, 'Building':yellow:in_progress, 'Applied':green:complete, 'Abandoned':red:complete), "Capabilities" RELATION('<specs data source>', DUAL 'Blueprints'), "Brief" URL, "Tickets" URL, "Branch" RICH_TEXT, "PR" URL, "Last edited" LAST_EDITED_TIME)`
 

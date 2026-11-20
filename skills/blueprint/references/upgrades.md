@@ -12,7 +12,7 @@ Apply every entry newer than the repo's `version`, oldest first, each in full be
 
 1. Show the entry's writes for this repo and backend as one list (files, pages, properties), and apply them after the user's yes.
 2. Run the entry's checks.
-3. Set `version` in `blueprint.json` to the entry's number. A migration never renames a capability or changes anchors, stamps or `specVersion`, so it never reads as drift.
+3. Set `version` in `blueprint.json` to the entry's number. A migration never renames a capability or changes anchors or stamps, and it changes `specVersion` only where the entry says so, for a page it rewrote mechanically, so it never reads as drift.
 
 Entries are append-only. A new format version adds a section at the end, raises **Current format version**, and names what changed, how to migrate per backend, and how to verify.
 
@@ -30,7 +30,7 @@ Entries are append-only. A new format version adds a section at the end, raises 
 - `.blueprint/drift.py`: overwrite with `scripts/drift.py` from the blueprint skill. With the Notion backend, also overwrite `.blueprint/notion_normalize.py` with `scripts/notion_normalize.py`.
 - Backend, by `docs.backend`:
   - **notion**: add `"Kind" SELECT('Capability':gray, 'Domain':blue)` to the Specs data source and set every existing row to `Capability`, then turn on sub-items for it (a `Parent item` self-relation), so a domain row can hold capability rows.
-  - **obsidian**: move each capability note from the flattened `<specs>/<domain>__<capability>.md` to the folder `<specs>/<domain>/<capability>.md`, then update its `ref` in `blueprint.json` and the `[[wikilinks]]` that point to it. A bare capability stays at `<specs>/<capability>.md`.
+  - **obsidian**: move each capability note from the flattened `<specs>/<domain>__<capability>.md` to the folder `<specs>/<domain>/<capability>.md`, then update its `ref` in `blueprint.json` and the `[[wikilinks]]` that point to it. Rewriting links changes the content hash of every spec note that holds one, so first note which spec notes are in sync (current marker equals `specVersion`); after the rewrite, make the same link change in their `baseline/<capability>.md` and record their new marker as `specVersion`. A note that had already moved keeps its old `specVersion`, so it still reads as moved. A bare capability stays at `<specs>/<capability>.md`.
   - **markdown**, **linear**, **jira**, **github**: nothing to move; capability names already keep their `/`.
 - No capability is renamed and no domain is created by the migration. Grouping is the next, separate step of the same `/blueprint-tidy` run.
 

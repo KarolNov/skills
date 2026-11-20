@@ -80,24 +80,24 @@ def repo_files():
     return sorted(f for f in listed if (ROOT / f).is_file())
 
 
-def matching_anchors(spec, path):
-    """The include anchors that match path, or [] when none does or an exclusion wins."""
-    if path.startswith(".blueprint/"):
-        return []
+def compile_anchors(spec):
+    """A spec's anchors as ([(include, regex)], [exclude regex]), compiled once."""
     anchors = spec.get("anchors", [])
-    if any(glob_re(p[1:]).match(path) for p in anchors if p.startswith("!")):
+    return ([(p, glob_re(p)) for p in anchors if not p.startswith("!")],
+            [glob_re(p[1:]) for p in anchors if p.startswith("!")])
+
+
+def matching_anchors(compiled, path):
+    """The include anchors that match path, or [] when none does or an exclusion wins."""
+    includes, excludes = compiled
+    if path.startswith(".blueprint/") or any(r.match(path) for r in excludes):
         return []
-    return [p for p in anchors if not p.startswith("!") and glob_re(p).match(path)]
+    return [p for p, r in includes if r.match(path)]
 
 
 def matched(spec, files):
-    includes = [glob_re(p) for p in spec.get("anchors", []) if not p.startswith("!")]
-    excludes = [glob_re(p[1:]) for p in spec.get("anchors", []) if p.startswith("!")]
-    return [
-        f for f in files
-        if any(r.match(f) for r in includes) and not any(r.match(f) for r in excludes)
-        and not f.startswith(".blueprint/")
-    ]
+    compiled = compile_anchors(spec)
+    return [f for f in files if matching_anchors(compiled, f)]
 
 
 def file_hashes(paths):
@@ -215,10 +215,11 @@ def cmd_version(args):
 def cmd_overlaps(args):
     as_json = "--json" in args
     specs, files = load().get("specs", {}), repo_files()
+    compiled = {name: compile_anchors(spec) for name, spec in specs.items()}
     report = []
     for f in files:
         hits = [{"capability": name, "anchors": anchors}
-                for name, spec in specs.items() if (anchors := matching_anchors(spec, f))]
+                for name, c in compiled.items() if (anchors := matching_anchors(c, f))]
         if len(hits) > 1:
             report.append({"file": f, "capabilities": hits})
     if as_json:
@@ -236,6 +237,9 @@ def collision(name, specs, domains, ignore=None):
     """Why name can't be a capability next to the others (a name is a domain or a capability,
     never both), or None."""
     others = [n for n in specs if n != ignore]
+    parts = name.split("/")
+    if len(parts) > 2 or any(p in ("", ".", "..") for p in parts):
+        return f"{name} isn't <domain>/<capability> or <capability> (domains are one level deep)"
     if name in domains:
         return f"{name} is a domain"
     if clash := next((n for n in others if n.startswith(name + "/")), None):
@@ -257,20 +261,15 @@ def cmd_rename(args):
         sys.exit(f"capability already exists: {new}")
     if why := collision(new, specs, state.get("domains", {}), ignore=old):
         sys.exit(f"can't rename {old} to {new}: {why}")
-    # Rebuild in place so the key keeps its position, and with it the order of check's report.
-    state["specs"] = {(new if k == old else k): v for k, v in specs.items()}
-    moved = 0
-    for change in state.get("changes", {}).values():
-        caps = change.get("capabilities")
-        if isinstance(caps, list) and old in caps:
-            change["capabilities"] = [new if c == old else c for c in caps]
-            moved += 1
     base = ROOT / ".blueprint" / "baseline"
     src, dst = base / f"{old}.md", base / f"{new}.md"
+    if dst.exists():
+        # A leftover baseline would silently become the renamed capability's merge base.
+        sys.exit(f"baseline already exists: {dst.relative_to(ROOT)}")
+    # Rebuild in place so the key keeps its position, and with it the order of check's report.
+    state["specs"] = {(new if k == old else k): v for k, v in specs.items()}
     has_baseline = src.exists()
     if has_baseline:
-        if dst.exists():
-            sys.exit(f"baseline already exists: {dst.relative_to(ROOT)}")
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
         # Drop folders the move left empty, up to baseline/ itself.
@@ -279,9 +278,9 @@ def cmd_rename(args):
             parent.rmdir()
             parent = parent.parent
     save(state)
-    print(f"renamed {old} to {new}"
-          + ("; baseline moved" if has_baseline else "")
-          + (f"; {moved} change(s) updated" if moved else ""))
+    print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else ""))
+    print(f"  the backend still names it {old}: rename its page and the briefs that list it",
+          file=sys.stderr)
     return 0
 
 
@@ -289,7 +288,12 @@ def anchor_folder(anchor):
     """The folder an anchor lives in, at most two levels deep (`src/board`), or None for a
     root-level file or an anchor that starts with a wildcard."""
     parts = anchor.rstrip("/").split("/")
-    if not (ROOT / anchor).is_dir():
+    path, last = ROOT / anchor, parts[-1]
+    # A bare directory, even one not created yet: a trailing "/", or a literal name with no
+    # extension that isn't a file.
+    is_dir = anchor.endswith("/") or path.is_dir() or (
+        not path.is_file() and "." not in last and not any(c in last for c in "*?["))
+    if not is_dir:
         parts = parts[:-1]  # a file or a glob: its folder is everything before the last part
     literal = []
     for part in parts:

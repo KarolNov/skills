@@ -18,7 +18,7 @@ Ask for the vault path (look for a folder containing `.obsidian/` under the home
 
 ## Pages
 
-- **Capability spec**: `<specs>/<capability with / replaced by __>.md`, e.g. `auth__session.md`. Frontmatter:
+- **Capability spec**: `<specs>/<capability>.md`, so a domain is a folder: `auth/session` is `<specs>/auth/session.md`, a bare `search` is `<specs>/search.md`. Frontmatter:
   ```yaml
   ---
   capability: auth/session

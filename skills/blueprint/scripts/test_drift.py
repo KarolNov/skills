@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,8 @@ import unittest
 from pathlib import Path
 
 DRIFT = Path(__file__).resolve().parent / "drift.py"
+# Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
+ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
 
 
 class Repo:
@@ -30,11 +33,12 @@ class Repo:
         (self.root / path).write_text(text)
 
     def git(self, *args):
-        subprocess.run(["git", "-C", str(self.root), *args], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(self.root), *args], check=True, capture_output=True,
+                       env=ENV)
 
     def drift(self, *args):
         return subprocess.run([sys.executable, str(DRIFT), *args], cwd=self.root,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=ENV)
 
     def state(self):
         return json.loads((self.root / ".blueprint/blueprint.json").read_text())
@@ -121,7 +125,7 @@ class Rename(DriftTest):
         r.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "stamp")
         return r
 
-    def test_moves_key_baseline_and_changes_keeping_stamps(self):
+    def test_moves_key_and_baseline_keeping_stamps(self):
         r = self.stamped()
         before = r.state()
         out = r.drift("rename", "board", "board/session")
@@ -129,8 +133,7 @@ class Rename(DriftTest):
         after = r.state()
         self.assertEqual(list(after["specs"]), ["board/session", "board/ops", "ui"])
         self.assertEqual(after["specs"]["board/session"], before["specs"]["board"])
-        self.assertEqual(after["changes"]["open"]["capabilities"], ["board/session", "ui"])
-        self.assertNotIn("capabilities", after["changes"]["other"])
+        self.assertEqual(after["changes"], before["changes"])
         base = r.root / ".blueprint/baseline"
         self.assertFalse((base / "board.md").exists())
         self.assertEqual((base / "board/session.md").read_text(), "# board\n")
@@ -156,13 +159,13 @@ class Rename(DriftTest):
         cases = {
             ("ui", "board/ops"): "already exists",
             ("ui", "core"): "is a domain",
-            ("ui", "ui/x"): None,  # its own old name may become the domain
             ("board/ops", "ui/ops"): "its domain ui is a capability",
-            ("ui", "board/ops/x"): "its domain board is a capability",
+            ("ui", "board/ops/x"): "domains are one level deep",
+            ("ui", "x/y/z"): "domains are one level deep",
+            ("ui", "../../escaped"): "domains are one level deep",
+            ("ui", "ui/"): "domains are one level deep",
         }
         for (old, new), why in cases.items():
-            if why is None:
-                continue
             out = r.drift("rename", old, new)
             self.assertNotEqual(out.returncode, 0, (old, new))
             self.assertIn(why, out.stderr, (old, new))
@@ -177,6 +180,12 @@ class Rename(DriftTest):
         r = self.repo(self.FILES, self.STATE)
         out = r.drift("rename", "ui", "ui/app")
         self.assertEqual(out.returncode, 0, out.stderr)
+
+    def test_refuses_leftover_baseline_at_new_name(self):
+        r = self.repo(dict(self.FILES, **{".blueprint/baseline/ui/app.md": "# old\n"}), self.STATE)
+        out = r.drift("rename", "ui", "ui/app")
+        self.assertIn("baseline already exists", out.stderr)
+        self.assertIn("ui", r.state()["specs"])
 
     def test_unknown(self):
         r = self.repo(self.FILES, self.STATE)
@@ -210,6 +219,10 @@ class Hint(DriftTest):
     def test_bare_directory_anchor_is_its_own_folder(self):
         files = {"src/a/x.ts": "", "src/b/x.ts": "", "src/c/x.ts": ""}
         r = self.repo(files, {"specs": {n: spec(f"src/{n}") for n in "abc"}})
+        self.assertEqual(r.drift("hint").stdout, "")
+
+    def test_missing_bare_directory_is_its_own_folder(self):
+        r = self.repo({}, {"specs": {"a": spec("src/a"), "b": spec("src/b/"), "c": spec("src/c")}})
         self.assertEqual(r.drift("hint").stdout, "")
 
     def test_capabilities_in_a_domain_do_not_count(self):
