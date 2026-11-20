@@ -20,7 +20,7 @@ Open the printed path with the platform's opener: `open` on macOS, `xdg-open` on
 
 ## 3. Report
 
-Two or three lines: the path, how many capabilities and domains it shows, and which capabilities drifted on the code side (all from graph.py's summary line; don't run it or `drift.py` again), each with what fixes it: `/blueprint-drift` when the spec is right, `/blueprint-sync` when the code is. Say that spec-side drift is not on the map and `/blueprint-sync` reports it, as the page's legend does. When no two capabilities share a file, say the page starts with files shown as nodes.
+Two or three lines: the path, that it added `map.html` to `.blueprint/.gitignore` when graph.py printed so (first run only), how many capabilities and domains it shows, and which capabilities drifted on the code side (all from graph.py's summary line; don't run it or `drift.py` again), each with what fixes it: `/blueprint-drift` when the spec is right, `/blueprint-sync` when the code is. Say that spec-side drift is not on the map and `/blueprint-sync` reports it, as the page's legend does. When no two capabilities share a file, say the page starts with files shown as nodes.
 
 ## What the page does
 
