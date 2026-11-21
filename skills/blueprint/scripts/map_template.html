@@ -92,8 +92,9 @@ a.link:hover { text-decoration: underline; }
 .sw.file { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--file); }
 .sw.art { width: 9px; height: 9px; margin: 0 7px; background: var(--art); transform: rotate(45deg); border-radius: 1px; }
 .sw.bubble { width: 16px; height: 16px; margin: 0 3px; border-radius: 50%; background: var(--panel); border: 1.5px solid var(--file); }
-.legend .row.files, .legend .row.arts, .legend .row.groups { display: none; }
-.legend.files .row.files, .legend.arts .row.arts, .legend.files .row.groups, .legend.arts .row.groups { display: flex; }
+/* Rows for node kinds that are switched off stay, faded, so the legend never changes size. */
+.legend .row.files, .legend .row.arts, .legend .row.groups { opacity: .4; transition: opacity .2s; }
+.legend.files .row.files, .legend.arts .row.arts, .legend.files .row.groups, .legend.arts .row.groups { opacity: 1; }
 
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh 1fr; }
@@ -148,6 +149,10 @@ svg:active { cursor: grabbing; }
 .hull.sel { stroke: var(--accent); stroke-dasharray: none; }
 /* Search dimming wins over hover focus. */
 .dim, .focus .cap.dim, .focus .fgroup.dim, .focus .share-label.on.dim { opacity: .12; }
+/* Nodes switched on fade in; "backwards" so the dimming and focus rules win once it's done. */
+.enter { animation: enter .28s ease-out backwards; }
+@keyframes enter { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
 </style>
 <script>/*D3*/</script>
 </head><body>
@@ -519,6 +524,7 @@ function placeFiles(groups, capById, caps) {
 const Canvas = (function () {
   let el, svg, root, zoom, sim, onSelect, plan, k = 1, moved = false;
   let caps = [], capById = new Map(), shares = [], groups = [], files = [], ties = [];
+  let glide = null;  // the timer moving capabilities aside after nodes are switched on
   let capSel, shareSel, labelSel, hullSel, groupSel, fileSel, tieSel, tipSel, hovered = null, hoveredFile = null, selectedId = null;
   const W = () => el.clientWidth, H = () => el.clientHeight;
   const sid = (end) => (typeof end === "object" ? end.id : end);
@@ -605,6 +611,27 @@ const Canvas = (function () {
     svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity.translate(W() / 2, H() / 2).scale(s).translate(-x, -y));
   }
 
+  // The canvas left of the legend (when it's open and there's room beside it).
+  function room() {
+    const legend = el.querySelector(".legend[open]");
+    const left = legend && W() > 700 ? legend.offsetWidth + 12 : 0;
+    return { left, w: W() - left };
+  }
+
+  // Box edges (with the nodes under them, and shared groups), so nothing at the side is cut off.
+  function bounds() {
+    const boxes = [...caps.map((d) => [d.x - d.w / 2, d.y - 13, d.x + d.w / 2, d.y + 13 + d.blockH]),
+      ...groups.filter((x) => x.owners.length > 1).map((x) => [x.x - x.r, x.y - x.r, x.x + x.r, x.y + x.r])];
+    return [d3.min(boxes, (b) => b[0]), d3.min(boxes, (b) => b[1]), d3.max(boxes, (b) => b[2]), d3.max(boxes, (b) => b[3])];
+  }
+
+  function reveal() {
+    if (!caps.length || !W() || !H()) return;
+    const t = d3.zoomTransform(svg.node()), { left } = room(), [x0, y0, x1, y1] = bounds();
+    const [sx0, sy0] = t.apply([x0, y0]), [sx1, sy1] = t.apply([x1, y1]);
+    if (sx0 < left || sy0 < 0 || sx1 > W() || sy1 > H()) Canvas.fit(450);
+  }
+
   return {
     mount(container, select) {
       el = container; onSelect = select;
@@ -623,8 +650,9 @@ const Canvas = (function () {
     render(g) {
       if (sim) sim.stop();
       // Keep where capabilities already are (and what is pinned) when redrawing, e.g. after the files switch.
-      const prev = new Map(caps.map((n) => [n.id, n]));
+      const prev = new Map(caps.map((n) => [n.id, n])), prevGroups = new Set(groups.map((x) => x.id));
       root.selectAll("*").remove();
+      if (glide) glide.stop();
 
       const own = g.groups.filter((x) => x.owners.length === 1);
       const next = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26 }));
@@ -637,11 +665,25 @@ const Canvas = (function () {
         next.forEach((c, i) => { c.x = best.nodes[i].x; c.y = best.nodes[i].y; });
       } else {
         next.forEach((c) => { const p = prev.get(c.id); Object.assign(c, { x: p.x, y: p.y, fx: p.fx, fy: p.fy }); });
-        // Files switched on: the blocks under the boxes may now overlap a neighbour. Push apart
-        // only what overlaps, so the map keeps its shape.
+        // Nodes switched on: the blocks under the boxes may now overlap a neighbour. Push apart
+        // only what overlaps, so the map keeps its shape, and glide there rather than jump.
         if (next.some((c) => c.blockH > prev.get(c.id).blockH)) {
+          const from = next.map((c) => [c.x, c.y]);
           d3.forceSimulation(next).force("collide", rectCollide(12)).velocityDecay(0.6).stop().tick(80);
-          next.forEach((c) => { c.vx = c.vy = 0; });
+          const to = next.map((c) => { c.vx = c.vy = 0; return [c.x, c.y]; });
+          if (to.some((p, i) => Math.hypot(p[0] - from[i][0], p[1] - from[i][1]) > 0.5)) {
+            next.forEach((c, i) => { [c.x, c.y] = from[i]; });
+            const ease = d3.easeCubicOut, ms = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320;
+            glide = d3.timer((t) => {
+              const e = ms ? ease(Math.min(1, t / ms)) : 1;
+              next.forEach((c, i) => {
+                c.x = from[i][0] + (to[i][0] - from[i][0]) * e; c.y = from[i][1] + (to[i][1] - from[i][1]) * e;
+                if (c.fx != null) { c.fx = c.x; c.fy = c.y; }
+              });
+              draw();
+              if (e >= 1) { glide.stop(); glide = null; reveal(); }
+            });
+          }
         }
       }
       caps = next;
@@ -656,7 +698,8 @@ const Canvas = (function () {
       hullSel.append("path").attr("class", "hull").on("click", (e, d) => { e.stopPropagation(); onSelect("dom:" + d.id); });
       hullSel.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
 
-      tieSel = linkG.append("g").selectAll("path").data(ties).join("path").attr("class", "tie");
+      tieSel = linkG.append("g").selectAll("path").data(ties).join("path")
+        .attr("class", (t) => "tie" + (!fresh && !prevGroups.has(t.group.id) ? " enter" : ""));
       // Light lines fade back so the heavy ones carry the picture.
       shareSel = linkG.append("g").selectAll("path").data(shares).join("path")
         .attr("class", "share")
@@ -682,7 +725,9 @@ const Canvas = (function () {
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
       capSel.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
 
-      groupSel = fileG.selectAll("g").data(groups).join("g").attr("class", "fgroup")
+      // Groups that weren't drawn before (just switched on) fade in; the rest stay as they were.
+      const isNew = (x) => !fresh && !prevGroups.has(x.id);
+      groupSel = fileG.selectAll("g").data(groups).join("g").attr("class", (x) => "fgroup" + (isNew(x) ? " enter" : ""))
         .on("mouseenter", (e, d) => { hovered = d; focus(); })
         .on("mouseleave", () => { hovered = null; focus(); });
       groupSel.append("circle").attr("class", (d) => "bubble" + (d.kind === "art" ? " art" : "") + (d.files.some((f) => f.drift) ? " drift" : ""))
@@ -750,19 +795,15 @@ const Canvas = (function () {
     fit(ms = 450) {
       moved = false;
       if (!caps.length || !W() || !H()) return;
-      const legend = el.querySelector(".legend[open]");
-      const left = legend && W() > 700 ? legend.offsetWidth + 12 : 0, w = W() - left;
-      // Box edges (with the files under them, and shared groups), so nothing at the side is cut off.
-      const boxes = [...caps.map((d) => [d.x - d.w / 2, d.y - 13, d.x + d.w / 2, d.y + 13 + d.blockH]),
-        ...groups.filter((x) => x.owners.length > 1).map((x) => [x.x - x.r, x.y - x.r, x.x + x.r, x.y + x.r])];
-      const x0 = d3.min(boxes, (b) => b[0]), x1 = d3.max(boxes, (b) => b[2]);
-      const y0 = d3.min(boxes, (b) => b[1]), y1 = d3.max(boxes, (b) => b[3]);
+      const { left, w } = room(), [x0, y0, x1, y1] = bounds();
       const pad = 40, s = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / w, (y1 - y0 + pad * 2) / H())));
       const t = d3.zoomIdentity.translate(left + w / 2, H() / 2).scale(s).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
       (ms ? svg.transition().duration(ms) : svg).call(zoom.transform, t);
     },
     // On resize, refit only while the user hasn't moved the view themselves.
     refit() { if (!moved) this.fit(0); },
+    // After switching nodes on or off: keep the view, unless something now falls outside it.
+    reveal() { if (!glide) reveal(); },
   };
 })();
 
@@ -1018,7 +1059,8 @@ window.addEventListener("DOMContentLoaded", () => {
   redraw();
   Canvas.fit(0);
 
-  files.onchange = arts.onchange = () => { label(); redraw(); Canvas.fit(); };
+  // Switching keeps the view where it is (refitting only when new nodes would fall outside it).
+  files.onchange = arts.onchange = () => { label(); redraw(); Canvas.reveal(); };
   // Close the menu on a press anywhere else (captured, since the canvas swallows its own presses).
   document.addEventListener("pointerdown", (e) => { if (!nodes.contains(e.target)) nodes.open = false; }, true);
   q.oninput = () => Page.search(q.value);
