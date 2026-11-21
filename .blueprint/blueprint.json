@@ -256,5 +256,19 @@
       "status": "approved",
       "baseCommit": "34ddef626ac44617913a7d735de36f1f8b5818da"
     }
+  },
+  "artifacts": {
+    "show-dont-prompt-post": {
+      "type": "webpage",
+      "value": "https://karolnov.dev/blog/show-dont-prompt/",
+      "description": "Blog post 'Show, don't prompt': tells readers to install the walkthrough plugin with /plugin marketplace add KarolNov/skills and /plugin install walkthrough@karolnov-skills",
+      "capabilities": [
+        "distribution"
+      ],
+      "checkedFiles": {
+        ".claude-plugin/marketplace.json": "24c0704d4ec9",
+        "README.md": "9d7d3e61e163"
+      }
+    }
   }
 }
