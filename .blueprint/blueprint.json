@@ -31,15 +31,11 @@
         "skills/blueprint/references/formats.md",
         "skills/blueprint/references/visuals.md",
         "skills/blueprint/scripts/render_mermaid.py",
-        "skills/blueprint/scripts/text_diagram.py",
-        "skills/blueprint/examples/**"
+        "skills/blueprint/scripts/text_diagram.py"
       ],
       "specVersion": "69d237c3b2db6f4f",
       "anchorsFiles": {
         "skills/blueprint/SKILL.md": "ce83009d6f73",
-        "skills/blueprint/examples/fictional-yjs-provider/brief.md": "9ec2d1b8408a",
-        "skills/blueprint/examples/fictional-yjs-provider/playground.html": "4c2bf54894f3",
-        "skills/blueprint/examples/fictional-yjs-provider/review.html": "de95a652c7ee",
         "skills/blueprint/references/formats.md": "238266f778b0",
         "skills/blueprint/references/propose.md": "71599851cb93",
         "skills/blueprint/references/visuals.md": "542144087ae9",
