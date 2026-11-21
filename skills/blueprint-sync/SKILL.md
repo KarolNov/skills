@@ -46,7 +46,7 @@ After the bookkeeping, run `python3 .blueprint/drift.py artifacts <the capabilit
 → updated / still fine / not yet
 ```
 
-Mark the ones answered **updated** or **still fine** checked in one call (`drift.py artifacts checked <id>…`) and leave the **not yet** ones stale, so the next CI run lists them again. Never open or edit an artifact, and don't suggest new ones.
+Mark the ones answered **updated** or **still fine** checked in one call (`drift.py artifacts checked <id>…`) and leave the **not yet** ones stale, so the next CI run lists them again. An artifact listed with an unknown capability names one that was renamed or removed outside `drift.py rename`: `checked` refuses it, so ask which capability it covers now, then `artifacts remove` it and `artifacts add` it again with the same id and the corrected names (that stamps it checked, so do it only for one answered updated or still fine). Never open or edit an artifact, and don't suggest new ones.
 
 ## Done when
 
