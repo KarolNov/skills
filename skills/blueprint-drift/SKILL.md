@@ -47,3 +47,4 @@ For each capability whose code now satisfies its spec (or whose remaining gaps a
 ## Done when
 
 Every requirement in scope is holds, fixed, marked not yet built with a link, or handed to sync. Report one line per capability: what was broken, what was fixed (with tests), what became a blueprint or tickets, and which capabilities to run `blueprint-sync` on next.
+
