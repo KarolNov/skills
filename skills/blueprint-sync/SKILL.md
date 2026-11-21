@@ -39,7 +39,7 @@ For a capability with no spec yet, draft the whole spec from its anchored code: 
 
 ## 4. Ask about stale artifacts
 
-After the bookkeeping, run `python3 .blueprint/drift.py artifacts <the capabilities you synced>`. It prints nothing when no artifact is stale; skip this step then. Otherwise put each stale artifact to the user with its type, value, description and changed files, in one round:
+After the bookkeeping, run `python3 .blueprint/drift.py artifacts <the capabilities you synced>`. If it answers `unknown command: artifacts`, the repo's copy predates artifacts: overwrite `.blueprint/drift.py` with `scripts/drift.py` from the blueprint skill (no format version changes) and run it again. It prints nothing when no artifact is stale; skip this step then. Otherwise put each stale artifact to the user with its type, value, description and changed files, in one round:
 
 ```
 **<id>** · <type> · <value>: <description> (changed: <files>)
