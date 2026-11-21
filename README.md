@@ -179,3 +179,4 @@ paragraph to the README next to the skills it extends. Check it with `claude plu
 ## License
 
 [MIT](LICENSE)
+
