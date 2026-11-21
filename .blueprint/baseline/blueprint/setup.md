@@ -72,7 +72,7 @@ When the target repo doesn't exist yet, setup SHALL still decide docs, tickets a
 
 ### Requirement: Drift guard from a template
 
-When the user accepts a CI drift guard, setup SHALL copy the skill's `blueprint-drift.yml` template to `.github/workflows/blueprint-drift.yml`, or, when the repo already has a workflow the user prefers, add the same steps there. The workflow SHALL run `python3 .blueprint/drift.py check` on every pull request. When anything drifted, it SHALL keep one PR comment listing the drifted capabilities and their changed files, updated on each push and marked back in sync once fixed, and emit a warning annotation for each drifted capability; a PR that never drifted gets neither. It SHALL fail only when `BLUEPRINT_DRIFT_FAIL` is `"true"`, and SHALL say that only code-side drift is checked. The template SHALL be presented as the recommended shape: the repo owns its copy, and setup SHALL tailor it when the user asks (for example adding a `drifted` label), keeping the drift check.
+When the user accepts a CI drift guard, setup SHALL copy the skill's `blueprint-drift.yml` template to `.github/workflows/blueprint-drift.yml`, or, when the repo already has a workflow the user prefers, add the same steps there. The workflow SHALL run `python3 .blueprint/drift.py check` and `python3 .blueprint/drift.py artifacts` on every pull request. When anything drifted or any artifact is stale, it SHALL keep one PR comment listing the drifted capabilities with their changed files, and the stale artifacts with their type, value (linked when it can be) and description, under "Artifacts that may need an update". The comment SHALL be updated on each push and marked back in sync once both lists are empty. The workflow SHALL emit a warning annotation for each drifted capability and each stale artifact; a PR that never drifted and never had a stale artifact gets neither. It SHALL fail only when `BLUEPRINT_DRIFT_FAIL` is `"true"` and a capability drifted, never for stale artifacts alone, and SHALL say that only code-side drift is checked. When the repo's `drift.py` has no `artifacts` command, the workflow SHALL skip the artifacts section with a notice. The template SHALL be presented as the recommended shape: the repo owns its copy, and setup SHALL tailor it when the user asks (for example adding a `drifted` label), keeping the drift check.
 
 - **Scenario: Team tailors it**
   - **WHEN** the user asks for a `drifted` label on PRs with drift
@@ -81,16 +81,28 @@ When the user accepts a CI drift guard, setup SHALL copy the skill's `blueprint-
   - **GIVEN** the template is installed with its defaults
   - **WHEN** a PR changes an anchored file without a sync
   - **THEN** the PR gets one comment naming the capability and file, a warning annotation, and the check passes
+- **Scenario: Stale artifact on a PR**
+  - **GIVEN** a `webpage` artifact covering a capability
+  - **WHEN** a PR changes a file that capability anchors
+  - **THEN** the comment lists the artifact's linked URL and description under "Artifacts that may need an update", and a warning annotation names it
 - **Scenario: Second push**
   - **WHEN** a later push to the same PR changes the drift
   - **THEN** the same comment is updated, not a new one added
 - **Scenario: Back in sync**
-  - **WHEN** a later push to the same PR leaves nothing drifted
+  - **WHEN** a later push to the same PR leaves nothing drifted and no artifact stale
   - **THEN** the same comment says everything is back in sync
 - **Scenario: Fork PR**
   - **WHEN** the workflow can't comment because the PR comes from a fork
-  - **THEN** the warning annotations still report the drift and the job doesn't fail for that reason
+  - **THEN** the warning annotations still report the drift and the stale artifacts, and the job doesn't fail for that reason
 - **Scenario: Strict mode**
   - **GIVEN** `BLUEPRINT_DRIFT_FAIL: "true"`
   - **WHEN** drift is found
   - **THEN** the job fails
+- **Scenario: Strict mode, stale artifact only**
+  - **GIVEN** `BLUEPRINT_DRIFT_FAIL: "true"`
+  - **WHEN** an artifact is stale and no capability drifted
+  - **THEN** the job passes and the comment lists the artifact
+- **Scenario: Older ****`drift.py`**
+  - **GIVEN** the repo's `.blueprint/drift.py` predates artifacts
+  - **WHEN** the workflow runs
+  - **THEN** capability drift is reported as before and the artifacts section is skipped with a notice

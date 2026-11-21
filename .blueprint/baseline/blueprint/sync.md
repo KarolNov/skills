@@ -91,3 +91,39 @@ Baselines SHALL live in `.blueprint/baseline/` and be committed with the code th
   - **GIVEN** two open PRs that each synced `auth/session`
   - **WHEN** the second is merged after the first
   - **THEN** git reports a conflict in `baseline/auth/session.md`, and it is resolved by running `/blueprint-sync auth/session` on the merged code
+
+### Requirement: Artifacts
+
+`blueprint.json` MAY hold a top-level `artifacts` map from a kebab-case id to `{type, value, description, capabilities, checkedFiles}`. `type` SHALL be one of `webpage`, `notion`, `confluence`, `linear`, `github` (value a URL), `file` (value `<repo>:<path>`), `obsidian` or `markdown` (value a path to the note). `capabilities` SHALL name capabilities or domains, where a domain stands for every capability in it at check time. `drift.py artifacts add` SHALL add one and stamp it as checked. `drift.py artifacts checked <id>… | --all` SHALL record a hash per file its capabilities' anchors match, and SHALL refuse an artifact whose `capabilities` name something that is no longer a capability or a domain. `drift.py artifacts remove <id>` SHALL drop one. `drift.py artifacts [--json] [--] [capability|domain…]` SHALL list each artifact whose files were added, removed or edited since it was checked, with those files, and, under any filter, each artifact whose `capabilities` name something that is no longer a capability or a domain, marked unknown. It SHALL exit 0, unless a filter names no capability or domain. `drift.py rename` SHALL rename the capability in every artifact that names it, and `drift.py prune` SHALL trim the dropped files from the `checkedFiles` of artifacts over that capability, unless another capability they cover still matches them.
+
+- **Scenario: Code changes after a check**
+  - **GIVEN** an artifact covering `billing/invoices`, checked
+  - **WHEN** a file anchored by `billing/invoices` changes
+  - **THEN** `drift.py artifacts` lists that artifact with the file
+- **Scenario: Spec synced, artifact not checked**
+  - **GIVEN** a stale artifact
+  - **WHEN** its capability is synced and stamped, but the artifact is not marked checked
+  - **THEN** the artifact is still listed
+- **Scenario: Domain-wide artifact**
+  - **GIVEN** an artifact covering the domain `billing`
+  - **WHEN** a capability is added to `billing` and its code later changes
+  - **THEN** the artifact is listed
+- **Scenario: Unknown type**
+  - **WHEN** `drift.py artifacts add` is given a type not in that list, or a value of the wrong shape for its type
+  - **THEN** it refuses and writes nothing
+- **Scenario: Page in the same backend**
+  - **GIVEN** a repo whose backend is Notion
+  - **WHEN** an artifact of type `notion` is added with another page's URL
+  - **THEN** it is stored with type `notion` and listed like any other artifact
+- **Scenario: Capability removed by hand**
+  - **GIVEN** an artifact naming `billing/old`, which is no longer a capability
+  - **WHEN** `drift.py artifacts billing/invoices` runs
+  - **THEN** the artifact is listed, marked unknown, and `drift.py artifacts checked` refuses it
+
+### Requirement: Sync asks about stale artifacts
+
+After the bookkeeping, sync SHALL list the stale artifacts of the capabilities it synced and ask, for each, whether it was updated, is still accurate, or is left for later. It SHALL mark the first two checked and leave the third stale. An artifact that names an unknown capability SHALL be added again with the corrected names, and only when the user says it was updated or is still accurate. Sync SHALL never edit an artifact.
+
+- **Scenario: Article left for later**
+  - **WHEN** the user says a stale support article will be updated later
+  - **THEN** sync leaves it stale, so the next CI run lists it again
