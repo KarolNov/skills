@@ -240,6 +240,12 @@
       "baseCommit": "9b41921b690996696b6fbf11def92ae163842a82",
       "branch": "kn/blueprint-map-specs",
       "pr": "https://github.com/KarolNov/skills/pull/34"
+    },
+    "artifacts": {
+      "brief": "https://app.notion.com/p/41e43cce21f2819fbf8eee562700bc8a",
+      "review": "https://app.notion.com/p/41e43cce21f28164881ec1d8f239cc72",
+      "status": "approved",
+      "baseCommit": "a59f9af0acf8bad2e19014eb80479a427677fea0"
     }
   }
 }
