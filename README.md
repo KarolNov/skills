@@ -115,7 +115,7 @@ that shape. For behavior over time (retries, ordering, offline, caching), it off
 **playground**: a small interactive model with scenario buttons, knobs like latency or an
 offline toggle, and a before/after switch that runs the same scenario through the old and the new design.
 In Notion the diagrams go in as rendered images (Mermaid source in a toggle underneath) and the playground runs inside the review as an embedded HTML block.
-Example, a blueprint for adding network sync to `fictional-yjs-provider`: [see it in Notion](https://app.notion.com/p/karolnov/Blueprint-example-fictional-yjs-provider-41343cce21f281668919f46ad2891139) (Specs and Blueprints databases, the review with its diagrams and live playground, the brief inside it), or the same files here: [brief](skills/blueprint/examples/fictional-yjs-provider/brief.md), [review](skills/blueprint/examples/fictional-yjs-provider/review.html) and [playground](skills/blueprint/examples/fictional-yjs-provider/playground.html).
+Examples: this repo runs blueprint on itself (see [`.blueprint/`](.blueprint/) and its [specs and blueprints in Notion](https://app.notion.com/p/41c43cce21f2819ba9e9e27bc322d312)), and so does [jambo](https://github.com/KarolNov/jambo).
 
 **Docs and tickets can live apart:** for example specs and blueprints in Notion, under the project's own page, and tasks as GitHub issues in the repo. Ticket trackers: GitHub issues, Linear, Jira, a Notion tasks database (the team's own, or a new one beside the specs), or none.
 
