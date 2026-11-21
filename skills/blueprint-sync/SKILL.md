@@ -37,6 +37,17 @@ For each capability, show the result as a delta (ADDED / MODIFIED / REMOVED, [fo
 
 For a capability with no spec yet, draft the whole spec from its anchored code: what the code does today, including behavior that looks accidental, marked `<!-- verify: … -->` for the user to decide. Create the page as the backend file says (inside its domain, when its name has one in `domains`), set `ref`, link it from that domain overview's Capabilities list (link its existing "no spec yet" line and drop the marker; add a line only if it isn't listed), and do the bookkeeping.
 
+## 4. Ask about stale artifacts
+
+After the bookkeeping, run `python3 .blueprint/drift.py artifacts <the capabilities you synced>`. If it answers `unknown command: artifacts`, the repo's copy predates artifacts: overwrite `.blueprint/drift.py` with `scripts/drift.py` from the blueprint skill (no format version changes) and run it again. It prints nothing when no artifact is stale; skip this step then. Otherwise put each stale artifact to the user with its type, value, description and changed files, in one round:
+
+```
+**<id>** · <type> · <value>: <description> (changed: <files>)
+→ updated / still fine / not yet
+```
+
+Mark the ones answered **updated** or **still fine** checked in one call (`drift.py artifacts checked <id>…`) and leave the **not yet** ones stale, so the next CI run lists them again. An artifact listed with an unknown capability names one that was renamed or removed outside `drift.py rename`: `checked` refuses it, so ask which capability it covers now, then `artifacts remove` it and `artifacts add` it again with the same id and the corrected names (that stamps it checked, so do it only for one answered updated or still fine). Never open or edit an artifact, and don't suggest new ones.
+
 ## Done when
 
-Every capability in scope is `in-sync` in `drift.py check` with its `specVersion` and baseline matching the page, apart from those handed to `blueprint-drift`. Report one line per capability: what changed in the code, what changed in the spec (linked), and which capabilities to run `blueprint-drift` on. Then run `python3 .blueprint/drift.py hint` and end the report with its line when it prints one (more than 10 capabilities without a domain, or 3 or more sharing a top-level folder without one). Never regroup or rename anything here; that is `/blueprint-tidy`, run when the user chooses.
+Every capability in scope is `in-sync` in `drift.py check` with its `specVersion` and baseline matching the page, apart from those handed to `blueprint-drift`. Report one line per capability: what changed in the code, what changed in the spec (linked), and which capabilities to run `blueprint-drift` on, then one line naming any artifacts left stale. Then run `python3 .blueprint/drift.py hint` and end the report with its line when it prints one (more than 10 capabilities without a domain, or 3 or more sharing a top-level folder without one). Never regroup or rename anything here; that is `/blueprint-tidy`, run when the user chooses.

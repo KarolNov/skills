@@ -109,6 +109,10 @@ Each change has two documents that sit side by side in the backend and link to e
 ### <capability> · RENAMED
 - <old name> → <new name>
 
+## Artifacts
+<optional: resources outside the repo that describe the touched capabilities; absent when none were named>
+- **<id, kebab-case>** · <type> · <value> · <description> · covers <capabilities or domains>
+
 ## Tasks
 - [ ] 1. <a vertical slice: one observable step that can be built and checked on its own>
 - [ ] 2. …
@@ -127,6 +131,7 @@ Each change has two documents that sit side by side in the backend and link to e
 - A change that alters no observable behavior (a refactor, tooling) has an empty Spec delta and says so in one line.
 - Tasks are tracer bullets, each ending in something runnable or testable, not layers ("all the models", then "all the endpoints").
 - The Code map is the one place for file paths: it guides the build and goes stale harmlessly once the change is applied. Capability specs never carry it.
+- **Artifacts** lists the resources outside the repo (a support article, a docs page, a README in another repo) that describe the capabilities this change touches, each in the shape of an `artifacts` entry in `blueprint.json` below. Apply adds them with `drift.py artifacts add`; until then they live only on the brief.
 
 ### Review
 
@@ -197,6 +202,15 @@ Each change has two documents that sit side by side in the backend and link to e
       "baseRepo": "<only when baseCommit is in another repo, e.g. owner/source-repo>",
       "branch": "kn/add-sso-login"
     }
+  },
+  "artifacts": {
+    "sso-help-article": {
+      "type": "webpage",
+      "value": "https://help.example.com/articles/sign-in-with-sso",
+      "description": "Help-center article on signing in with SSO",
+      "capabilities": ["auth"],
+      "checkedFiles": { "src/auth/session.ts": "<content hash, written by drift.py artifacts add / checked, trimmed by prune>" }
+    }
   }
 }
 ```
@@ -209,3 +223,9 @@ Each change has two documents that sit side by side in the backend and link to e
 - **baseRepo** is set when `baseCommit` belongs to another repo (a change that creates this repo from another one's code). Without it, `baseCommit` is a commit of this repo.
 - **specVersion** is whatever the backend offers as a cheap "has this page changed" marker (see the backend file). When it differs from the backend's current marker, the spec moved.
 - `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp` (and `anchorsFiles` trimmed by `drift.py prune`); never edit them by hand. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.
+- **artifacts** (optional) maps a kebab-case id to a resource outside the repo that describes one or more capabilities, so whoever changes their code is told to check it. Older readers ignore the key, so it needs no format version bump.
+  - `type` is one of `webpage` (value a URL), `file` (a file in another git repo: `<repo>:<path>`, where `<repo>` is `owner/name` on GitHub or a git URL), `notion`, `confluence`, `linear` or `github` (value the page's URL; `github` is for an issue, PR, wiki or Pages URL, while a file in a repo is `file`), `obsidian` (a path relative to the vault, or an `obsidian://` URL) or `markdown` (a path relative to the notes folder's root, or absolute). Types are named after the tool, not the repo's backend, and any type can be used whatever the backend is; when the backend is that tool, relative paths resolve against its `docs.location`.
+  - `capabilities` names capabilities or domains; a domain stands for every capability in it at check time, so one added to the domain later is covered too.
+  - `checkedFiles` is the artifact's own stamp: a hash per file its capabilities' anchors matched when someone last checked it. The artifact is **stale** from the moment one of those files is added, removed or edited until it is marked checked again, whether or not the spec was synced in between.
+  - Manage them only through `drift.py`: `artifacts add --id <id> --type <type> --value <value> --description <text> <capability>…` adds one, stamped as checked (`--id` is derived from the description when left out, and the value's shape is checked per type); `add` refuses an unknown type, a value of the wrong shape, an empty description, a name that is neither a capability nor a domain, and an id that isn't kebab-case or is taken. `artifacts checked <id>… | --all` restamps; `artifacts remove <id>` drops one; `artifacts [--json] [--] [capability|domain…]` lists the stale ones with their changed files and exits 0 unless a filter names no capability or domain (`--` lets a filter be named `add`, `checked` or `remove`). It also lists, under any filter, an artifact whose `capabilities` names something that is no longer a capability or a domain, marked unknown; `checked` refuses such an artifact until its `capabilities` are fixed. `drift.py rename` renames a capability in every artifact too, and `drift.py prune` trims the stamps of artifacts over the pruned capability. Never edit `checkedFiles` by hand.
+  - Artifacts are bookkeeping, like anchors: they stay in this file, never on spec pages.
