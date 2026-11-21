@@ -15,6 +15,14 @@ since its spec was last synced. It never talks to the spec backend.
     drift.py rename OLD NEW                    rename a capability, keeping its stamps
     drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match
     drift.py hint                              one line suggesting /blueprint-tidy, or nothing
+    drift.py artifacts [--json] [--] [CAPABILITY|DOMAIN ...]
+                                               stale artifacts (outside resources describing a
+                                               capability) and their changed files; exit 0.
+                                               `--` lets a filter be named add/checked/remove
+    drift.py artifacts add --type T --value V --description D [--id ID] CAPABILITY ...
+                                               add one, stamped as checked
+    drift.py artifacts checked ID ... | --all  record the current state as checked
+    drift.py artifacts remove ID               drop one
     drift.py version                           the format version of blueprint.json
 
 Run from anywhere inside the repository.
@@ -26,6 +34,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 
 def git(*args, check=True):
@@ -117,6 +126,21 @@ def uncommitted():
             | git_paths("ls-files", "-o", "--exclude-standard"))
 
 
+def cached_hashes():
+    """file_hashes with a cache, so a file several capabilities match is read once."""
+    cache = {}
+
+    def hashes(paths):
+        cache.update(file_hashes([p for p in paths if p not in cache]))
+        return {p: cache[p] for p in paths}
+    return hashes
+
+
+def changed_files(old, now):
+    """Paths added, removed or edited between two {path: hash} stamps, sorted."""
+    return sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
+
+
 def code_status(spec, paths, hashes=file_hashes):
     """A capability's code-side status and changed files, given the files its anchors match.
 
@@ -128,8 +152,7 @@ def code_status(spec, paths, hashes=file_hashes):
         # Mapped but never written as a spec (lazy setup): nothing to drift from.
         return "no-spec", []
     # Compare file by file, so additions, deletions and renames all show up.
-    old, now = spec["anchorsFiles"], hashes(paths)
-    changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
+    changed = changed_files(spec["anchorsFiles"], hashes(paths))
     return ("code-moved" if changed else "in-sync"), changed
 
 
@@ -213,8 +236,21 @@ def cmd_prune(args):
     compiled, old = compile_anchors(spec), spec.get("anchorsFiles", {})
     kept = {p: h for p, h in old.items() if matching_anchors(compiled, p)}
     spec["anchorsFiles"] = kept
+    # Artifacts over it drop the same paths, unless another capability they cover keeps them.
+    specs, domains = state["specs"], state.get("domains", {})
+    trimmed = 0
+    for art in state.get("artifacts", {}).values():
+        covers = resolve(art.get("capabilities", []), specs, domains)
+        if args[0] not in covers:
+            continue
+        compiled_all = [compile_anchors(specs[c]) for c in covers]
+        checked = art.get("checkedFiles", {})
+        art["checkedFiles"] = {p: h for p, h in checked.items()
+                               if any(matching_anchors(c, p) for c in compiled_all)}
+        trimmed += len(checked) - len(art["checkedFiles"])
     save(state)
-    print(f"pruned {args[0]}: dropped {len(old) - len(kept)} of {len(old)} stamps")
+    print(f"pruned {args[0]}: dropped {len(old) - len(kept)} of {len(old)} stamps"
+          + (f"; {trimmed} artifact stamps" if trimmed else ""))
     return 0
 
 
@@ -298,6 +334,11 @@ def cmd_rename(args):
         sys.exit(f"baseline already exists: {dst.relative_to(ROOT)}")
     # Rebuild in place so the key keeps its position, and with it the order of check's report.
     state["specs"] = {(new if k == old else k): v for k, v in specs.items()}
+    renamed = []
+    for aid, art in state.get("artifacts", {}).items():
+        if old in art.get("capabilities", []):
+            art["capabilities"] = [new if c == old else c for c in art["capabilities"]]
+            renamed.append(aid)
     has_baseline = src.exists()
     if has_baseline:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -308,7 +349,8 @@ def cmd_rename(args):
             parent.rmdir()
             parent = parent.parent
     save(state)
-    print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else ""))
+    print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else "")
+          + (f"; {len(renamed)} artifacts updated" if renamed else ""))
     print(f"  the backend still names it {old}: rename its page and the briefs that list it",
           file=sys.stderr)
     return 0
@@ -353,6 +395,215 @@ def cmd_hint(args):
     return 0
 
 
+# Artifacts: resources outside the repo (support articles, docs pages, files in other repos)
+# that describe capabilities. Each has its own checked stamp, so syncing a spec never clears
+# the reminder to look at the article.
+
+URL_TYPES = ("webpage", "notion", "confluence", "linear", "github")
+ARTIFACT_TYPES = URL_TYPES + ("file", "obsidian", "markdown")
+KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+# A git URL with a path after the host: scheme://host/path or scp-style user@host:path.
+GIT_URL = re.compile(r"^(?:[a-z][a-z0-9+.-]*://[^/\s]+/\S+|[^@\s/]+@[^:\s/]+:\S+)$")
+# The same URL forms on github.com, capturing owner/name.
+GITHUB_GIT_URL = re.compile(
+    r"^(?:https?://github\.com/|ssh://git@github\.com/|git@github\.com:)"
+    r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+
+
+def value_problem(kind, value):
+    """Why value isn't the right shape for an artifact of this type, or None."""
+    if kind not in ARTIFACT_TYPES:
+        return f"unknown type {kind!r}: use one of {', '.join(ARTIFACT_TYPES)}"
+    if kind in URL_TYPES:
+        if not re.match(r"^https?://[^\s/]+\S*$", value):
+            return f"a {kind} value is a URL (http:// or https://)"
+    elif kind == "file":
+        repo, sep, path = value.rpartition(":")
+        if not sep or not path.strip() or not (GITHUB_REPO.match(repo) or GIT_URL.match(repo)):
+            return "a file value is <repo>:<path>, with <repo> owner/name or a git URL"
+    elif not value.strip():
+        return f"a {kind} value is a path to the note"
+    return None
+
+
+def file_link(kind, value):
+    """Where a reader can open the artifact from CI, or None when only its tool can."""
+    if kind in URL_TYPES:
+        return value
+    if kind == "file":
+        repo, _, path = value.rpartition(":")
+        m = GITHUB_GIT_URL.match(repo)
+        if m or GITHUB_REPO.match(repo):
+            owner_name = m.group(1) if m else repo
+            return f"https://github.com/{owner_name}/blob/HEAD/{quote(path.lstrip('/'))}"
+    return None
+
+
+def resolve(names, specs, domains):
+    """Capability names, with each domain standing for every capability in it now."""
+    out = []
+    for name in names:
+        hits = ([s for s in specs if s.startswith(name + "/")] if name in domains
+                else [name] if name in specs else [])
+        out.extend(h for h in hits if h not in out)
+    return out
+
+
+def unknown_names(names, specs, domains):
+    return [n for n in names if n not in specs and n not in domains]
+
+
+def artifact_files(covers, specs, files, memo=None):
+    """The files the anchors of these capabilities match, now. memo ({name: files}) is
+    shared across artifacts so each capability's anchors are matched once."""
+    memo = {} if memo is None else memo
+    paths = set()
+    for name in covers:
+        if name not in memo:
+            memo[name] = matched(specs[name], files)
+        paths.update(memo[name])
+    return sorted(paths)
+
+
+def dangling(art, specs, domains):
+    """The names in an artifact's capabilities that are no longer a capability or a domain."""
+    return unknown_names(art.get("capabilities", []), specs, domains)
+
+
+def artifact_ids(args, arts, what):
+    if "--all" in args:
+        return list(arts)
+    ids = [a for a in args if not a.startswith("--")]
+    if not ids:
+        sys.exit(f"artifacts {what} needs artifact ids" + (" or --all" if what == "checked" else ""))
+    if missing := [i for i in ids if i not in arts]:
+        sys.exit(f"unknown artifact: {', '.join(missing)}")
+    return ids
+
+
+def slug(text, taken):
+    words = re.findall(r"[a-z0-9]+", text.lower())[:5]
+    base = "-".join(words) or "artifact"
+    out, n = base, 2
+    while out in taken:
+        out, n = f"{base}-{n}", n + 1
+    return out
+
+
+def artifacts_list(args):
+    as_json = "--json" in args
+    names = [a for a in args if not a.startswith("--")]
+    state, files = load(), repo_files()
+    specs, domains = state.get("specs", {}), state.get("domains", {})
+    if missing := unknown_names(names, specs, domains):
+        sys.exit(f"unknown capability: {', '.join(missing)}")
+    wanted = set(resolve(names, specs, domains))
+    hashes, memo = cached_hashes(), {}
+
+    report = []
+    for aid, art in state.get("artifacts", {}).items():
+        covers = resolve(art.get("capabilities", []), specs, domains)
+        # A name that no longer exists (renamed or removed by hand) is always reported, even
+        # under a filter, since it can't be told which capability it was meant to cover.
+        unknown = dangling(art, specs, domains)
+        if names and not unknown and not wanted.intersection(covers):
+            continue
+        changed = changed_files(art.get("checkedFiles", {}),
+                                hashes(artifact_files(covers, specs, files, memo)))
+        if changed or unknown:
+            report.append({"id": aid, "type": art.get("type"), "value": art.get("value"),
+                           "link": file_link(art.get("type"), art.get("value", "")),
+                           "description": art.get("description", ""),
+                           "capabilities": art.get("capabilities", []), "changed": changed,
+                           "unknown": unknown})
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        for r in report:
+            print(f"{r['id']}  {r['type']}  {r['value']}")
+            if r["description"]:
+                print(f"    {r['description']}")
+            if r["unknown"]:
+                print(f"    unknown capability: {', '.join(r['unknown'])}: fix its capabilities")
+            print("".join(f"      {f}\n" for f in r["changed"]), end="")
+    return 0
+
+
+def artifacts_add(args):
+    import argparse
+    parser = argparse.ArgumentParser(prog="drift.py artifacts add")
+    parser.add_argument("--type", required=True, dest="kind")
+    parser.add_argument("--value", required=True)
+    parser.add_argument("--description", required=True)
+    parser.add_argument("--id")
+    parser.add_argument("capabilities", nargs="+")
+    opts = parser.parse_args(args)
+    state = load()
+    specs, domains = state.get("specs", {}), state.get("domains", {})
+    arts = state.get("artifacts", {})
+    if why := value_problem(opts.kind, opts.value):
+        sys.exit(f"can't add artifact: {why}")
+    if not opts.description.strip():
+        sys.exit("can't add artifact: the description is empty")
+    if missing := unknown_names(opts.capabilities, specs, domains):
+        sys.exit(f"unknown capability or domain: {', '.join(missing)}")
+    aid = opts.id if opts.id is not None else slug(opts.description, arts)
+    if not KEBAB.match(aid):
+        sys.exit(f"artifact id {aid!r} isn't kebab-case")
+    if aid in arts:
+        sys.exit(f"artifact already exists: {aid}")
+    caps = list(dict.fromkeys(opts.capabilities))
+    art = {"type": opts.kind, "value": opts.value, "description": opts.description.strip(),
+           "capabilities": caps}
+    # Whoever adds it is taken to have just read it.
+    art["checkedFiles"] = file_hashes(artifact_files(resolve(caps, specs, domains), specs,
+                                                     repo_files()))
+    state.setdefault("artifacts", {})[aid] = art
+    save(state)
+    print(f"added {aid}: {len(art['checkedFiles'])} files checked")
+    return 0
+
+
+def artifacts_checked(args):
+    state, files = load(), repo_files()
+    specs, domains = state.get("specs", {}), state.get("domains", {})
+    arts = state.get("artifacts", {})
+    ids = artifact_ids(args, arts, "checked")
+    # Stamping one with a dangling name would hide it for good: its files would never change.
+    if bad := [f"{a} ({', '.join(u)})" for a in ids if (u := dangling(arts[a], specs, domains))]:
+        sys.exit(f"unknown capability in artifact: {'; '.join(bad)}: fix its capabilities first")
+    hashes, memo = cached_hashes(), {}
+    for aid in ids:
+        covers = resolve(arts[aid].get("capabilities", []), specs, domains)
+        arts[aid]["checkedFiles"] = hashes(artifact_files(covers, specs, files, memo))
+        print(f"checked {aid}: {len(arts[aid]['checkedFiles'])} files")
+    save(state)
+    return 0
+
+
+def artifacts_remove(args):
+    if len(args) != 1 or args[0].startswith("--"):
+        sys.exit("artifacts remove takes one artifact id")
+    state = load()
+    arts = state.get("artifacts", {})
+    artifact_ids(args, arts, "remove")
+    del arts[args[0]]
+    save(state)
+    print(f"removed {args[0]}")
+    return 0
+
+
+def cmd_artifacts(args):
+    subs = {"add": artifacts_add, "checked": artifacts_checked, "remove": artifacts_remove}
+    if args and args[0] in subs:
+        return subs[args[0]](args[1:])
+    if args and args[0] == "--":
+        # `artifacts -- remove`: a filter by a capability that shares a subcommand's name.
+        args = args[1:]
+    return artifacts_list(args)
+
+
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print(__doc__)
@@ -360,7 +611,8 @@ def main():
     cmd, args = sys.argv[1], sys.argv[2:]
     handlers = {"check": cmd_check, "stamp": cmd_stamp, "files": cmd_files,
                 "unanchored": cmd_unanchored, "overlaps": cmd_overlaps, "rename": cmd_rename,
-                "prune": cmd_prune, "hint": cmd_hint, "version": cmd_version}
+                "prune": cmd_prune, "hint": cmd_hint, "version": cmd_version,
+                "artifacts": cmd_artifacts}
     if cmd not in handlers:
         sys.exit(f"unknown command: {cmd}")
     return handlers[cmd](args)

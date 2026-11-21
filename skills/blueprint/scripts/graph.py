@@ -43,16 +43,6 @@ def domain_of(name, domains):
     return head if "/" in name and head in domains else None
 
 
-def cached_hashes():
-    """drift.file_hashes with a cache, so a file several capabilities match is read once."""
-    cache = {}
-
-    def hashes(paths):
-        cache.update(drift.file_hashes([p for p in paths if p not in cache]))
-        return {p: cache[p] for p in paths}
-    return hashes
-
-
 def repo_name(root):
     """The repository's folder name, the main checkout's when run inside a linked worktree."""
     common = drift.git("rev-parse", "--path-format=absolute", "--git-common-dir", check=False).strip()
@@ -67,7 +57,7 @@ def build(state=None, files=None):
     files = drift.repo_files() if files is None else files
     specs, domains = state.get("specs", {}), state.get("domains", {})
 
-    nodes, owners, hashes = [], {}, cached_hashes()
+    nodes, owners, hashes = [], {}, drift.cached_hashes()
     for name, spec in specs.items():
         compiled = drift.compile_anchors(spec)
         mine = [f for f in files if drift.matching_anchors(compiled, f)]
