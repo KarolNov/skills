@@ -440,6 +440,15 @@ def file_link(kind, value):
     return None
 
 
+def open_link(kind, value):
+    """Where a browser can open the artifact: file_link, plus obsidian:// URLs, which a
+    browser hands to the Obsidian app. None when nothing can open it."""
+    link = file_link(kind, value)
+    if link is None and kind == "obsidian" and value.startswith("obsidian://"):
+        link = value
+    return link
+
+
 def resolve(names, specs, domains):
     """Capability names, with each domain standing for every capability in it now."""
     out = []
@@ -469,6 +478,15 @@ def artifact_files(covers, specs, files, memo=None):
 def dangling(art, specs, domains):
     """The names in an artifact's capabilities that are no longer a capability or a domain."""
     return unknown_names(art.get("capabilities", []), specs, domains)
+
+
+def artifact_state(art, specs, domains, files, hashes, memo):
+    """An artifact's capabilities now (covers), the files changed since its check (changed)
+    and the names that are gone (unknown): stale when either of the last two is non-empty."""
+    covers = resolve(art.get("capabilities", []), specs, domains)
+    changed = changed_files(art.get("checkedFiles", {}),
+                            hashes(artifact_files(covers, specs, files, memo)))
+    return covers, changed, dangling(art, specs, domains)
 
 
 def artifact_ids(args, arts, what):
@@ -503,14 +521,12 @@ def artifacts_list(args):
 
     report = []
     for aid, art in state.get("artifacts", {}).items():
-        covers = resolve(art.get("capabilities", []), specs, domains)
         # A name that no longer exists (renamed or removed by hand) is always reported, even
         # under a filter, since it can't be told which capability it was meant to cover.
-        unknown = dangling(art, specs, domains)
-        if names and not unknown and not wanted.intersection(covers):
+        if (names and not dangling(art, specs, domains)
+                and not wanted.intersection(resolve(art.get("capabilities", []), specs, domains))):
             continue
-        changed = changed_files(art.get("checkedFiles", {}),
-                                hashes(artifact_files(covers, specs, files, memo)))
+        _, changed, unknown = artifact_state(art, specs, domains, files, hashes, memo)
         if changed or unknown:
             report.append({"id": aid, "type": art.get("type"), "value": art.get("value"),
                            "link": file_link(art.get("type"), art.get("value", "")),

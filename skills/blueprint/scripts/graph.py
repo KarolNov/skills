@@ -115,14 +115,8 @@ def artifacts(state, files, hashes, memo):
     out = []
     for aid, art in state.get("artifacts", {}).items():
         kind, value = art.get("type"), art.get("value", "")
-        covers = drift.resolve(art.get("capabilities", []), specs, domains)
-        changed = drift.changed_files(art.get("checkedFiles", {}),
-                                      hashes(drift.artifact_files(covers, specs, files, memo)))
-        unknown = drift.dangling(art, specs, domains)
-        link = drift.file_link(kind, value)
-        if link is None and kind == "obsidian" and value.startswith("obsidian://"):
-            link = value  # a browser hands it to the Obsidian app
-        out.append({"id": aid, "type": kind, "value": value, "link": link,
+        covers, changed, unknown = drift.artifact_state(art, specs, domains, files, hashes, memo)
+        out.append({"id": aid, "type": kind, "value": value, "link": drift.open_link(kind, value),
                     "description": art.get("description", ""),
                     "capabilities": art.get("capabilities", []), "covers": covers,
                     "stale": bool(changed or unknown), "changed": changed, "unknown": unknown})

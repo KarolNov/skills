@@ -594,7 +594,7 @@ const Canvas = (function () {
   }
 
   const drag = () => d3.drag()
-    .on("start", (e, d) => { d.moved = false; })
+    .on("start", (e, d) => { d.moved = false; if (glide) glide.finish(); })  // the drag takes over from a glide
     .on("drag", (e, d) => {
       if (!d.moved) { d.moved = true; sim.alphaTarget(0.02).restart(); }
       d.fx = d.x = e.x; d.fy = d.y = e.y;  // the running simulation's tick redraws, files included
@@ -652,7 +652,7 @@ const Canvas = (function () {
       // Keep where capabilities already are (and what is pinned) when redrawing, e.g. after the files switch.
       const prev = new Map(caps.map((n) => [n.id, n])), prevGroups = new Set(groups.map((x) => x.id));
       root.selectAll("*").remove();
-      if (glide) glide.stop();
+      if (glide) { glide.stop(); glide = null; }
 
       const own = g.groups.filter((x) => x.owners.length === 1);
       const next = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26 }));
@@ -681,8 +681,13 @@ const Canvas = (function () {
                 if (c.fx != null) { c.fx = c.x; c.fy = c.y; }
               });
               draw();
-              if (e >= 1) { glide.stop(); glide = null; reveal(); }
+              if (e >= 1) glide.finish();
             });
+            // Jump to the end (when done, or when a drag starts mid-way).
+            glide.finish = () => {
+              next.forEach((c, i) => { [c.x, c.y] = to[i]; if (c.fx != null) { c.fx = c.x; c.fy = c.y; } });
+              glide.stop(); glide = null; draw(); reveal();
+            };
           }
         }
       }
@@ -872,13 +877,13 @@ const capLink = (id) => `<a class="link" data-id="${esc(id)}">${esc(id)}</a>`;
 // One artifact: its type, value (a link when it opens in a browser), description and, when stale,
 // what changed since it was checked. `from` is the capability whose panel lists it, to say when
 // it covers that capability through its domain.
-function artifact(a, from) {
+function artifact(a, from, titled) {
   const href = a.link && /^(https?|obsidian):/i.test(a.link) ? a.link : null;
   const via = from && !a.capabilities.includes(from.id) && from.domain && a.capabilities.includes(from.domain) ? from.domain : null;
   return `<div class="art-card${a.stale ? " stale" : ""}">
     <span class="pill">${esc(a.type)}</span>${a.stale ? `<span class="pill drift">stale</span>` : ""}<a class="link" data-id="art:${esc(a.id)}">${esc(a.id)}</a>
     <div class="val">${href ? `<a class="link" href="${esc(href)}" target="_blank" rel="noopener">${esc(a.value)} ↗</a>` : `<code>${esc(a.value)}</code>`}</div>
-    ${a.description ? `<p>${inline(a.description)}</p>` : ""}
+    ${a.description && !titled ? `<p>${inline(a.description)}</p>` : ""}
     ${via ? `<p class="muted">Covers every capability in <a class="link" data-id="dom:${esc(via)}">${esc(via)}</a>.</p>` : ""}
     ${a.changed.length ? `<p class="muted">${plural(a.changed.length, "file changed", "files changed")} since it was last checked:</p>
       <ul class="files">${a.changed.map((f) => `<li class="changed">${fileOwners[f] ? `<a class="link" data-id="file:${esc(f)}">${esc(f)}</a>` : esc(f)}</li>`).join("")}</ul>` : ""}
@@ -929,7 +934,7 @@ const Page = {
       <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(new Set(d.nodes.map((n) => n.domain).filter(Boolean)).size, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
       ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
       ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
-      ${stale.length ? `<h3>Stale artifacts</h3>${stale.map((a) => `<p>${a.description ? inline(a.description) : esc(a.value)} <span class="pill drift">${esc(a.type)}</span><br>${a.covers.map(capLink).join(" · ")}</p>`).join("")}` : ""}
+      ${stale.length ? `<h3>Stale artifacts</h3>${stale.map((a) => `<p><a class="link" data-id="art:${esc(a.id)}">${esc(a.description || a.value)}</a> <span class="pill drift">${esc(a.type)}</span><br>${a.covers.map(capLink).join(" · ")}</p>`).join("")}` : ""}
       <p class="empty">Click a capability, line, file, artifact or domain outline for its details. Search covers names, purposes, requirements, scenarios, file paths and artifacts.</p>`;
   },
 
@@ -984,7 +989,7 @@ const Page = {
   artifact(id) {
     const a = artById[id];
     if (!a) return this.overview();
-    return `<h2>${esc(a.description || a.id)}</h2>${artifact(a, null)}
+    return `<h2>${esc(a.description || a.id)}</h2>${artifact(a, null, true)}
       <h3>Covers (${a.covers.length})</h3>${a.covers.map((c) => `<p>${capLink(c)}${a.capabilities.includes(c) ? "" : ` <span class="muted">through ${esc(byId[c].domain)}</span>`}</p>`).join("")}`;
   },
 
@@ -1040,7 +1045,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const legend = document.getElementById("legend"), nodes = document.getElementById("nodes");
   document.getElementById("repo").textContent = DATA.repo;
   files.checked = !!DATA.filesDefault;
-  arts.checked = !!(DATA.artifacts || []).length;
+  arts.checked = (DATA.artifacts || []).some((a) => a.covers.length);
   arts.disabled = !arts.checked;  // nothing to draw
   const show = () => ({ files: files.checked, artifacts: arts.checked });
   const label = () => {
