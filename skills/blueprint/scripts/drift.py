@@ -12,7 +12,8 @@ since its spec was last synced. It never talks to the spec backend.
                                                the given anchors instead (writes nothing)
     drift.py unanchored [--since REF]          changed files no capability covers
     drift.py overlaps [--json]                 files two or more capabilities' anchors match
-    drift.py rename OLD NEW                    rename a capability, keeping its stamps
+    drift.py rename OLD NEW                    rename a capability, keeping its stamps; also
+                                               renames it in artifacts and @scenario tags
     drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match
     drift.py hint                              one line suggesting /blueprint-tidy, or nothing
     drift.py artifacts [--json] [--] [CAPABILITY|DOMAIN ...]
@@ -315,6 +316,37 @@ def collision(name, specs, domains, ignore=None):
     return None
 
 
+MAX_TAG_FILE = 1 << 20  # larger files are data, not tests
+
+
+def tag_files():
+    """Repo files that may hold @scenario tags: text files under 1 MB, outside .blueprint/."""
+    for f in repo_files():
+        path = ROOT / f
+        if f.startswith(".blueprint/") or path.stat().st_size > MAX_TAG_FILE:
+            continue
+        raw = path.read_bytes()
+        if b"\0" in raw:
+            continue
+        try:
+            yield path, raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+
+
+def rewrite_tags(old, new):
+    """Point `@scenario OLD: …` tags at NEW, in place. Returns how many were rewritten."""
+    # The colon right after the name keeps `board` from matching `@scenario board/ops: …`.
+    tag = re.compile(r"(@scenario[ \t]+)" + re.escape(old) + r"([ \t]*:)")
+    count = 0
+    for path, text in tag_files():
+        out, n = tag.subn(lambda m: m.group(1) + new + m.group(2), text)
+        if n:
+            path.write_bytes(out.encode("utf-8"))
+            count += n
+    return count
+
+
 def cmd_rename(args):
     if len(args) != 2:
         sys.exit("rename takes OLD NEW")
@@ -349,8 +381,10 @@ def cmd_rename(args):
             parent.rmdir()
             parent = parent.parent
     save(state)
+    tags = rewrite_tags(old, new)
     print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else "")
-          + (f"; {len(renamed)} artifacts updated" if renamed else ""))
+          + (f"; {len(renamed)} artifacts updated" if renamed else "")
+          + (f"; {tags} tags rewritten" if tags else ""))
     print(f"  the backend still names it {old}: rename its page and the briefs that list it",
           file=sys.stderr)
     return 0

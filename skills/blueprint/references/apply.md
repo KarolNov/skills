@@ -54,7 +54,7 @@ On a yes, write it into the brief as a **PRs** section after Tasks, one line per
 
 For each unticked task, in order:
 
-1. Build it, with tests where the repo has them. Use the repo's own conventions and any skills the user normally reaches for (TDD, for one).
+1. Build it, with tests where the repo has them. Use the repo's own conventions and any skills the user normally reaches for (TDD, for one). Each test written for a delta scenario carries that scenario's tag on the line above it, `@scenario <capability>: <scenario name>` in the file's line-comment syntax ([formats.md](formats.md)); for a MODIFIED block, the name as the block now reads.
 2. Run the checks that cover it.
 3. Close its ticket ([tickets.md](tickets.md)) with a note of what was built, and tick it in the brief. Refresh the review's Progress line when you stop, not after every task.
 
@@ -64,17 +64,19 @@ Stop after a task when the session is getting long: tick what is done, and say w
 
 ## 4. Verify against the delta
 
-When every task but the last is ticked, check each requirement and scenario in the delta against the code:
+When every task but the last is ticked, check each requirement and scenario in the delta against the code. Take the test evidence from the tags: save the brief as Markdown (a scratch file, outside the repo) and run `python3 <this skill>/scripts/coverage.py --delta <that file> --json <capability>` for each capability in the delta, so ADDED and MODIFIED scenarios count as known (marked pending) before they are folded. A delta scenario no tag claims is missing test evidence, even when a test happens to exercise it: tag that test, or write one. An orphan tag in the files this change touched is a typo against the delta: fix it. When `blueprint.json` has no `tests.kinds`, coverage exits 2: propose kinds as [coverage.md](coverage.md) step 1 does and write them on the user's yes, or, on a no, gather the evidence by reading the tests and say the tags went unchecked.
 
 | Requirement / scenario | Evidence | Status |
 | --- | --- | --- |
-| `<name>` | `<test name or file:line>` | covered / missing / contradicts |
+| `<name>` | `<claiming test file:line, or code file:line>` | covered / missing / contradicts |
 
 Fix what is missing or contradicts (or amend the brief, with the user's yes, if the code is right and the delta is not). Also run `python3 .blueprint/drift.py unanchored --since <baseCommit>` (when the change has a `baseRepo`, `baseCommit` isn't in this repo and the whole repo is new: run it without `--since`) and propose anchors for any changed file that implements behavior but belongs to no capability.
 
 ## 5. Fold the delta into the specs
 
 For each capability in the delta, produce the spec as it should read now: apply RENAMED, then REMOVED, then MODIFIED (replace the whole block matched by name), then ADDED, raising each block's heading one level as it moves from the brief into the spec. A new capability gets a fresh page from its ADDED requirements and Purpose, created inside its domain when its name's first part is in `domains` (the backend file's **Domains** section). Before creating it, check the name against the naming rule in [formats.md](formats.md): if it is a domain, the parent of an existing capability, under a bare capability, or more than one level deep, stop and have the user rename it. A mapped capability with `"ref": null` gets the spec drafted from its code during propose, with the delta applied on top, so the page describes all of its behavior, not only this change. Drop any `Not yet built → <this blueprint>` line that `blueprint-drift` left under a requirement.
+
+**Keep the tags pointing at the spec.** When a MODIFIED block renames a scenario (the old block has a scenario the new one lacks, and the new one has a scenario at the same place with a different name), rewrite the tags that claim the old name in that capability to the new one, matching as coverage does (case-insensitive, whitespace collapsed), and show those edits with the spec diff. Ask when it isn't clear which new scenario an old one became. List the tags left orphaned by REMOVED requirements, and by scenarios a MODIFIED block dropped, with their files: they claim behavior that is gone, so propose removing each tag (and the test with it, when it checks only that behavior) and remove on the user's yes. Once the bookkeeping below has written the baselines, run `coverage.py`: it should report no orphans in the folded capabilities. A RENAMED section renames requirements, which tags don't name, so it needs nothing here.
 
 Show each merged spec as a diff against the current page and write it after the user approves. Then, for each capability written, set `ref` for new pages and do the spec bookkeeping from [status.md](status.md). Commit the code before stamping, so `syncedCommit` holds it, then commit the `.blueprint/` changes (stamps, and the artifacts below) on top; a later code edit to an anchored file reads as drift, which is correct.
 

@@ -191,6 +191,34 @@ class Rename(DriftTest):
         r = self.repo(self.FILES, self.STATE)
         self.assertIn("unknown capability", r.drift("rename", "nope", "x").stderr)
 
+    # @scenario blueprint/sync: Rename rewrites tags
+    def test_rewrites_scenario_tags(self):
+        files = dict(self.FILES, **{
+            "tests/ui.test.ts": "// @scenario ui: Empty query\n"
+                                "// @scenario ui : Spaced colon\nit('x')\n",
+            "tests/test_ui.py": "# @scenario ui: Empty query\r\n"
+                                "# @scenario ui/other: Not this one\r\n",
+            "tests/other.rs": "// @scenario board: Untouched\n",
+            ".blueprint/notes.md": "@scenario ui: inside .blueprint stays\n",
+            "tests/blob.bin": "@scenario ui: binary\0\n",
+        })
+        r = self.repo(files, self.STATE)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout, "renamed ui to catalog/ui; 3 tags rewritten\n")
+        read = lambda p: (r.root / p).read_bytes().decode()
+        self.assertEqual(read("tests/ui.test.ts"), "// @scenario catalog/ui: Empty query\n"
+                                                   "// @scenario catalog/ui : Spaced colon\nit('x')\n")
+        self.assertEqual(read("tests/test_ui.py"), "# @scenario catalog/ui: Empty query\r\n"
+                                                   "# @scenario ui/other: Not this one\r\n")
+        for path in ("tests/other.rs", ".blueprint/notes.md", "tests/blob.bin"):
+            self.assertEqual(read(path), files[path], path)
+
+    def test_no_tags_no_count(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = r.drift("rename", "ui", "ui/app")
+        self.assertEqual(out.stdout, "renamed ui to ui/app\n")
+
 
 class Hint(DriftTest):
     def test_more_than_ten_without_domain(self):
