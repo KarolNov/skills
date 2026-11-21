@@ -82,6 +82,8 @@ a.link:hover { text-decoration: underline; }
   color: var(--muted); background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line);
   border-radius: 8px; padding: 6px 10px; }
 .legend summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+.legend summary .hint { color: var(--muted); font-weight: 400; }
+.legend[open] summary .hint { display: none; }
 .legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
 .legend p { margin: 6px 0 2px; }
 .sw { flex: none; display: inline-block; width: 22px; height: 12px; border-radius: 3px; }
@@ -152,7 +154,13 @@ svg:active { cursor: grabbing; }
 /* Nodes switched on fade in; "backwards" so the dimming and focus rules win once it's done. */
 .enter { animation: enter .28s ease-out backwards; }
 @keyframes enter { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
+/* First load: capabilities pop in one by one, from the middle out, then lines and domains fade in. */
+.intro .cap > * { transform-box: fill-box; transform-origin: center;
+  animation: pop .38s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(var(--i) * 45ms); }
+.intro .share, .intro .share-label, .intro .tie, .intro .hull, .intro .hull-label, .intro .fgroup {
+  animation: enter .5s ease-out backwards; animation-delay: calc(var(--n) * 45ms + 120ms); }
+@keyframes pop { from { opacity: 0; transform: scale(.82); } }
+@media (prefers-reduced-motion: reduce) { .enter, .intro *, .intro .cap > * { animation: none; } }
 </style>
 <script>/*D3*/</script>
 </head><body>
@@ -165,7 +173,7 @@ svg:active { cursor: grabbing; }
       </div></details>
     <button id="fit">Fit</button></header>
   <div id="graph">
-    <details class="legend" id="legend" open><summary>Legend</summary>
+    <details class="legend" id="legend"><summary>Legend <span class="hint">· code-side drift only</span></summary>
       <div class="row"><span class="sw cap"></span>capability</div>
       <div class="row"><span class="sw drift"></span>code drifted: anchored files changed since its last sync</div>
       <div class="row"><span class="sw dom"></span>domain</div>
@@ -657,7 +665,7 @@ const Canvas = (function () {
       const own = g.groups.filter((x) => x.owners.length === 1);
       const next = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26 }));
       next.forEach((c) => { c.blockH = d3.sum(own, (x) => x.owners[0] === c.id ? blockHeight(c, x.files.length) : 0); });
-      const fresh = !plan || next.some((c) => !prev.has(c.id));
+      const first = !plan, fresh = first || next.some((c) => !prev.has(c.id));
       if (fresh) {
         // First draw: pick the least tangled of several seeded layouts of the capabilities.
         const best = layout(next.map((c) => ({ ...c })), g.links);
@@ -729,6 +737,14 @@ const Canvas = (function () {
       capSel.append("rect").attr("rx", 6).attr("height", 26).attr("y", -13)
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
       capSel.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
+      // On first load, capabilities pop in from the middle outwards, then the lines between them.
+      if (first) {
+        const cx = d3.mean(caps, (c) => c.x), cy = d3.mean(caps, (c) => c.y);
+        const order = new Map([...caps].sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy)).map((c, i) => [c.id, i]));
+        capSel.style("--i", (d) => order.get(d.id));
+        root.style("--n", caps.length).classed("intro", true);
+        setTimeout(() => root.classed("intro", false), 700 + caps.length * 45);
+      }
 
       // Groups that weren't drawn before (just switched on) fade in; the rest stay as they were.
       const isNew = (x) => !fresh && !prevGroups.has(x.id);
