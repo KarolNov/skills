@@ -260,5 +260,164 @@ class FilesAndPrune(DriftTest):
         self.assertEqual(check["changed"], ["shared/gone.ts"])
 
 
+class Artifacts(DriftTest):
+    FILES = {"billing/invoices.ts": "i", "billing/refunds.ts": "r", "search/index.ts": "s"}
+    STATE = {"version": 2, "domains": {"billing": {"ref": "p", "purpose": "money"}}, "specs": {
+        "billing/invoices": spec("billing/invoices.ts"),
+        "search": spec("search/**"),
+    }}
+    URL = "https://help.example.com/invoices"
+
+    def add(self, r, *caps, kind="webpage", value=URL, description="Invoices help", **kw):
+        extra = [a for k, v in kw.items() for a in (f"--{k}", v)]
+        return r.drift("artifacts", "add", "--type", kind, "--value", value,
+                       "--description", description, *extra, *caps)
+
+    def stale(self, r, *args):
+        out = r.drift("artifacts", "--json", *args)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return {a["id"]: a["changed"] for a in json.loads(out.stdout)}
+
+    def test_add_stamps_as_checked(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = self.add(r, "billing/invoices", id="invoices-help")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        art = r.state()["artifacts"]["invoices-help"]
+        self.assertEqual(art["type"], "webpage")
+        self.assertEqual(art["value"], self.URL)
+        self.assertEqual(art["description"], "Invoices help")
+        self.assertEqual(art["capabilities"], ["billing/invoices"])
+        self.assertEqual(list(art["checkedFiles"]), ["billing/invoices.ts"])
+        listed = r.drift("artifacts")
+        self.assertEqual((listed.returncode, listed.stdout), (0, ""))
+
+    def test_id_derived_from_description(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "search", description="Search: how it ranks results, explained in full")
+        self.add(r, "search", description="Search: how it ranks results, explained again")
+        self.assertEqual(list(r.state()["artifacts"]),
+                         ["search-how-it-ranks-results", "search-how-it-ranks-results-2"])
+
+    def test_code_change_lists_artifact_with_file(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "billing/invoices", id="invoices-help")
+        self.add(r, "search", id="search-help")
+        r.write("billing/invoices.ts", "edited")
+        self.assertEqual(self.stale(r), {"invoices-help": ["billing/invoices.ts"]})
+        report = json.loads(r.drift("artifacts", "--json").stdout)[0]
+        self.assertEqual(report["link"], self.URL)
+        self.assertEqual(report["capabilities"], ["billing/invoices"])
+        text = r.drift("artifacts").stdout
+        self.assertEqual(text, f"invoices-help  webpage  {self.URL}\n    Invoices help\n"
+                               "      billing/invoices.ts\n")
+
+    def test_spec_stamp_does_not_clear_it(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "billing/invoices", id="invoices-help")
+        r.write("billing/invoices.ts", "edited")
+        r.drift("stamp", "billing/invoices")
+        self.assertIn("invoices-help", self.stale(r))
+        out = r.drift("artifacts", "checked", "invoices-help")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(self.stale(r), {})
+
+    def test_domain_covers_capability_added_later(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "billing", id="billing-help")
+        state = r.state()
+        state["specs"]["billing/refunds"] = spec("billing/refunds.ts")
+        r.write(".blueprint/blueprint.json", json.dumps(state))
+        # The new capability's files count as added since the check.
+        self.assertEqual(self.stale(r), {"billing-help": ["billing/refunds.ts"]})
+        r.drift("artifacts", "checked", "--all")
+        r.write("billing/refunds.ts", "edited")
+        self.assertEqual(self.stale(r), {"billing-help": ["billing/refunds.ts"]})
+
+    def test_filter_by_capability_or_domain(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "billing", id="billing-help")
+        self.add(r, "search", id="search-help")
+        r.write("billing/invoices.ts", "edited")
+        r.write("search/index.ts", "edited")
+        self.assertEqual(list(self.stale(r, "search")), ["search-help"])
+        self.assertEqual(list(self.stale(r, "billing/invoices")), ["billing-help"])
+        self.assertEqual(list(self.stale(r, "billing")), ["billing-help"])
+        self.assertNotEqual(r.drift("artifacts", "nope").returncode, 0)
+
+    def test_removed_file_counts(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "search", id="search-help")
+        (r.root / "search/index.ts").unlink()
+        self.assertEqual(self.stale(r), {"search-help": ["search/index.ts"]})
+
+    def test_refuses_bad_input_and_writes_nothing(self):
+        r = self.repo(self.FILES, self.STATE)
+        before = r.state()
+        cases = [
+            dict(kind="wiki"),
+            dict(kind="webpage", value="help.example.com"),
+            dict(kind="notion", value="not a url"),
+            dict(kind="file", value="just/a/path.md"),
+            dict(kind="file", value="owner/name:"),
+            dict(kind="markdown", value="  "),
+            dict(id="Not Kebab"),
+        ]
+        for kw in cases:
+            out = self.add(r, "search", **kw)
+            self.assertNotEqual(out.returncode, 0, kw)
+        self.assertNotEqual(self.add(r, "nope").returncode, 0)
+        self.assertNotEqual(r.drift("artifacts", "add", "--type", "webpage").returncode, 0)
+        self.assertEqual(r.state(), before)
+        self.add(r, "search", id="dup")
+        self.assertIn("already exists", self.add(r, "search", id="dup").stderr)
+
+    def test_value_shapes_and_links(self):
+        r = self.repo(self.FILES, self.STATE)
+        ok = {
+            "gh-file": ("file", "acme/docs:guides/search.md",
+                        "https://github.com/acme/docs/blob/HEAD/guides/search.md"),
+            "git-file": ("file", "git@gitlab.com:acme/docs.git:guides/search.md", None),
+            "notion-page": ("notion", "https://www.notion.so/acme/Search-123", None),
+            "vault-note": ("obsidian", "Product/Search.md", None),
+            "notes": ("markdown", "/srv/notes/search.md", None),
+        }
+        for aid, (kind, value, _) in ok.items():
+            out = self.add(r, "search", kind=kind, value=value, id=aid)
+            self.assertEqual(out.returncode, 0, (aid, out.stderr))
+        self.assertEqual(r.state()["artifacts"]["notion-page"]["type"], "notion")
+        r.write("search/index.ts", "edited")
+        report = {a["id"]: a for a in json.loads(r.drift("artifacts", "--json").stdout)}
+        self.assertEqual(list(report), list(ok))
+        for aid, (kind, value, link) in ok.items():
+            expected = value if kind == "notion" else link
+            self.assertEqual(report[aid]["link"], expected, aid)
+
+    def test_checked_and_remove_refuse_unknown(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "search", id="search-help")
+        before = r.state()
+        self.assertIn("unknown artifact", r.drift("artifacts", "checked", "nope").stderr)
+        self.assertNotEqual(r.drift("artifacts", "checked").returncode, 0)
+        self.assertIn("unknown artifact", r.drift("artifacts", "remove", "nope").stderr)
+        self.assertEqual(r.state(), before)
+        self.assertEqual(r.drift("artifacts", "remove", "search-help").returncode, 0)
+        self.assertEqual(r.state()["artifacts"], {})
+
+    def test_rename_updates_artifacts(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "search", "billing", id="both")
+        out = r.drift("rename", "search", "billing/search")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(r.state()["artifacts"]["both"]["capabilities"],
+                         ["billing/search", "billing"])
+        self.assertEqual(self.stale(r), {})
+
+    def test_no_artifacts(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = r.drift("artifacts")
+        self.assertEqual((out.returncode, out.stdout), (0, ""))
+        self.assertEqual(json.loads(r.drift("artifacts", "--json").stdout), [])
+
+
 if __name__ == "__main__":
     unittest.main()
