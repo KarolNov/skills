@@ -73,7 +73,7 @@ A search box SHALL match capability names, purposes, requirement titles and text
 
 ### Requirement: Steady layout
 
-The map SHALL appear already laid out, without nodes drifting into place, and the same data SHALL always be laid out the same way. Dragging a capability SHALL move it and its files while the rest move little, and leave it where it was dropped until the user double-clicks it. Scrolling SHALL zoom and dragging the background SHALL pan.
+The map SHALL appear already laid out, without nodes drifting into place, and the same data SHALL always be laid out the same way. On first load the capabilities SHALL appear in their final places from the middle outwards, then the lines, with no motion when the system asks for reduced motion. Switching a kind of node on or off SHALL keep the view where it is, refitting only when new nodes would fall outside it. Dragging a capability SHALL move it and its files while the rest move little, and leave it where it was dropped until the user double-clicks it. Scrolling SHALL zoom and dragging the background SHALL pan.
 
 - **Scenario: Drop a node**
   - **WHEN** the user drags `pads` to an empty area and lets go
@@ -81,3 +81,20 @@ The map SHALL appear already laid out, without nodes drifting into place, and th
 - **Scenario: Same picture twice**
   - **WHEN** the map is written twice from the same `blueprint.json`
   - **THEN** both pages show every node in the same place
+- **Scenario: Files switched on**
+  - **GIVEN** the map is zoomed in on one domain
+  - **WHEN** the user switches files on and every new file node fits in the view
+  - **THEN** the view stays where it was and the file nodes fade in
+
+### Requirement: Artifacts on the map
+
+The details panel of a capability SHALL list the artifacts that cover it, directly or through its domain, with type, value and description, and mark the stale ones. A "Show as nodes" setting SHALL let the user draw files, artifacts, both or neither on the canvas, with artifacts on at first when any artifact covers a capability. Artifact nodes SHALL look different from file nodes, SHALL be tied to the capabilities they cover, and SHALL be marked when stale.
+
+- **Scenario: Stale article**
+  - **GIVEN** a stale `webpage` artifact covering `billing/invoices`
+  - **WHEN** the user opens `billing/invoices` on the map
+  - **THEN** the panel lists the article as a link, marked stale
+- **Scenario: Artifacts as nodes**
+  - **GIVEN** artifacts are switched on under "Show as nodes"
+  - **WHEN** the map is drawn
+  - **THEN** each artifact sits by the capabilities it covers as a diamond, red when stale, and clicking it opens its details

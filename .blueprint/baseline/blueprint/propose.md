@@ -129,3 +129,11 @@ A capability name SHALL be `<domain>/<capability>` or a bare `<capability>`, and
   - **GIVEN** a domain `board` exists
   - **WHEN** a brief adds a capability for pad layouts
   - **THEN** it is proposed as `board/pads`, not `pads`
+
+### Requirement: Artifacts in a brief
+
+When the user names resources outside the repo that the change affects or that describe it, the brief SHALL carry an **Artifacts** section listing each with its id, type, value, description and capabilities.
+
+- **Scenario: Support article named**
+  - **WHEN** the user mentions a help-center article about the feature being changed
+  - **THEN** the brief lists it under Artifacts as a `webpage` (or the type of the tool it lives in) covering the touched capability

@@ -113,3 +113,12 @@ Ticket handling SHALL follow the configured tracker (`github`, `linear`, `jira`,
 - **Scenario: Tracker none**
   - **WHEN** `tickets.tracker` is `none`
   - **THEN** tasks stay as checkboxes in the brief and no tickets are created
+
+### Requirement: Fold artifacts
+
+When folding a brief, apply SHALL add each entry of its **Artifacts** section to `blueprint.json` with `drift.py artifacts add`, after the capabilities it names exist.
+
+- **Scenario: Artifact for a new capability**
+  - **GIVEN** a brief adds the capability `billing/refunds` and an artifact covering it
+  - **WHEN** the brief is applied
+  - **THEN** `blueprint.json` holds the artifact, stamped as checked against the built code
