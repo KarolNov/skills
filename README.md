@@ -179,3 +179,5 @@ paragraph to the README next to the skills it extends. Check it with `claude plu
 ## License
 
 [MIT](LICENSE)
+
+Install the marketplace with `/plugin marketplace add KarolNov/skills`.
