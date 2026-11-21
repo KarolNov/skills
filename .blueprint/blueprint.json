@@ -205,6 +205,13 @@
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       },
       "syncedCommit": "39f4a25fcae41689478c99ee2d741df27547b7dc"
+    },
+    "blueprint/coverage": {
+      "ref": null,
+      "anchors": [
+        "skills/blueprint/scripts/coverage.py",
+        "skills/blueprint/references/coverage.md"
+      ]
     }
   },
   "changes": {
@@ -246,6 +253,12 @@
       "review": "https://app.notion.com/p/41e43cce21f28164881ec1d8f239cc72",
       "status": "approved",
       "baseCommit": "a59f9af0acf8bad2e19014eb80479a427677fea0"
+    },
+    "scenario-test-coverage": {
+      "brief": "https://app.notion.com/p/41f43cce21f2813eba98ebd764c684d8",
+      "review": "https://app.notion.com/p/41f43cce21f28102a9fec8dc35cb66a8",
+      "status": "approved",
+      "baseCommit": "34ddef626ac44617913a7d735de36f1f8b5818da"
     }
   }
 }
