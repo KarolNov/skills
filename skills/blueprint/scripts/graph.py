@@ -57,10 +57,9 @@ def build(state=None, files=None):
     files = drift.repo_files() if files is None else files
     specs, domains = state.get("specs", {}), state.get("domains", {})
 
-    nodes, owners, hashes = [], {}, drift.cached_hashes()
+    nodes, owners, hashes, memo = [], {}, drift.cached_hashes(), {}
     for name, spec in specs.items():
-        compiled = drift.compile_anchors(spec)
-        mine = [f for f in files if drift.matching_anchors(compiled, f)]
+        mine = memo[name] = drift.matched(spec, files)
         for f in mine:
             owners.setdefault(f, []).append(name)
         status, changed = drift.code_status(spec, mine, hashes)
@@ -77,7 +76,14 @@ def build(state=None, files=None):
             "requirements": reqs,
             "files": mine,
             "changed": changed,
+            "artifacts": [],
         })
+
+    arts = artifacts(state, files, hashes, memo)
+    by_id = {n["id"]: n for n in nodes}
+    for art in arts:
+        for name in art["covers"]:
+            by_id[name]["artifacts"].append(art["id"])
 
     shared = {}
     for f, caps in owners.items():
@@ -92,9 +98,29 @@ def build(state=None, files=None):
         "domains": [{"id": d, "purpose": (v or {}).get("purpose", "")} for d, v in domains.items()],
         "nodes": nodes,
         "edges": edges,
+        "artifacts": arts,
         # With no shared files there are no lines, so the page starts with files drawn as nodes.
         "filesDefault": not edges,
     }
+
+
+def artifacts(state, files, hashes, memo):
+    """Every artifact with the capabilities it covers now and whether it is stale, judged the
+    way `drift.py artifacts` judges it: files changed since its check, or a name that is gone.
+
+    memo ({capability: files}) and hashes are the ones build() filled, so nothing is matched
+    or hashed twice.
+    """
+    specs, domains = state.get("specs", {}), state.get("domains", {})
+    out = []
+    for aid, art in state.get("artifacts", {}).items():
+        kind, value = art.get("type"), art.get("value", "")
+        covers, changed, unknown = drift.artifact_state(art, specs, domains, files, hashes, memo)
+        out.append({"id": aid, "type": kind, "value": value, "link": drift.open_link(kind, value),
+                    "description": art.get("description", ""),
+                    "capabilities": art.get("capabilities", []), "covers": covers,
+                    "stale": bool(changed or unknown), "changed": changed, "unknown": unknown})
+    return out
 
 
 def script_json(data):
@@ -153,10 +179,12 @@ def ignore_map(path):
 def summary(data):
     """One line for the report: counts, and the capabilities whose code moved."""
     moved = [n["id"] for n in data["nodes"] if n["status"] == "code-moved"]
+    stale = sum(a["stale"] for a in data.get("artifacts", []))
     shared = "" if data["edges"] else "; no shared files, so files start as nodes"
     n, d = len(data["nodes"]), len(data["domains"])
     return (f"{n} capabilit{'y' if n == 1 else 'ies'}, {d} domain{'' if d == 1 else 's'}; "
-            f"code-drifted: {', '.join(moved) or 'none'}{shared}")
+            f"code-drifted: {', '.join(moved) or 'none'}"
+            + (f"; {stale} stale artifact{'' if stale == 1 else 's'}" if stale else "") + shared)
 
 
 if __name__ == "__main__":

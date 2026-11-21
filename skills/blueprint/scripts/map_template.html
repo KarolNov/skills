@@ -6,14 +6,14 @@
 :root {
   --bg: #fbfaf8; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e4e2dd;
   --node: #ffffff; --node-line: #b9b6ae; --domain: #f1efe9; --domain-line: #d9d5cb;
-  --accent: #2f6fde; --edge: #8f8b82; --file: #a9a59c; --ok: #2b8a3e;
+  --accent: #2f6fde; --edge: #8f8b82; --file: #a9a59c; --art: #8a5cd6; --ok: #2b8a3e;
   --drift: #d93b30; --drift-bg: #fdecea; --hit: #f4b400;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #161617; --panel: #1f1f21; --ink: #ececee; --muted: #9a9aa0; --line: #333336;
     --node: #2a2a2d; --node-line: #55555a; --domain: #222225; --domain-line: #3a3a3e;
-    --accent: #6ea0ff; --edge: #77777d; --file: #6c6c72; --ok: #5cc27a;
+    --accent: #6ea0ff; --edge: #77777d; --file: #6c6c72; --art: #b08cf5; --ok: #5cc27a;
     --drift: #ff6b5f; --drift-bg: #3a1f1d; --hit: #f4b400;
   }
 }
@@ -27,6 +27,17 @@ header h1 { font-size: 15px; margin: 0; font-weight: 600; }
 header .tag { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 header .spacer { flex: 1; }
 header label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+/* "Show as nodes": one menu of things that can be drawn beside the capabilities. */
+.nodes { position: relative; font-size: 13px; }
+.nodes summary { cursor: pointer; list-style: none; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; }
+.nodes summary::-webkit-details-marker { display: none; }
+.nodes summary b { color: var(--ink); font-weight: 500; }
+.nodes[open] summary, .nodes summary:hover { border-color: var(--accent); }
+.nodes .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 220px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
+.nodes .menu label { padding: 5px 6px; border-radius: 5px; color: var(--ink); }
+.nodes .menu label:hover { background: var(--domain); }
+.nodes .menu .sw { margin: 0 2px; }
 button, input[type=search] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
   border-radius: 7px; padding: 5px 9px; }
 button { cursor: pointer; } button:hover { border-color: var(--accent); }
@@ -56,6 +67,10 @@ ul.files { list-style: none; padding: 0; margin: 0; font-family: ui-monospace, S
 ul.files li { padding: 2px 0; color: var(--muted); word-break: break-all; }
 ul.files li.changed { color: var(--drift); }
 ul.files li.changed::after { content: " · changed"; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+.art-card { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.art-card.stale { border-color: var(--drift); background: var(--drift-bg); }
+.art-card .val { font-size: 13px; word-break: break-all; margin: 2px 0; }
+.art-card p { font-size: 13px; }
 .result { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
 .result:hover { border-color: var(--accent); }
 .result .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
@@ -75,8 +90,11 @@ a.link:hover { text-decoration: underline; }
 .sw.dom { background: var(--domain); border: 1.5px dashed var(--domain-line); border-radius: 6px; }
 .sw.line { height: 4px; background: var(--edge); border-radius: 2px; }
 .sw.file { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--file); }
+.sw.art { width: 9px; height: 9px; margin: 0 7px; background: var(--art); transform: rotate(45deg); border-radius: 1px; }
 .sw.bubble { width: 16px; height: 16px; margin: 0 3px; border-radius: 50%; background: var(--panel); border: 1.5px solid var(--file); }
-.legend .row.files { display: none; } .legend.files .row.files { display: flex; }
+/* Rows for node kinds that are switched off stay, faded, so the legend never changes size. */
+.legend .row.files, .legend .row.arts, .legend .row.groups { opacity: .4; transition: opacity .2s; }
+.legend.files .row.files, .legend.arts .row.arts, .legend.files .row.groups, .legend.arts .row.groups { opacity: 1; }
 
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh 1fr; }
@@ -107,10 +125,13 @@ svg:active { cursor: grabbing; }
 .file { cursor: pointer; }
 .file circle { fill: var(--file); }
 .file.drift circle { fill: var(--drift); }
+.file.art .mark { fill: var(--art); stroke: var(--panel); stroke-width: 1; }
+.file.art.drift .mark { fill: var(--drift); }
 /* Zoomed out, a big group is one bubble with its count; zoomed in, each file is a dot. */
 .fgroup .file, .fgroup.split .bubble, .fgroup.split .count { display: none; }
 .fgroup.split .file { display: inline; }
 .bubble { fill: var(--panel); stroke: var(--file); stroke-width: 1.5; cursor: zoom-in; }
+.bubble.art { stroke: var(--art); stroke-dasharray: 3 2; }
 .bubble.drift { stroke: var(--drift); }
 .bubble.hit { stroke: var(--hit); stroke-width: 2.5; }
 .bubble.sel { stroke: var(--accent); stroke-width: 3; }
@@ -122,18 +143,26 @@ svg:active { cursor: grabbing; }
 .file-tip text { fill: var(--ink); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .hit rect { stroke: var(--hit) !important; stroke-width: 3.5 !important; }
 .cap.drift.hit rect { stroke: var(--drift) !important; }  /* a match is already lit by the rest being dimmed */
-.hit circle { stroke: var(--hit); stroke-width: 2; }
-.sel rect, .sel circle { stroke: var(--accent) !important; stroke-width: 3 !important; }
+.hit circle, .file.hit .mark { stroke: var(--hit); stroke-width: 2; }
+.sel rect, .sel circle, .file.sel .mark { stroke: var(--accent) !important; stroke-width: 3 !important; }
 .share.sel { stroke: var(--accent); stroke-opacity: 1; }
 .hull.sel { stroke: var(--accent); stroke-dasharray: none; }
 /* Search dimming wins over hover focus. */
 .dim, .focus .cap.dim, .focus .fgroup.dim, .focus .share-label.on.dim { opacity: .12; }
+/* Nodes switched on fade in; "backwards" so the dimming and focus rules win once it's done. */
+.enter { animation: enter .28s ease-out backwards; }
+@keyframes enter { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
 </style>
 <script>/*D3*/</script>
 </head><body>
 <div class="app">
   <header><h1>Capability map</h1><span class="tag" id="repo"></span><span class="spacer"></span>
-    <label><input type="checkbox" id="files"> files as nodes</label>
+    <details class="nodes" id="nodes"><summary>Show as nodes: <b id="nodes-on"></b> ▾</summary>
+      <div class="menu">
+        <label><input type="checkbox" id="files"><span class="sw file"></span>files: what the anchors match</label>
+        <label><input type="checkbox" id="artifacts"><span class="sw art"></span>artifacts: outside resources</label>
+      </div></details>
     <button id="fit">Fit</button></header>
   <div id="graph">
     <details class="legend" id="legend" open><summary>Legend</summary>
@@ -142,13 +171,14 @@ svg:active { cursor: grabbing; }
       <div class="row"><span class="sw dom"></span>domain</div>
       <div class="row"><span class="sw line"></span>shares files; the label says how many, and lines between domains run bundled</div>
       <div class="row files"><span class="sw file"></span>anchored file: a capability's own files sit under it, shared ones between the capabilities, tied by thin lines</div>
-      <div class="row files"><span class="sw bubble"></span>a group of files, with its count: zoom in or click it to see each</div>
+      <div class="row arts"><span class="sw art"></span>artifact: a resource outside the repo describing the capabilities it is tied to; red when stale (its code changed since it was checked)</div>
+      <div class="row groups"><span class="sw bubble"></span>a group of files (or of artifacts, dashed), with its count: zoom in or click it to see each</div>
       <p>Only code-side drift is shown. A spec edited since its last sync is not: <code>/blueprint-sync</code> reports that.</p>
       <p>Hover or select a capability to bring its lines forward · scroll to zoom · drag the background to pan · drag a capability to pin it · double-click to free it.</p>
     </details>
   </div>
   <aside>
-    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files…" autocomplete="off">
+    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files, artifacts…" autocomplete="off">
       <div class="count" id="count"></div></div>
     <div id="panel"></div>
   </aside>
@@ -164,10 +194,19 @@ const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
 const fileOwners = {};
 for (const n of DATA.nodes) for (const f of n.files) (fileOwners[f] = fileOwners[f] || []).push(n.id);
 const fileChanged = (f) => fileOwners[f].some((id) => byId[id].changed.includes(f));
+// Outside resources describing capabilities: listed in their panels and, when switched on, drawn
+// like files (as diamonds), tied to the capabilities they cover.
+const artById = Object.fromEntries((DATA.artifacts || []).map((a) => [a.id, a]));
 
-function toGraph(d, showFiles) {
-  const files = showFiles ? Object.keys(fileOwners).sort().map((f) => ({
-    id: "file:" + f, path: f, label: f.split("/").pop(), owners: fileOwners[f], drift: fileChanged(f) })) : [];
+// show: which extras are drawn as nodes, { files, artifacts }. Both go through the same groups
+// and placement; an artifact's "owners" are the capabilities it covers now.
+function toGraph(d, show) {
+  const files = show.files ? Object.keys(fileOwners).sort().map((f) => ({
+    id: "file:" + f, kind: "file", path: f, label: f.split("/").pop(), owners: fileOwners[f], drift: fileChanged(f) })) : [];
+  if (show.artifacts) for (const a of d.artifacts || []) {
+    if (a.covers.length) files.push({ id: "art:" + a.id, kind: "art", path: a.description || a.value, label: a.id,
+      owners: a.covers, drift: a.stale });
+  }
   return {
     domains: d.domains.filter((dom) => d.nodes.some((n) => n.domain === dom.id)),
     caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain, drift: n.status === "code-moved" })),
@@ -180,8 +219,8 @@ function toGraph(d, showFiles) {
 function groupFiles(files) {
   const byKey = new Map();
   for (const f of files) {
-    const key = [...f.owners].sort().join("|");
-    if (!byKey.has(key)) byKey.set(key, { id: "grp:" + key, owners: f.owners, files: [] });
+    const key = f.kind + ":" + [...f.owners].sort().join("|");
+    if (!byKey.has(key)) byKey.set(key, { id: "grp:" + key, kind: f.kind, owners: f.owners, files: [] });
     byKey.get(key).files.push(f);
   }
   return [...byKey.values()];
@@ -437,16 +476,18 @@ const sunflowerR = (n) => DOT * 0.6 * Math.sqrt(n) + 4;
 const blockHeight = (cap, n) => (n ? Math.max(8 + Math.ceil(n / blockCols(cap)) * DOT, 2 * bubbleR(n) + 6) : 0);
 
 function placeFiles(groups, capById, caps) {
-  const taken = [];
+  // A capability's own files and own artifacts stack under its box, files first.
+  const taken = [], below = new Map();
   for (const g of groups) {
     const owners = g.owners.map((id) => capById.get(id)), n = g.files.length;
     if (owners.length === 1) {
-      const c = owners[0], cols = blockCols(c);
+      const c = owners[0], cols = blockCols(c), dy = below.get(c.id) || 0;
       g.files.forEach((f, i) => {
         const row = Math.floor(i / cols), inRow = Math.min(cols, n - row * cols);
-        f.x = c.x + (i % cols - (inRow - 1) / 2) * DOT; f.y = c.y + 13 + 8 + row * DOT;
+        f.x = c.x + (i % cols - (inRow - 1) / 2) * DOT; f.y = c.y + 13 + 8 + dy + row * DOT;
       });
-      g.r = bubbleR(n); g.x = c.x; g.y = c.y + 13 + 4 + g.r;
+      g.r = bubbleR(n); g.x = c.x; g.y = c.y + 13 + 4 + dy + g.r;
+      below.set(c.id, dy + blockHeight(c, n));
       continue;
     }
     g.r = Math.max(sunflowerR(n), n > FEW ? bubbleR(n) : 0);
@@ -483,6 +524,7 @@ function placeFiles(groups, capById, caps) {
 const Canvas = (function () {
   let el, svg, root, zoom, sim, onSelect, plan, k = 1, moved = false;
   let caps = [], capById = new Map(), shares = [], groups = [], files = [], ties = [];
+  let glide = null;  // the timer moving capabilities aside after nodes are switched on
   let capSel, shareSel, labelSel, hullSel, groupSel, fileSel, tieSel, tipSel, hovered = null, hoveredFile = null, selectedId = null;
   const W = () => el.clientWidth, H = () => el.clientHeight;
   const sid = (end) => (typeof end === "object" ? end.id : end);
@@ -552,7 +594,7 @@ const Canvas = (function () {
   }
 
   const drag = () => d3.drag()
-    .on("start", (e, d) => { d.moved = false; })
+    .on("start", (e, d) => { d.moved = false; if (glide) glide.finish(); })  // the drag takes over from a glide
     .on("drag", (e, d) => {
       if (!d.moved) { d.moved = true; sim.alphaTarget(0.02).restart(); }
       d.fx = d.x = e.x; d.fy = d.y = e.y;  // the running simulation's tick redraws, files included
@@ -567,6 +609,27 @@ const Canvas = (function () {
     moved = true;
     const s = Math.max(k, minK);
     svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity.translate(W() / 2, H() / 2).scale(s).translate(-x, -y));
+  }
+
+  // The canvas left of the legend (when it's open and there's room beside it).
+  function room() {
+    const legend = el.querySelector(".legend[open]");
+    const left = legend && W() > 700 ? legend.offsetWidth + 12 : 0;
+    return { left, w: W() - left };
+  }
+
+  // Box edges (with the nodes under them, and shared groups), so nothing at the side is cut off.
+  function bounds() {
+    const boxes = [...caps.map((d) => [d.x - d.w / 2, d.y - 13, d.x + d.w / 2, d.y + 13 + d.blockH]),
+      ...groups.filter((x) => x.owners.length > 1).map((x) => [x.x - x.r, x.y - x.r, x.x + x.r, x.y + x.r])];
+    return [d3.min(boxes, (b) => b[0]), d3.min(boxes, (b) => b[1]), d3.max(boxes, (b) => b[2]), d3.max(boxes, (b) => b[3])];
+  }
+
+  function reveal() {
+    if (!caps.length || !W() || !H()) return;
+    const t = d3.zoomTransform(svg.node()), { left } = room(), [x0, y0, x1, y1] = bounds();
+    const [sx0, sy0] = t.apply([x0, y0]), [sx1, sy1] = t.apply([x1, y1]);
+    if (sx0 < left || sy0 < 0 || sx1 > W() || sy1 > H()) Canvas.fit(450);
   }
 
   return {
@@ -587,12 +650,13 @@ const Canvas = (function () {
     render(g) {
       if (sim) sim.stop();
       // Keep where capabilities already are (and what is pinned) when redrawing, e.g. after the files switch.
-      const prev = new Map(caps.map((n) => [n.id, n]));
+      const prev = new Map(caps.map((n) => [n.id, n])), prevGroups = new Set(groups.map((x) => x.id));
       root.selectAll("*").remove();
+      if (glide) { glide.stop(); glide = null; }
 
-      const ownCount = new Map(g.groups.filter((x) => x.owners.length === 1).map((x) => [x.owners[0], x.files.length]));
+      const own = g.groups.filter((x) => x.owners.length === 1);
       const next = g.caps.map((c) => ({ ...c, kind: "cap", w: c.label.length * 6.8 + 20, h: 26 }));
-      next.forEach((c) => { c.blockH = blockHeight(c, ownCount.get(c.id) || 0); });
+      next.forEach((c) => { c.blockH = d3.sum(own, (x) => x.owners[0] === c.id ? blockHeight(c, x.files.length) : 0); });
       const fresh = !plan || next.some((c) => !prev.has(c.id));
       if (fresh) {
         // First draw: pick the least tangled of several seeded layouts of the capabilities.
@@ -601,11 +665,30 @@ const Canvas = (function () {
         next.forEach((c, i) => { c.x = best.nodes[i].x; c.y = best.nodes[i].y; });
       } else {
         next.forEach((c) => { const p = prev.get(c.id); Object.assign(c, { x: p.x, y: p.y, fx: p.fx, fy: p.fy }); });
-        // Files switched on: the blocks under the boxes may now overlap a neighbour. Push apart
-        // only what overlaps, so the map keeps its shape.
+        // Nodes switched on: the blocks under the boxes may now overlap a neighbour. Push apart
+        // only what overlaps, so the map keeps its shape, and glide there rather than jump.
         if (next.some((c) => c.blockH > prev.get(c.id).blockH)) {
+          const from = next.map((c) => [c.x, c.y]);
           d3.forceSimulation(next).force("collide", rectCollide(12)).velocityDecay(0.6).stop().tick(80);
-          next.forEach((c) => { c.vx = c.vy = 0; });
+          const to = next.map((c) => { c.vx = c.vy = 0; return [c.x, c.y]; });
+          if (to.some((p, i) => Math.hypot(p[0] - from[i][0], p[1] - from[i][1]) > 0.5)) {
+            next.forEach((c, i) => { [c.x, c.y] = from[i]; });
+            const ease = d3.easeCubicOut, ms = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320;
+            glide = d3.timer((t) => {
+              const e = ms ? ease(Math.min(1, t / ms)) : 1;
+              next.forEach((c, i) => {
+                c.x = from[i][0] + (to[i][0] - from[i][0]) * e; c.y = from[i][1] + (to[i][1] - from[i][1]) * e;
+                if (c.fx != null) { c.fx = c.x; c.fy = c.y; }
+              });
+              draw();
+              if (e >= 1) glide.finish();
+            });
+            // Jump to the end (when done, or when a drag starts mid-way).
+            glide.finish = () => {
+              next.forEach((c, i) => { [c.x, c.y] = to[i]; if (c.fx != null) { c.fx = c.x; c.fy = c.y; } });
+              glide.stop(); glide = null; draw(); reveal();
+            };
+          }
         }
       }
       caps = next;
@@ -620,7 +703,8 @@ const Canvas = (function () {
       hullSel.append("path").attr("class", "hull").on("click", (e, d) => { e.stopPropagation(); onSelect("dom:" + d.id); });
       hullSel.append("text").attr("class", "hull-label").attr("text-anchor", "middle").text((d) => d.id);
 
-      tieSel = linkG.append("g").selectAll("path").data(ties).join("path").attr("class", "tie");
+      tieSel = linkG.append("g").selectAll("path").data(ties).join("path")
+        .attr("class", (t) => "tie" + (!fresh && !prevGroups.has(t.group.id) ? " enter" : ""));
       // Light lines fade back so the heavy ones carry the picture.
       shareSel = linkG.append("g").selectAll("path").data(shares).join("path")
         .attr("class", "share")
@@ -646,18 +730,22 @@ const Canvas = (function () {
         .attr("width", (d) => d.w).attr("x", (d) => -d.w / 2);
       capSel.append("text").attr("text-anchor", "middle").attr("dy", 4).text((d) => d.label);
 
-      groupSel = fileG.selectAll("g").data(groups).join("g").attr("class", "fgroup")
+      // Groups that weren't drawn before (just switched on) fade in; the rest stay as they were.
+      const isNew = (x) => !fresh && !prevGroups.has(x.id);
+      groupSel = fileG.selectAll("g").data(groups).join("g").attr("class", (x) => "fgroup" + (isNew(x) ? " enter" : ""))
         .on("mouseenter", (e, d) => { hovered = d; focus(); })
         .on("mouseleave", () => { hovered = null; focus(); });
-      groupSel.append("circle").attr("class", (d) => "bubble" + (d.files.some((f) => f.drift) ? " drift" : ""))
+      groupSel.append("circle").attr("class", (d) => "bubble" + (d.kind === "art" ? " art" : "") + (d.files.some((f) => f.drift) ? " drift" : ""))
         .on("click", (e, d) => { e.stopPropagation(); centre(d.x, d.y, SPLIT_AT * 1.15); });
       groupSel.append("text").attr("class", "count").attr("text-anchor", "middle").text((d) => d.files.length);
-      groupSel.append("title").text((d) => `${plural(d.files.length, "file", "files")} · ${d.owners.join(", ")}`);
+      groupSel.append("title").text((d) => `${d.kind === "art" ? plural(d.files.length, "artifact", "artifacts") : plural(d.files.length, "file", "files")} · ${d.owners.join(", ")}`);
       fileSel = groupSel.selectAll("g.file").data((d) => d.files).join("g")
-        .attr("class", (d) => "file" + (d.drift ? " drift" : ""))
+        .attr("class", (d) => "file" + (d.kind === "art" ? " art" : "") + (d.drift ? " drift" : ""))
         .on("click", (e, d) => { e.stopPropagation(); onSelect(d.id); });
       fileSel.append("circle").attr("class", "pad").attr("r", DOT / 2);  // an easier target than the dot
-      fileSel.append("circle").attr("r", 3.5);
+      // A file is a dot; an artifact a slightly bigger diamond, so it stands out among them.
+      fileSel.filter((d) => d.kind !== "art").append("circle").attr("r", 3.5);
+      fileSel.filter((d) => d.kind === "art").append("path").attr("class", "mark").attr("d", "M0,-5L5,0L0,5L-5,0Z");
       fileSel.append("title").text((d) => d.path);
       fileSel.on("mouseenter", (e, d) => { hoveredFile = d; tip(); }).on("mouseleave", () => { hoveredFile = null; tip(); });
       tipSel = labelG.append("g").attr("class", "file-tip").attr("display", "none");
@@ -712,25 +800,21 @@ const Canvas = (function () {
     fit(ms = 450) {
       moved = false;
       if (!caps.length || !W() || !H()) return;
-      const legend = el.querySelector(".legend[open]");
-      const left = legend && W() > 700 ? legend.offsetWidth + 12 : 0, w = W() - left;
-      // Box edges (with the files under them, and shared groups), so nothing at the side is cut off.
-      const boxes = [...caps.map((d) => [d.x - d.w / 2, d.y - 13, d.x + d.w / 2, d.y + 13 + d.blockH]),
-        ...groups.filter((x) => x.owners.length > 1).map((x) => [x.x - x.r, x.y - x.r, x.x + x.r, x.y + x.r])];
-      const x0 = d3.min(boxes, (b) => b[0]), x1 = d3.max(boxes, (b) => b[2]);
-      const y0 = d3.min(boxes, (b) => b[1]), y1 = d3.max(boxes, (b) => b[3]);
+      const { left, w } = room(), [x0, y0, x1, y1] = bounds();
       const pad = 40, s = Math.max(0.15, Math.min(2, 0.95 / Math.max((x1 - x0 + pad * 2) / w, (y1 - y0 + pad * 2) / H())));
       const t = d3.zoomIdentity.translate(left + w / 2, H() / 2).scale(s).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
       (ms ? svg.transition().duration(ms) : svg).call(zoom.transform, t);
     },
     // On resize, refit only while the user hasn't moved the view themselves.
     refit() { if (!moved) this.fit(0); },
+    // After switching nodes on or off: keep the view, unless something now falls outside it.
+    reveal() { if (!glide) reveal(); },
   };
 })();
 
 // ---- search -------------------------------------------------------------
 // A capability matches when every typed word appears somewhere in its name, purpose, requirements
-// (title, text and scenarios) or file paths. What matched is the fields holding the most words.
+// (title, text and scenarios), file paths or artifacts. What matched is the fields holding the most words.
 const Search = {
   terms: [],
   set(q) { this.terms = q.toLowerCase().split(/\s+/).filter(Boolean); },
@@ -745,6 +829,8 @@ const Search = {
         { kind: "purpose", label: "purpose", text: n.purpose },
         ...n.requirements.map((r) => ({ kind: "req", label: "“" + r.title + "”", text: this.reqText(r) })),
         ...n.files.map((f) => ({ kind: "file", label: f, text: f })),
+        ...n.artifacts.map((id) => artById[id]).filter(Boolean)
+          .map((a) => ({ kind: "artifact", id: a.id, label: "artifact " + a.id, text: [a.id, a.value, a.description].join("\n") })),
       ];
       const all = fields.map((f) => f.text).join("\n").toLowerCase();
       if (!this.terms.every((w) => all.includes(w))) continue;
@@ -752,7 +838,8 @@ const Search = {
       const best = Math.max(...scored.map((f) => f.s));
       const why = scored.filter((f) => f.s === best);
       // Every file holding a typed word stays lit on the canvas, not only the best-scoring ones.
-      out.push({ id: n.id, why, files: scored.filter((f) => f.kind === "file").map((f) => f.text) });
+      out.push({ id: n.id, why, files: scored.filter((f) => f.kind === "file").map((f) => f.text),
+        arts: scored.filter((f) => f.kind === "artifact").map((f) => f.id) });
     }
     return out;
   },
@@ -787,6 +874,27 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const capLink = (id) => `<a class="link" data-id="${esc(id)}">${esc(id)}</a>`;
+// One artifact: its type, value (a link when it opens in a browser), description and, when stale,
+// what changed since it was checked. `from` is the capability whose panel lists it, to say when
+// it covers that capability through its domain.
+function artifact(a, from, titled) {
+  const href = a.link && /^(https?|obsidian):/i.test(a.link) ? a.link : null;
+  const via = from && !a.capabilities.includes(from.id) && from.domain && a.capabilities.includes(from.domain) ? from.domain : null;
+  return `<div class="art-card${a.stale ? " stale" : ""}">
+    <span class="pill">${esc(a.type)}</span>${a.stale ? `<span class="pill drift">stale</span>` : ""}<a class="link" data-id="art:${esc(a.id)}">${esc(a.id)}</a>
+    <div class="val">${href ? `<a class="link" href="${esc(href)}" target="_blank" rel="noopener">${esc(a.value)} ↗</a>` : `<code>${esc(a.value)}</code>`}</div>
+    ${a.description && !titled ? `<p>${inline(a.description)}</p>` : ""}
+    ${via ? `<p class="muted">Covers every capability in <a class="link" data-id="dom:${esc(via)}">${esc(via)}</a>.</p>` : ""}
+    ${a.changed.length ? `<p class="muted">${plural(a.changed.length, "file changed", "files changed")} since it was last checked:</p>
+      <ul class="files">${a.changed.map((f) => `<li class="changed">${fileOwners[f] ? `<a class="link" data-id="file:${esc(f)}">${esc(f)}</a>` : esc(f)}</li>`).join("")}</ul>` : ""}
+    ${a.unknown.length ? `<p class="muted">Names no capability or domain any more: <code>${a.unknown.map(esc).join("</code> <code>")}</code>.</p>` : ""}
+    ${a.stale ? `<p class="muted">Once it's updated or still accurate: <code>drift.py artifacts checked ${esc(a.id)}</code></p>` : ""}
+  </div>`;
+}
+// Stale ones first, otherwise in blueprint.json's order.
+const artList = (ids, from) => ids.map((id) => artById[id]).filter(Boolean)
+  .sort((x, y) => y.stale - x.stale).map((a) => artifact(a, from)).join("");
+
 const STATUS = {
   "in-sync": ["in sync", "ok"], "code-moved": ["code drifted", "drift"],
   "no-spec": ["no spec yet", ""], "no-anchors": ["no anchors", ""],
@@ -821,11 +929,13 @@ const Page = {
 
   overview() {
     const d = DATA, drifted = d.nodes.filter((n) => n.status === "code-moved");
+    const stale = (d.artifacts || []).filter((a) => a.stale);
     return `<h2>${esc(d.repo)}</h2>
       <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(new Set(d.nodes.map((n) => n.domain).filter(Boolean)).size, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
       ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
       ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
-      <p class="empty">Click a capability, line, file or domain outline for its details. Search covers names, purposes, requirements, scenarios and file paths.</p>`;
+      ${stale.length ? `<h3>Stale artifacts</h3>${stale.map((a) => `<p><a class="link" data-id="art:${esc(a.id)}">${esc(a.description || a.value)}</a> <span class="pill drift">${esc(a.type)}</span><br>${a.covers.map(capLink).join(" · ")}</p>`).join("")}` : ""}
+      <p class="empty">Click a capability, line, file, artifact or domain outline for its details. Search covers names, purposes, requirements, scenarios, file paths and artifacts.</p>`;
   },
 
   resultList(res) {
@@ -853,6 +963,7 @@ const Page = {
       ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
       ${n.status === "code-moved" ? `<p class="muted">${plural(n.changed.length, "anchored file changed", "anchored files changed")} since the last sync (marked below). <code>/blueprint-sync ${esc(n.id)}</code> settles it.</p>` : ""}
       ${neighbours.length ? `<h3>Shares files with</h3>${neighbours.map((x) => `<p>${capLink(x.id)} <a class="pill link" data-id="edge:${esc([n.id, x.id].sort().join("~"))}">${plural(x.count, "file", "files")}</a></p>`).join("")}` : ""}
+      ${n.artifacts.length ? `<h3>Artifacts (${n.artifacts.length})</h3>${artList(n.artifacts, n)}` : ""}
       ${n.hasBaseline ? `<h3>Requirements (${n.requirements.length})</h3>${reqs || `<p class="muted">None.</p>`}` : ""}
       <h3>Files (${n.files.length})</h3>
       <ul class="files">${n.files.map((f) => `<li class="${n.changed.includes(f) ? "changed" : ""}"><a class="link" data-id="file:${esc(f)}">${esc(f)}</a></li>`).join("")}</ul>
@@ -875,12 +986,21 @@ const Page = {
       <h3>Anchored by</h3>${owners.map((id) => `<p>${capLink(id)}</p>`).join("")}`;
   },
 
+  artifact(id) {
+    const a = artById[id];
+    if (!a) return this.overview();
+    return `<h2>${esc(a.description || a.id)}</h2>${artifact(a, null, true)}
+      <h3>Covers (${a.covers.length})</h3>${a.covers.map((c) => `<p>${capLink(c)}${a.capabilities.includes(c) ? "" : ` <span class="muted">through ${esc(byId[c].domain)}</span>`}</p>`).join("")}`;
+  },
+
   domain(id) {
     const dom = DATA.domains.find((x) => x.id === id) || { id, purpose: "" };
     const caps = DATA.nodes.filter((n) => n.domain === id);
+    const arts = (DATA.artifacts || []).filter((a) => a.capabilities.includes(id)).map((a) => a.id);
     return `<h2>${esc(id)}</h2><span class="pill">domain</span>
       ${dom.purpose ? `<p>${inline(dom.purpose)}</p>` : ""}
-      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">code drifted</span>` : ""}</p>`).join("")}`;
+      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">code drifted</span>` : ""}</p>`).join("")}
+      ${arts.length ? `<h3>Artifacts for the whole domain (${arts.length})</h3>${artList(arts, null)}` : ""}`;
   },
 
   draw() {
@@ -893,6 +1013,7 @@ const Page = {
       if (s.startsWith("edge:")) html = back + this.edge(s.slice(5));
       else if (s.startsWith("file:")) html = back + this.file(s.slice(5));
       else if (s.startsWith("dom:")) html = back + this.domain(s.slice(4));
+      else if (s.startsWith("art:")) html = back + this.artifact(s.slice(4));
       else if (byId[s]) html = back + this.capability(byId[s]);
       else html = this.overview();
     }
@@ -912,7 +1033,7 @@ const Page = {
   search(q, keep) {
     Search.set(q);
     this.results = Search.run();
-    const ids = this.results && new Set(this.results.flatMap((r) => [r.id, ...r.files.map((f) => "file:" + f)]));
+    const ids = this.results && new Set(this.results.flatMap((r) => [r.id, ...r.files.map((f) => "file:" + f), ...r.arts.map((a) => "art:" + a)]));
     Canvas.dim(ids);
     this.choose(keep ? this.selected : null);
   },
@@ -920,20 +1041,33 @@ const Page = {
 
 window.addEventListener("DOMContentLoaded", () => {
   const graph = document.getElementById("graph"), q = document.getElementById("q");
-  const files = document.getElementById("files"), legend = document.getElementById("legend");
+  const files = document.getElementById("files"), arts = document.getElementById("artifacts");
+  const legend = document.getElementById("legend"), nodes = document.getElementById("nodes");
   document.getElementById("repo").textContent = DATA.repo;
   files.checked = !!DATA.filesDefault;
-  legend.classList.toggle("files", files.checked);
+  arts.checked = (DATA.artifacts || []).some((a) => a.covers.length);
+  arts.disabled = !arts.checked;  // nothing to draw
+  const show = () => ({ files: files.checked, artifacts: arts.checked });
+  const label = () => {
+    const on = [files.checked && "files", arts.checked && "artifacts"].filter(Boolean);
+    document.getElementById("nodes-on").textContent = on.join(", ") || "none";
+    legend.classList.toggle("files", files.checked);
+    legend.classList.toggle("arts", arts.checked);
+  };
+  label();
 
   Canvas.mount(graph, (id) => Page.choose(id, false));
   const redraw = () => {
-    Canvas.render(toGraph(DATA, files.checked));
+    Canvas.render(toGraph(DATA, show()));
     Page.search(q.value, true);
   };
   redraw();
   Canvas.fit(0);
 
-  files.onchange = () => { legend.classList.toggle("files", files.checked); redraw(); Canvas.fit(); };
+  // Switching keeps the view where it is (refitting only when new nodes would fall outside it).
+  files.onchange = arts.onchange = () => { label(); redraw(); Canvas.reveal(); };
+  // Close the menu on a press anywhere else (captured, since the canvas swallows its own presses).
+  document.addEventListener("pointerdown", (e) => { if (!nodes.contains(e.target)) nodes.open = false; }, true);
   q.oninput = () => Page.search(q.value);
   q.onkeydown = (e) => { if (e.key === "Escape") { q.value = ""; Page.search(""); } };
   document.addEventListener("keydown", (e) => {
