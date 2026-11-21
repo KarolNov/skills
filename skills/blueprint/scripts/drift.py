@@ -15,9 +15,10 @@ since its spec was last synced. It never talks to the spec backend.
     drift.py rename OLD NEW                    rename a capability, keeping its stamps
     drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match
     drift.py hint                              one line suggesting /blueprint-tidy, or nothing
-    drift.py artifacts [--json] [CAPABILITY ...]
+    drift.py artifacts [--json] [--] [CAPABILITY|DOMAIN ...]
                                                stale artifacts (outside resources describing a
-                                               capability) and their changed files; exit 0
+                                               capability) and their changed files; exit 0.
+                                               `--` lets a filter be named add/checked/remove
     drift.py artifacts add --type T --value V --description D [--id ID] CAPABILITY ...
                                                add one, stamped as checked
     drift.py artifacts checked ID ... | --all  record the current state as checked
@@ -33,6 +34,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 
 def git(*args, check=True):
@@ -124,6 +126,21 @@ def uncommitted():
             | git_paths("ls-files", "-o", "--exclude-standard"))
 
 
+def cached_hashes():
+    """file_hashes with a cache, so a file several capabilities match is read once."""
+    cache = {}
+
+    def hashes(paths):
+        cache.update(file_hashes([p for p in paths if p not in cache]))
+        return {p: cache[p] for p in paths}
+    return hashes
+
+
+def changed_files(old, now):
+    """Paths added, removed or edited between two {path: hash} stamps, sorted."""
+    return sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
+
+
 def code_status(spec, paths, hashes=file_hashes):
     """A capability's code-side status and changed files, given the files its anchors match.
 
@@ -135,8 +152,7 @@ def code_status(spec, paths, hashes=file_hashes):
         # Mapped but never written as a spec (lazy setup): nothing to drift from.
         return "no-spec", []
     # Compare file by file, so additions, deletions and renames all show up.
-    old, now = spec["anchorsFiles"], hashes(paths)
-    changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
+    changed = changed_files(spec["anchorsFiles"], hashes(paths))
     return ("code-moved" if changed else "in-sync"), changed
 
 
@@ -220,8 +236,21 @@ def cmd_prune(args):
     compiled, old = compile_anchors(spec), spec.get("anchorsFiles", {})
     kept = {p: h for p, h in old.items() if matching_anchors(compiled, p)}
     spec["anchorsFiles"] = kept
+    # Artifacts over it drop the same paths, unless another capability they cover keeps them.
+    specs, domains = state["specs"], state.get("domains", {})
+    trimmed = 0
+    for art in state.get("artifacts", {}).values():
+        covers = resolve(art.get("capabilities", []), specs, domains)
+        if args[0] not in covers:
+            continue
+        compiled_all = [compile_anchors(specs[c]) for c in covers]
+        checked = art.get("checkedFiles", {})
+        art["checkedFiles"] = {p: h for p, h in checked.items()
+                               if any(matching_anchors(c, p) for c in compiled_all)}
+        trimmed += len(checked) - len(art["checkedFiles"])
     save(state)
-    print(f"pruned {args[0]}: dropped {len(old) - len(kept)} of {len(old)} stamps")
+    print(f"pruned {args[0]}: dropped {len(old) - len(kept)} of {len(old)} stamps"
+          + (f"; {trimmed} artifact stamps" if trimmed else ""))
     return 0
 
 
@@ -374,6 +403,12 @@ URL_TYPES = ("webpage", "notion", "confluence", "linear", "github")
 ARTIFACT_TYPES = URL_TYPES + ("file", "obsidian", "markdown")
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+# A git URL with a path after the host: scheme://host/path or scp-style user@host:path.
+GIT_URL = re.compile(r"^(?:[a-z][a-z0-9+.-]*://[^/\s]+/\S+|[^@\s/]+@[^:\s/]+:\S+)$")
+# The same URL forms on github.com, capturing owner/name.
+GITHUB_GIT_URL = re.compile(
+    r"^(?:https?://github\.com/|ssh://git@github\.com/|git@github\.com:)"
+    r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
 
 
 def value_problem(kind, value):
@@ -385,8 +420,7 @@ def value_problem(kind, value):
             return f"a {kind} value is a URL (http:// or https://)"
     elif kind == "file":
         repo, sep, path = value.rpartition(":")
-        is_git_url = "://" in repo or repo.startswith("git@") or repo.endswith(".git")
-        if not sep or not path.strip() or not (GITHUB_REPO.match(repo) or is_git_url):
+        if not sep or not path.strip() or not (GITHUB_REPO.match(repo) or GIT_URL.match(repo)):
             return "a file value is <repo>:<path>, with <repo> owner/name or a git URL"
     elif not value.strip():
         return f"a {kind} value is a path to the note"
@@ -399,8 +433,10 @@ def file_link(kind, value):
         return value
     if kind == "file":
         repo, _, path = value.rpartition(":")
-        if GITHUB_REPO.match(repo):
-            return f"https://github.com/{repo}/blob/HEAD/{path.lstrip('/')}"
+        m = GITHUB_GIT_URL.match(repo)
+        if m or GITHUB_REPO.match(repo):
+            owner_name = m.group(1) if m else repo
+            return f"https://github.com/{owner_name}/blob/HEAD/{quote(path.lstrip('/'))}"
     return None
 
 
@@ -418,16 +454,27 @@ def unknown_names(names, specs, domains):
     return [n for n in names if n not in specs and n not in domains]
 
 
-def artifact_files(art, specs, domains, files):
-    """The files the anchors of an artifact's capabilities match, now."""
+def artifact_files(covers, specs, files, memo=None):
+    """The files the anchors of these capabilities match, now. memo ({name: files}) is
+    shared across artifacts so each capability's anchors are matched once."""
+    memo = {} if memo is None else memo
     paths = set()
-    for name in resolve(art.get("capabilities", []), specs, domains):
-        paths.update(matched(specs[name], files))
+    for name in covers:
+        if name not in memo:
+            memo[name] = matched(specs[name], files)
+        paths.update(memo[name])
     return sorted(paths)
 
 
+def dangling(art, specs, domains):
+    """The names in an artifact's capabilities that are no longer a capability or a domain."""
+    return unknown_names(art.get("capabilities", []), specs, domains)
+
+
 def artifact_ids(args, arts, what):
-    ids = list(arts) if "--all" in args else [a for a in args if not a.startswith("--")]
+    if "--all" in args:
+        return list(arts)
+    ids = [a for a in args if not a.startswith("--")]
     if not ids:
         sys.exit(f"artifacts {what} needs artifact ids" + (" or --all" if what == "checked" else ""))
     if missing := [i for i in ids if i not in arts]:
@@ -452,27 +499,24 @@ def artifacts_list(args):
     if missing := unknown_names(names, specs, domains):
         sys.exit(f"unknown capability: {', '.join(missing)}")
     wanted = set(resolve(names, specs, domains))
-    cache = {}
-
-    def hashes(paths):
-        for p in paths:
-            if p not in cache:
-                cache.update(file_hashes([p]))
-        return {p: cache[p] for p in paths}
+    hashes, memo = cached_hashes(), {}
 
     report = []
     for aid, art in state.get("artifacts", {}).items():
         covers = resolve(art.get("capabilities", []), specs, domains)
-        if names and not wanted.intersection(covers):
+        # A name that no longer exists (renamed or removed by hand) is always reported, even
+        # under a filter, since it can't be told which capability it was meant to cover.
+        unknown = dangling(art, specs, domains)
+        if names and not unknown and not wanted.intersection(covers):
             continue
-        old = art.get("checkedFiles", {})
-        now = hashes(artifact_files(art, specs, domains, files))
-        changed = sorted(p for p in old.keys() | now.keys() if old.get(p) != now.get(p))
-        if changed:
+        changed = changed_files(art.get("checkedFiles", {}),
+                                hashes(artifact_files(covers, specs, files, memo)))
+        if changed or unknown:
             report.append({"id": aid, "type": art.get("type"), "value": art.get("value"),
                            "link": file_link(art.get("type"), art.get("value", "")),
                            "description": art.get("description", ""),
-                           "capabilities": art.get("capabilities", []), "changed": changed})
+                           "capabilities": art.get("capabilities", []), "changed": changed,
+                           "unknown": unknown})
     if as_json:
         print(json.dumps(report, indent=2))
     else:
@@ -480,6 +524,8 @@ def artifacts_list(args):
             print(f"{r['id']}  {r['type']}  {r['value']}")
             if r["description"]:
                 print(f"    {r['description']}")
+            if r["unknown"]:
+                print(f"    unknown capability: {', '.join(r['unknown'])}: fix its capabilities")
             print("".join(f"      {f}\n" for f in r["changed"]), end="")
     return 0
 
@@ -511,7 +557,8 @@ def artifacts_add(args):
     art = {"type": opts.kind, "value": opts.value, "description": opts.description.strip(),
            "capabilities": caps}
     # Whoever adds it is taken to have just read it.
-    art["checkedFiles"] = file_hashes(artifact_files(art, specs, domains, repo_files()))
+    art["checkedFiles"] = file_hashes(artifact_files(resolve(caps, specs, domains), specs,
+                                                     repo_files()))
     state.setdefault("artifacts", {})[aid] = art
     save(state)
     print(f"added {aid}: {len(art['checkedFiles'])} files checked")
@@ -522,15 +569,21 @@ def artifacts_checked(args):
     state, files = load(), repo_files()
     specs, domains = state.get("specs", {}), state.get("domains", {})
     arts = state.get("artifacts", {})
-    for aid in artifact_ids(args, arts, "checked"):
-        arts[aid]["checkedFiles"] = file_hashes(artifact_files(arts[aid], specs, domains, files))
+    ids = artifact_ids(args, arts, "checked")
+    # Stamping one with a dangling name would hide it for good: its files would never change.
+    if bad := [f"{a} ({', '.join(u)})" for a in ids if (u := dangling(arts[a], specs, domains))]:
+        sys.exit(f"unknown capability in artifact: {'; '.join(bad)}: fix its capabilities first")
+    hashes, memo = cached_hashes(), {}
+    for aid in ids:
+        covers = resolve(arts[aid].get("capabilities", []), specs, domains)
+        arts[aid]["checkedFiles"] = hashes(artifact_files(covers, specs, files, memo))
         print(f"checked {aid}: {len(arts[aid]['checkedFiles'])} files")
     save(state)
     return 0
 
 
 def artifacts_remove(args):
-    if len(args) != 1:
+    if len(args) != 1 or args[0].startswith("--"):
         sys.exit("artifacts remove takes one artifact id")
     state = load()
     arts = state.get("artifacts", {})
@@ -545,6 +598,9 @@ def cmd_artifacts(args):
     subs = {"add": artifacts_add, "checked": artifacts_checked, "remove": artifacts_remove}
     if args and args[0] in subs:
         return subs[args[0]](args[1:])
+    if args and args[0] == "--":
+        # `artifacts -- remove`: a filter by a capability that shares a subcommand's name.
+        args = args[1:]
     return artifacts_list(args)
 
 

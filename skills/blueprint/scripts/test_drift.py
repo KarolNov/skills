@@ -412,6 +412,76 @@ class Artifacts(DriftTest):
                          ["billing/search", "billing"])
         self.assertEqual(self.stale(r), {})
 
+    def test_remove_refuses_flags(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "search", id="search-help")
+        out = r.drift("artifacts", "remove", "--all")
+        self.assertIn("takes one artifact id", out.stderr)
+        self.assertNotIn("Traceback", out.stderr)
+        self.assertIn("search-help", r.state()["artifacts"])
+
+    def test_checked_all_with_none_is_a_no_op(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = r.drift("artifacts", "checked", "--all")
+        self.assertEqual(out.returncode, 0, out.stderr)
+
+    def test_dangling_capability_is_reported_and_blocks_checked(self):
+        r = self.repo(self.FILES, self.STATE)
+        self.add(r, "search", id="search-help")
+        state = r.state()
+        state["specs"]["find"] = state["specs"].pop("search")  # renamed by hand
+        r.write(".blueprint/blueprint.json", json.dumps(state))
+        report = {a["id"]: a for a in json.loads(r.drift("artifacts", "--json", "find").stdout)}
+        self.assertEqual(report["search-help"]["unknown"], ["search"])
+        out = r.drift("artifacts", "checked", "search-help")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("search", out.stderr)
+        self.assertEqual(r.state()["artifacts"]["search-help"]["checkedFiles"],
+                         {"search/index.ts": state["artifacts"]["search-help"]["checkedFiles"]
+                          ["search/index.ts"]})
+
+    def test_prune_trims_artifact_stamps(self):
+        files = dict(self.FILES, **{"search/core.ts": "c"})
+        r = self.repo(files, self.STATE)
+        self.add(r, "search", id="search-help")
+        state = r.state()
+        state["specs"]["search"]["anchors"] = ["search/core.ts"]
+        r.write(".blueprint/blueprint.json", json.dumps(state))
+        self.assertEqual(self.stale(r), {"search-help": ["search/index.ts"]})
+        self.assertEqual(r.drift("prune", "search").returncode, 0)
+        self.assertEqual(self.stale(r), {})
+
+    def test_git_urls_need_a_path(self):
+        r = self.repo(self.FILES, self.STATE)
+        for value in ("git@github.com:acme/docs.git", "ssh://git@host:2222/acme/docs.git",
+                      "docs.git:guides/search.md"):
+            self.assertNotEqual(self.add(r, "search", kind="file", value=value).returncode, 0,
+                                value)
+
+    def test_github_git_urls_link_and_paths_are_escaped(self):
+        r = self.repo(self.FILES, self.STATE)
+        ok = {
+            "ssh-gh": ("git@github.com:acme/docs.git:guides/search.md",
+                       "https://github.com/acme/docs/blob/HEAD/guides/search.md"),
+            "https-gh": ("https://github.com/acme/docs.git:guides/FAQ #2.md",
+                         "https://github.com/acme/docs/blob/HEAD/guides/FAQ%20%232.md"),
+        }
+        for aid, (value, _) in ok.items():
+            out = self.add(r, "search", kind="file", value=value, id=aid)
+            self.assertEqual(out.returncode, 0, (aid, out.stderr))
+        r.write("search/index.ts", "edited")
+        report = {a["id"]: a for a in json.loads(r.drift("artifacts", "--json").stdout)}
+        for aid, (_, link) in ok.items():
+            self.assertEqual(report[aid]["link"], link, aid)
+
+    def test_double_dash_filters_by_subcommand_name(self):
+        state = json.loads(json.dumps(self.STATE))
+        state["specs"]["remove"] = spec("search/**")
+        r = self.repo(self.FILES, state)
+        self.add(r, "remove", id="remove-help")
+        r.write("search/index.ts", "edited")
+        self.assertEqual(list(self.stale(r, "--", "remove")), ["remove-help"])
+
     def test_no_artifacts(self):
         r = self.repo(self.FILES, self.STATE)
         out = r.drift("artifacts")
