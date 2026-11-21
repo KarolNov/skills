@@ -56,6 +56,10 @@ ul.files { list-style: none; padding: 0; margin: 0; font-family: ui-monospace, S
 ul.files li { padding: 2px 0; color: var(--muted); word-break: break-all; }
 ul.files li.changed { color: var(--drift); }
 ul.files li.changed::after { content: " · changed"; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+.art { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.art.stale { border-color: var(--drift); background: var(--drift-bg); }
+.art .val { font-size: 13px; word-break: break-all; margin: 2px 0; }
+.art p { font-size: 13px; }
 .result { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
 .result:hover { border-color: var(--accent); }
 .result .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
@@ -148,7 +152,7 @@ svg:active { cursor: grabbing; }
     </details>
   </div>
   <aside>
-    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files…" autocomplete="off">
+    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files, artifacts…" autocomplete="off">
       <div class="count" id="count"></div></div>
     <div id="panel"></div>
   </aside>
@@ -164,6 +168,8 @@ const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
 const fileOwners = {};
 for (const n of DATA.nodes) for (const f of n.files) (fileOwners[f] = fileOwners[f] || []).push(n.id);
 const fileChanged = (f) => fileOwners[f].some((id) => byId[id].changed.includes(f));
+// Outside resources describing capabilities; not drawn on the canvas, only listed in the panel.
+const artById = Object.fromEntries((DATA.artifacts || []).map((a) => [a.id, a]));
 
 function toGraph(d, showFiles) {
   const files = showFiles ? Object.keys(fileOwners).sort().map((f) => ({
@@ -730,7 +736,7 @@ const Canvas = (function () {
 
 // ---- search -------------------------------------------------------------
 // A capability matches when every typed word appears somewhere in its name, purpose, requirements
-// (title, text and scenarios) or file paths. What matched is the fields holding the most words.
+// (title, text and scenarios), file paths or artifacts. What matched is the fields holding the most words.
 const Search = {
   terms: [],
   set(q) { this.terms = q.toLowerCase().split(/\s+/).filter(Boolean); },
@@ -745,6 +751,8 @@ const Search = {
         { kind: "purpose", label: "purpose", text: n.purpose },
         ...n.requirements.map((r) => ({ kind: "req", label: "“" + r.title + "”", text: this.reqText(r) })),
         ...n.files.map((f) => ({ kind: "file", label: f, text: f })),
+        ...n.artifacts.map((id) => artById[id]).filter(Boolean)
+          .map((a) => ({ kind: "artifact", label: "artifact " + a.id, text: [a.id, a.value, a.description].join("\n") })),
       ];
       const all = fields.map((f) => f.text).join("\n").toLowerCase();
       if (!this.terms.every((w) => all.includes(w))) continue;
@@ -787,6 +795,27 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const capLink = (id) => `<a class="link" data-id="${esc(id)}">${esc(id)}</a>`;
+// One artifact: its type, value (a link when it opens in a browser), description and, when stale,
+// what changed since it was checked. `from` is the capability whose panel lists it, to say when
+// it covers that capability through its domain.
+function artifact(a, from) {
+  const href = a.link && /^(https?|obsidian):/i.test(a.link) ? a.link : null;
+  const via = from && !a.capabilities.includes(from.id) && from.domain && a.capabilities.includes(from.domain) ? from.domain : null;
+  return `<div class="art${a.stale ? " stale" : ""}">
+    <span class="pill">${esc(a.type)}</span>${a.stale ? `<span class="pill drift">stale</span>` : ""}<span class="muted"> ${esc(a.id)}</span>
+    <div class="val">${href ? `<a class="link" href="${esc(href)}" target="_blank" rel="noopener">${esc(a.value)} ↗</a>` : `<code>${esc(a.value)}</code>`}</div>
+    ${a.description ? `<p>${inline(a.description)}</p>` : ""}
+    ${via ? `<p class="muted">Covers every capability in <a class="link" data-id="dom:${esc(via)}">${esc(via)}</a>.</p>` : ""}
+    ${a.changed.length ? `<p class="muted">${plural(a.changed.length, "file changed", "files changed")} since it was last checked:</p>
+      <ul class="files">${a.changed.map((f) => `<li class="changed">${fileOwners[f] ? `<a class="link" data-id="file:${esc(f)}">${esc(f)}</a>` : esc(f)}</li>`).join("")}</ul>` : ""}
+    ${a.unknown.length ? `<p class="muted">Names no capability or domain any more: <code>${a.unknown.map(esc).join("</code> <code>")}</code>.</p>` : ""}
+    ${a.stale ? `<p class="muted">Once it's updated or still accurate: <code>drift.py artifacts checked ${esc(a.id)}</code></p>` : ""}
+  </div>`;
+}
+// Stale ones first, otherwise in blueprint.json's order.
+const artList = (ids, from) => ids.map((id) => artById[id]).filter(Boolean)
+  .sort((x, y) => y.stale - x.stale).map((a) => artifact(a, from)).join("");
+
 const STATUS = {
   "in-sync": ["in sync", "ok"], "code-moved": ["code drifted", "drift"],
   "no-spec": ["no spec yet", ""], "no-anchors": ["no anchors", ""],
@@ -821,11 +850,13 @@ const Page = {
 
   overview() {
     const d = DATA, drifted = d.nodes.filter((n) => n.status === "code-moved");
+    const stale = (d.artifacts || []).filter((a) => a.stale);
     return `<h2>${esc(d.repo)}</h2>
       <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(new Set(d.nodes.map((n) => n.domain).filter(Boolean)).size, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
       ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
       ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
-      <p class="empty">Click a capability, line, file or domain outline for its details. Search covers names, purposes, requirements, scenarios and file paths.</p>`;
+      ${stale.length ? `<h3>Stale artifacts</h3>${stale.map((a) => `<p>${a.description ? inline(a.description) : esc(a.value)} <span class="pill drift">${esc(a.type)}</span><br>${a.covers.map(capLink).join(" · ")}</p>`).join("")}` : ""}
+      <p class="empty">Click a capability, line, file or domain outline for its details. Search covers names, purposes, requirements, scenarios, file paths and artifacts.</p>`;
   },
 
   resultList(res) {
@@ -853,6 +884,7 @@ const Page = {
       ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
       ${n.status === "code-moved" ? `<p class="muted">${plural(n.changed.length, "anchored file changed", "anchored files changed")} since the last sync (marked below). <code>/blueprint-sync ${esc(n.id)}</code> settles it.</p>` : ""}
       ${neighbours.length ? `<h3>Shares files with</h3>${neighbours.map((x) => `<p>${capLink(x.id)} <a class="pill link" data-id="edge:${esc([n.id, x.id].sort().join("~"))}">${plural(x.count, "file", "files")}</a></p>`).join("")}` : ""}
+      ${n.artifacts.length ? `<h3>Artifacts (${n.artifacts.length})</h3>${artList(n.artifacts, n)}` : ""}
       ${n.hasBaseline ? `<h3>Requirements (${n.requirements.length})</h3>${reqs || `<p class="muted">None.</p>`}` : ""}
       <h3>Files (${n.files.length})</h3>
       <ul class="files">${n.files.map((f) => `<li class="${n.changed.includes(f) ? "changed" : ""}"><a class="link" data-id="file:${esc(f)}">${esc(f)}</a></li>`).join("")}</ul>
@@ -878,9 +910,11 @@ const Page = {
   domain(id) {
     const dom = DATA.domains.find((x) => x.id === id) || { id, purpose: "" };
     const caps = DATA.nodes.filter((n) => n.domain === id);
+    const arts = (DATA.artifacts || []).filter((a) => a.capabilities.includes(id)).map((a) => a.id);
     return `<h2>${esc(id)}</h2><span class="pill">domain</span>
       ${dom.purpose ? `<p>${inline(dom.purpose)}</p>` : ""}
-      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">code drifted</span>` : ""}</p>`).join("")}`;
+      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">code drifted</span>` : ""}</p>`).join("")}
+      ${arts.length ? `<h3>Artifacts for the whole domain (${arts.length})</h3>${artList(arts, null)}` : ""}`;
   },
 
   draw() {

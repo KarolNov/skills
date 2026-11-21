@@ -181,6 +181,80 @@ class Drift(GraphTest):
         self.assertEqual(by, {"lazy": "no-spec", "bare": "no-anchors"})
 
 
+class Artifacts(GraphTest):
+    FILES = {"billing/invoices.py": "one", "billing/refunds.py": "two", "room.py": "r"}
+
+    def state(self, arts):
+        return {"domains": {"billing": {}},
+                "specs": {"billing/invoices": spec("billing/invoices.py"),
+                          "billing/refunds": spec("billing/refunds.py"), "room": spec("room.py")},
+                "artifacts": arts}
+
+    def art(self, kind, value, caps, checked):
+        hashes = {p: hashlib.sha256(self.FILES[p].encode()).hexdigest()[:12] for p in checked}
+        return {"type": kind, "value": value, "description": "Help article", "capabilities": caps,
+                "checkedFiles": hashes}
+
+    def test_direct_and_through_domain(self):
+        arts = {"help": self.art("webpage", "https://help.example.com/x", ["billing/invoices"],
+                                 ["billing/invoices.py"]),
+                "guide": self.art("notion", "https://notion.so/p", ["billing"],
+                                  ["billing/invoices.py", "billing/refunds.py"])}
+        d = self.repo(self.FILES, self.state(arts)).data()
+        by = {n["id"]: n["artifacts"] for n in d["nodes"]}
+        self.assertEqual(by, {"billing/invoices": ["help", "guide"], "billing/refunds": ["guide"],
+                              "room": []})
+        a = {x["id"]: x for x in d["artifacts"]}
+        self.assertEqual(a["guide"]["covers"], ["billing/invoices", "billing/refunds"])
+        self.assertEqual(a["help"]["link"], "https://help.example.com/x")
+        self.assertEqual((a["help"]["stale"], a["guide"]["stale"]), (False, False))
+        self.assertEqual(a["help"]["description"], "Help article")
+
+    def test_stale_after_code_changes(self):
+        arts = {"help": self.art("webpage", "https://help.example.com/x", ["billing/invoices"],
+                                 ["billing/invoices.py"])}
+        r = self.repo(self.FILES, self.state(arts))
+        r.write("billing/invoices.py", "edited")
+        a = r.data()["artifacts"][0]
+        self.assertEqual((a["stale"], a["changed"]), (True, ["billing/invoices.py"]))
+        out = r.graph("--out", "m.html")
+        self.assertIn("1 stale artifact", out.stdout)
+
+    def test_links_and_unknown_names(self):
+        arts = {"readme": self.art("file", "acme/docs:billing/README.md", ["room"], ["room.py"]),
+                "note": self.art("markdown", "notes/billing.md", ["room"], ["room.py"]),
+                "vault": self.art("obsidian", "obsidian://open?vault=v&file=b", ["room"], ["room.py"]),
+                "gone": self.art("webpage", "https://x.example.com", ["room", "old/cap"], ["room.py"])}
+        a = {x["id"]: x for x in self.repo(self.FILES, self.state(arts)).data()["artifacts"]}
+        self.assertEqual(a["readme"]["link"], "https://github.com/acme/docs/blob/HEAD/billing/README.md")
+        self.assertIsNone(a["note"]["link"])
+        self.assertEqual(a["vault"]["link"], "obsidian://open?vault=v&file=b")
+        # A name that is no longer a capability or domain keeps the artifact flagged, as in drift.py.
+        self.assertEqual((a["gone"]["stale"], a["gone"]["changed"], a["gone"]["unknown"]),
+                         (True, [], ["old/cap"]))
+        self.assertFalse(a["readme"]["stale"])
+
+    def test_agrees_with_drift(self):
+        """The map flags exactly what `drift.py artifacts` lists, with the same files."""
+        arts = {"help": self.art("webpage", "https://h.example.com", ["billing/invoices"],
+                                 ["billing/invoices.py"]),
+                "guide": self.art("notion", "https://notion.so/p", ["billing"], ["billing/refunds.py"]),
+                "room": self.art("webpage", "https://r.example.com", ["room"], ["room.py"]),
+                "gone": self.art("webpage", "https://g.example.com", ["old/cap"], [])}
+        r = self.repo(self.FILES, self.state(arts))
+        r.write("billing/invoices.py", "edited")
+        listed = subprocess.run([sys.executable, str(GRAPH.parent / "drift.py"), "artifacts", "--json"],
+                                cwd=r.root, capture_output=True, text=True, env=ENV)
+        want = {x["id"]: x["changed"] for x in json.loads(listed.stdout)}
+        got = {x["id"]: x["changed"] for x in r.data()["artifacts"] if x["stale"]}
+        self.assertEqual(got, want)
+        self.assertEqual(set(want), {"help", "guide", "gone"})
+
+    def test_none(self):
+        d = self.repo(self.FILES, {"specs": {"room": spec("room.py")}}).data()
+        self.assertEqual((d["artifacts"], d["nodes"][0]["artifacts"]), ([], []))
+
+
 class Page(GraphTest):
     STATE = {"domains": {"core": {"purpose": "</script><b>x</b>"}},
              "specs": {"core/a": spec("a.ts"), "core/b": spec("a.ts")}}
