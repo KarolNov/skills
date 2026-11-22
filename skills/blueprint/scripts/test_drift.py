@@ -244,6 +244,19 @@ class Rename(DriftTest):
         self.assertIn("couldn't rewrite the ui tags in: tests/a.test.ts", out.stderr)
         self.assertIn("catalog/ui", r.state()["specs"])
 
+    def test_unreadable_file_is_named(self):
+        files = dict(self.FILES, **{"tests/a.test.ts": "// @scenario ui: A\n",
+                                    "tests/b.test.ts": "// @scenario ui: B\n"})
+        r = self.repo(files, self.STATE)
+        (r.root / "tests/b.test.ts").chmod(0o000)
+        self.addCleanup((r.root / "tests/b.test.ts").chmod, 0o644)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout, "renamed ui to catalog/ui; 1 tags rewritten\n")
+        self.assertIn("couldn't read, so any tags in them still name ui: tests/b.test.ts (",
+                      out.stderr)
+        self.assertEqual((r.root / "tests/a.test.ts").read_text(), "// @scenario catalog/ui: A\n")
+
     def test_no_tags_no_count(self):
         r = self.repo(self.FILES, self.STATE)
         out = r.drift("rename", "ui", "ui/app")
