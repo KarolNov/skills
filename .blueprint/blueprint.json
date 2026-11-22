@@ -50,7 +50,7 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "5dcbaa8a583f81b8",
+      "specVersion": "a9a807089c232b06",
       "anchorsFiles": {
         "skills/blueprint/references/apply.md": "365935f3be26",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
@@ -131,7 +131,7 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "3d88476e342cdc53",
+      "specVersion": "f58e68819c76d3a0",
       "anchorsFiles": {
         "mods/blueprint-ui/.claude-plugin/plugin.json": "6b7771ba4d56",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",

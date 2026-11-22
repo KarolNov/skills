@@ -53,6 +53,7 @@ test('a group is ready once approved and its base is main or has a PR; Specs onc
   expect(proposed.groups.filter(g => isReady(proposed, g))).toEqual([])
 })
 
+// @scenario blueprint/ui: Group waits for others to merge
 test('a group cut from main that waits on others starts only once they all merged', async () => {
   const groups = [...PLAN.groups.slice(0, 3), { id: '4', name: 'Dogfood', tasks: '7', base: 'main', after: ['1', '2', '3'], prompt: '/blueprint apply add-sso 4' }, PLAN.groups[3]!]
   const p = plan({ groups: groups as never })
