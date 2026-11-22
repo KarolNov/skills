@@ -3,7 +3,8 @@
 
     python3 graph.py [--out PATH] [--json]
 
-Reads blueprint.json, baseline/ and the repo's files; writes .blueprint/map.html
+Reads blueprint.json, baseline/ and the repo's files (and, when blueprint.json has
+tests.kinds, the @scenario tags coverage.py finds in them); writes .blueprint/map.html
 (or PATH) with d3, the page script and the data inlined, so it opens offline, and prints
 the path and a one-line summary. The default path is kept out of git by .blueprint/.gitignore.
 --json prints the extracted data instead of writing the page.
@@ -84,6 +85,7 @@ def build(state=None, files=None):
     for art in arts:
         for name in art["covers"]:
             by_id[name]["artifacts"].append(art["id"])
+    cov, cov_error, tests = scenario_coverage(state, files, by_id)
 
     shared = {}
     for f, caps in owners.items():
@@ -99,6 +101,10 @@ def build(state=None, files=None):
         "nodes": nodes,
         "edges": edges,
         "artifacts": arts,
+        # None without tests.kinds (or when coverage.py can't run: coverageError says why).
+        "coverage": cov,
+        "coverageError": cov_error,
+        "tests": tests,
         # With no shared files there are no lines, so the page starts with files drawn as nodes.
         "filesDefault": not edges,
     }
@@ -121,6 +127,57 @@ def artifacts(state, files, hashes, memo):
                     "capabilities": art.get("capabilities", []), "covers": covers,
                     "stale": bool(changed or unknown), "changed": changed, "unknown": unknown})
     return out
+
+
+def scenario_coverage(state, files, by_id):
+    """What coverage.py finds, put on the map: each node gets its claimed count (`coverage`), its
+    requirements' scenarios with their claims, and the test files claiming them (`tests`).
+
+    Returns (coverage, error, tests): coverage is coverage.py's report without the per-capability
+    part (that went on the nodes), or None. Without tests.kinds the map draws as before, with no
+    error; any other problem coverage.py stops on is the error, and the map still draws.
+    tests is [{file, kind, covers, claims: [{capability, scenario, line}]}].
+    """
+    for n in by_id.values():
+        n["coverage"], n["tests"] = None, []
+    kinds = state.get("tests")
+    if not isinstance(kinds, dict) or kinds.get("kinds") is None:
+        return None, None, []
+    # Here, not at the top: coverage.py imports this module. By path, not `import coverage`,
+    # which would get the PyPI package when it is already loaded (coverage run, pytest-cov).
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("blueprint_coverage", HERE / "coverage.py")
+    coverage = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(coverage)
+    try:
+        data = coverage.build(state, files)
+    except coverage.Usage as e:
+        return None, str(e), []
+
+    by_file = {}
+    for cap in data["capabilities"]:
+        n = by_id.get(cap["name"])
+        if n is None:  # a capability only a delta adds; graph.py passes none
+            continue
+        n["coverage"] = {"claimed": cap["claimed"], "total": cap["total"]}
+        # Both sides come from parse_baseline in the same order, so they pair up one to one.
+        if len(cap["requirements"]) == len(n["requirements"]):
+            for req, c in zip(n["requirements"], cap["requirements"]):
+                req["scenarios"] = c["scenarios"]
+        for req in cap["requirements"]:
+            for s in req["scenarios"]:
+                for c in s["claims"]:
+                    t = by_file.setdefault(c["file"], {"file": c["file"], "kind": c["kind"], "claims": []})
+                    t["claims"].append({"capability": cap["name"], "scenario": s["name"], "line": c["line"]})
+    tests = []
+    for f in sorted(by_file):
+        t = by_file[f]
+        t["claims"].sort(key=lambda c: c["line"])
+        t["covers"] = sorted({c["capability"] for c in t["claims"]})
+        for name in t["covers"]:
+            by_id[name]["tests"].append(f)
+        tests.append(t)
+    return {k: v for k, v in data.items() if k != "capabilities"}, None, tests
 
 
 def script_json(data):
@@ -177,14 +234,21 @@ def ignore_map(path):
 
 
 def summary(data):
-    """One line for the report: counts, and the capabilities whose code moved."""
+    """One line for the report: counts, the capabilities whose code moved, and coverage when on."""
     moved = [n["id"] for n in data["nodes"] if n["status"] == "code-moved"]
     stale = sum(a["stale"] for a in data.get("artifacts", []))
     shared = "" if data["edges"] else "; no shared files, so files start as nodes"
     n, d = len(data["nodes"]), len(data["domains"])
+    cov, scen = data.get("coverage"), ""
+    if cov:
+        s, o = cov["summary"], len(cov["orphans"])
+        scen = (f"; {s['claimed']} of {s['total']} scenario{'' if s['total'] == 1 else 's'} claimed"
+                + (f", {o} orphan tag{'' if o == 1 else 's'}" if o else ""))
+    elif data.get("coverageError"):
+        scen = f"; coverage not shown: {data['coverageError']}"
     return (f"{n} capabilit{'y' if n == 1 else 'ies'}, {d} domain{'' if d == 1 else 's'}; "
             f"code-drifted: {', '.join(moved) or 'none'}"
-            + (f"; {stale} stale artifact{'' if stale == 1 else 's'}" if stale else "") + shared)
+            + (f"; {stale} stale artifact{'' if stale == 1 else 's'}" if stale else "") + scen + shared)
 
 
 if __name__ == "__main__":
