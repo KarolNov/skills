@@ -50,12 +50,12 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "5dcbaa8a583f81b8",
+      "specVersion": "a9a807089c232b06",
       "anchorsFiles": {
-        "skills/blueprint/references/apply.md": "365935f3be26",
+        "skills/blueprint/references/apply.md": "494e0fe8c66f",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "e569f32811bd2e3502b428e64cd9631c61cccb79"
     },
     "blueprint/backends": {
       "ref": "https://app.notion.com/p/41c43cce21f28136b9ded9fc8d7d6011",
@@ -131,7 +131,7 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "3d88476e342cdc53",
+      "specVersion": "f58e68819c76d3a0",
       "anchorsFiles": {
         "mods/blueprint-ui/.claude-plugin/plugin.json": "6b7771ba4d56",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
@@ -148,16 +148,16 @@
         "mods/blueprint-ui/hooks/register.test.tsx": "5ea41ead50c4",
         "mods/blueprint-ui/hooks/register.tsx": "c1eaa561a874",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
-        "mods/blueprint-ui/hooks/split.test.tsx": "14d50caec221",
-        "mods/blueprint-ui/hooks/split.ts": "e05d22940a37",
+        "mods/blueprint-ui/hooks/split.test.tsx": "7a0d8f19a96e",
+        "mods/blueprint-ui/hooks/split.ts": "6047e7e6dcfc",
         "mods/blueprint-ui/hooks/status.test.tsx": "17c17f39489d",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "fa81c68ff04c"
+        "mods/blueprint-ui/types/index.d.ts": "3a7226699b65"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "e569f32811bd2e3502b428e64cd9631c61cccb79"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",

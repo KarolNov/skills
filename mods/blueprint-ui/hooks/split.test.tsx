@@ -53,6 +53,28 @@ test('a group is ready once approved and its base is main or has a PR; Specs onc
   expect(proposed.groups.filter(g => isReady(proposed, g))).toEqual([])
 })
 
+// @scenario blueprint/ui: Group waits for others to merge
+test('a group cut from main that waits on others starts only once they all merged', async () => {
+  const groups = [...PLAN.groups.slice(0, 3), { id: '4', name: 'Dogfood', tasks: '7', base: 'main', after: ['1', '2', '3'], prompt: '/blueprint apply add-sso 4' }, PLAN.groups[3]!]
+  const p = plan({ groups: groups as never })
+  expect(p.groups.filter(g => isReady(p, g)).map(g => g.id)).toEqual(['1', '3'])
+  expect(stateOf(p, p.groups[3]!)).toBe('after groups 1, 2, 3 merge')
+  const some = plan({ groups: groups.map(g => (g.id === '1' || g.id === '3' ? { ...g, status: 'merged' } : g)) as never })
+  expect(isReady(some, some.groups[3]!)).toBe(false)
+  expect(stateOf(some, some.groups[3]!)).toBe('after group 2 merges')
+  const all = plan({ groups: groups.map(g => (['1', '2', '3'].includes(g.id) ? { ...g, status: 'merged' } : g)) as never })
+  expect(all.groups.filter(g => isReady(all, g)).map(g => g.id)).toEqual(['4'])
+  const unapproved = plan({ isApproved: false, groups: groups as never })
+  expect(stateOf(unapproved, unapproved.groups[3]!)).toBe('after groups 1, 2, 3 merge')
+})
+
+test('a group that waits on itself, on Specs or on no group is refused', async () => {
+  const g4 = (after: string[]) => ({ ...PLAN, groups: [PLAN.groups[0], { ...PLAN.groups[2], after }, PLAN.groups[3]] })
+  expect(splitOf(g4(['3']))).toEqual({ error: "group 3 can't wait for itself." })
+  expect(splitOf(g4(['9']))).toEqual({ error: 'group 3 waits for "9", which is no group.' })
+  expect(splitOf(g4(['specs']))).toEqual({ error: "group 3 can't wait for Specs, which merges last." })
+})
+
 test('a plan with a base that is no group is refused', async () => {
   expect(splitOf({ ...PLAN, groups: [{ ...PLAN.groups[0], base: '9' }] })).toEqual({ error: 'group 1\'s base "9" is neither main nor a group.' })
 })
