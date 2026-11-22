@@ -211,9 +211,9 @@
       "specVersion": "0c1f1403d09d8583",
       "anchorsFiles": {
         "skills/blueprint/references/coverage.md": "46407ac6a8c6",
-        "skills/blueprint/scripts/coverage.py": "e0ef3a27dae3"
+        "skills/blueprint/scripts/coverage.py": "2980d5843bdc"
       },
-      "syncedCommit": "bc4f31983223ffc4f26b5e4f427cea93d6c3db96"
+      "syncedCommit": "d4bb4a89e27943c25727360dd2dcdaae72f0af58"
     }
   },
   "changes": {
