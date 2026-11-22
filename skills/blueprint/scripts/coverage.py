@@ -36,6 +36,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import drift  # noqa: E402  (finds the repo root on import)
 from graph import parse_baseline  # noqa: E402
+from notion_normalize import normalize  # noqa: E402
 
 MAX_BYTES = 1 << 20
 _TAG = re.compile(r"^\s*(?://+!?|#+|--+|/\*+!?|\*+|<!--)\s*@scenario\b[ \t]*(.*?)\s*$")
@@ -126,6 +127,8 @@ def capabilities(specs, delta):
     out = {}
     for name in sorted(set(specs) | {c for c, ch in delta.items() if ch.get("ADDED")}):
         reqs = baseline_requirements(name)
+        if reqs is None and (specs.get(name) or {}).get("ref"):
+            raise Usage(f"{name} has a spec but no .blueprint/baseline/{name}.md: sync it first")
         change = delta.get(name)
         if change:
             reqs = apply_delta(reqs or [], change)
@@ -157,13 +160,13 @@ def kind_of(path, kinds):
 def scan_text(text):
     """[(line, capability, scenario)] for each tag; capability None when malformed."""
     tags = []
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in enumerate(text.split("\n"), 1):
         m = _TAG.match(line)
         if not m:
             continue
         rest = _TAG_END.sub("", m.group(1))
         cap, sep, name = rest.partition(":")
-        cap, name = cap.strip(), " ".join(name.split())
+        cap, name = cap.strip().strip("`"), " ".join(name.split())
         if not sep or not cap or not name or " " in cap:
             tags.append((n, None, rest))
         else:
@@ -186,7 +189,7 @@ def scan(files):
             continue
         if b"@scenario" not in data or b"\0" in data[:8192]:
             continue
-        for line, cap, name in scan_text(data.decode("utf-8", "replace")):
+        for line, cap, name in scan_text(data.decode("utf-8-sig", "replace")):
             tags.append({"file": path, "line": line, "capability": cap, "scenario": name})
     return tags
 
@@ -260,7 +263,9 @@ def build(state=None, files=None, delta=None, only=None):
                          "requirements": out_reqs})
 
     def keep(items):
-        return items if only is None else [i for i in items if i["capability"] == only]
+        # An unknown capability whose nearest name is `only` is a typo aimed at it.
+        return items if only is None else [i for i in items if i["capability"] == only or (
+            i.get("reason") == "unknown capability" and i.get("suggestion") == only)]
 
     return {
         "kinds": kind_names,
@@ -341,7 +346,7 @@ def parse_args(argv):
             opts["strict"] = "all"
         elif a == "--delta" or a.startswith("--delta="):
             opts["delta"] = a.split("=", 1)[1] if "=" in a else next(it, None)
-            if not opts["delta"]:
+            if not opts["delta"] or opts["delta"].startswith("-"):
                 raise Usage("--delta needs a file")
         elif a.startswith("-"):
             raise Usage(f"unknown option: {a}")
@@ -360,7 +365,11 @@ def main(argv):
             path = Path(opts["delta"])
             if not path.is_file():
                 raise Usage(f"--delta file not found: {opts['delta']}")
-            delta = parse_delta(path.read_text(encoding="utf-8"))
+            # Through the Notion normalizer, so escapes, entities and spans match the baseline.
+            delta = parse_delta(normalize(path.read_text(encoding="utf-8")))
+            if not delta:
+                raise Usage(f"--delta file has no Spec delta (### <capability> · ADDED|MODIFIED|"
+                            f"REMOVED|RENAMED headings): {opts['delta']}")
         data = build(delta=delta, only=opts["only"])
     except Usage as e:
         print(f"coverage.py: {e}", file=sys.stderr)

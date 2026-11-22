@@ -308,6 +308,31 @@ class Gate(TestCase):
         self.assertEqual(r.run("--nope").returncode, 2)
         self.assertEqual(r.run("--delta").returncode, 2)
         self.assertEqual(r.run("--delta", "missing.md").returncode, 2)
+        out = r.run("--delta", "--json")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("--delta needs a file", out.stderr)
+
+    def test_filter_keeps_typos_aimed_at_the_capability(self):
+        r = self.repo({"tests/a.py": tag("#", "auth/sessions: Fresh session stays")})
+        self.assertEqual(r.run("auth/session", "--strict").returncode, 1)
+
+    def test_spec_without_baseline_is_a_setup_error(self):
+        st = state(**{"auth/session": {"ref": "p", "anchors": []}, "billing": {"ref": "p", "anchors": []}})
+        out = self.repo({"tests/a.py": tag("#", "billing: Wrong")}, st).run("--strict")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("sync it first", out.stderr)
+
+    def test_bom_form_feed_and_backticked_capability(self):
+        r = self.repo({})
+        (r.root / "tests").mkdir()
+        (r.root / "tests/a.py").write_bytes(
+            b"\xef\xbb\xbf" + tag("#", "auth/session: Fresh session stays").encode()
+            + b"\x0c\n" + tag("#", "`auth/session`: Logout clears cookie").encode())
+        data = r.data()
+        sc = scenarios(data)
+        self.assertEqual(sc["Fresh session stays"]["claims"][0]["line"], 1)
+        self.assertEqual(sc["Logout clears cookie"]["claims"][0]["line"], 3)
+        self.assertEqual(data["orphans"], [])
 
 
 BRIEF = """# A brief
@@ -385,6 +410,20 @@ class Delta(TestCase):
         data = r.data("--delta", "BRIEF.md")
         self.assertEqual(data["orphans"], [])
         self.assertTrue(scenarios(data, "billing")["Charges card"]["pending"])
+
+    def test_delta_with_notion_escapes_and_entities(self):
+        brief = ("## Spec delta\n\n### auth/session · ADDED\n\n#### Requirement: Extra\n\n"
+                 "- <b>Scenario: Day\\-old &amp; stale session expires</b>\n  - <b>THEN</b> gone\n")
+        r = self.repo({"BRIEF.md": brief,
+                       "tests/a.py": tag("#", "auth/session: Day-old & stale session expires")})
+        data = r.data("--delta", "BRIEF.md")
+        self.assertEqual(data["orphans"], [])
+
+    def test_delta_without_spec_delta_is_an_error(self):
+        r = self.repo({"BRIEF.md": "# Just a note\n"})
+        out = r.run("--delta", "BRIEF.md")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("no Spec delta", out.stderr)
 
     def test_renamed_requirement_keeps_scenarios(self):
         brief = "## Spec delta\n\n### auth/session · RENAMED\n\n- Logout → Sign out\n"
