@@ -263,7 +263,8 @@
       "review": "https://app.notion.com/p/41f43cce21f28102a9fec8dc35cb66a8",
       "status": "applied",
       "baseCommit": "011e7d3e97c8b7422865ed5cd402b49fc0e6a2da",
-      "branch": "kn/blueprint-coverage-specs"
+      "branch": "kn/blueprint-coverage-specs",
+      "pr": "https://github.com/KarolNov/skills/pull/55"
     }
   },
   "artifacts": {
