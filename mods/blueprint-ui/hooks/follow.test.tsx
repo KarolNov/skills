@@ -58,6 +58,8 @@ test('ids, mapped pages and read tools', () => {
   expect(sameText('at most five', 'at most three')).toBe(false)
 })
 
+// @scenario blueprint/ui: Brief rewritten
+// @scenario blueprint/ui: Unrelated page
 test('a write to a mapped page opens the pane on it; reads and unmapped pages do nothing', async ($, on) => {
   const page = { text: '## Decisions\n\nShip it.\n' }
   const opened = world(on, page)
@@ -75,6 +77,7 @@ test('a write to a mapped page opens the pane on it; reads and unmapped pages do
 })
 
 for (const surface of ['terminal', 'desktop'] as const) {
+  // @scenario blueprint/ui: Quote edited away
   test(`a pending item whose quote is gone after a refresh is kept and marked outdated, on ${surface}`, async ($, on) => {
     const page = { text: '## Decisions\n\nShip it on Friday.\n\nKeep the flag.\n' }
     world(on, page)
@@ -103,6 +106,7 @@ test('firstChange finds the first block a write changed', () => {
 })
 
 for (const surface of ['terminal', 'desktop'] as const) {
+  // @scenario blueprint/ui: Write to the page showing
   test(`a write scrolls to the first changed block and lights it briefly, on ${surface}`, async ($, on) => {
     const clock = mock.clock(on)
     const page = { text: '## Decisions\n\nShip it on Friday.\n\nKeep the flag.\n' }

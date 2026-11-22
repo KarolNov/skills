@@ -42,6 +42,7 @@ const SPECS: BlueprintUiSpecs = {
   checkedAt: '2026-01-01T00:00:00Z',
 }
 
+// @scenario blueprint/ui: Both sides moved
 test('each capability gets the reason and next step status.md gives it', () => {
   const b = boardOf(MAP, code(DRIFT), SPECS, none)
   const by = Object.fromEntries(b.attention.map(r => [r.name, r]))
@@ -81,6 +82,7 @@ test('the summary counts what needs attention, what is in sync, open changes and
   expect(b.uncovered).toBe(2)
 })
 
+// @scenario blueprint/ui: Everything in sync
 test('everything in sync: no attention, every capability quiet, the applied change under Done', () => {
   const map = pagesOf(
     JSON.stringify({

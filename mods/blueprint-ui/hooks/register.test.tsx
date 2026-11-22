@@ -27,6 +27,8 @@ const MAP = JSON.stringify({
   changes: { 'add-sso': { brief: 'https://notion.so/brief', review: 'https://notion.so/review' } },
 })
 
+// @scenario blueprint/ui: Board
+// @scenario blueprint/ui: Desktop
 test('the board lists mapped changes and specs, and opens one, on every surface', async ($, on) => {
   on('fs.read', () => ({ value: MAP }))
   notion(on)
@@ -44,6 +46,7 @@ test('the board lists mapped changes and specs, and opens one, on every surface'
   }
 })
 
+// @scenario blueprint/ui: Repo not set up
 test('without blueprint.json the pane suggests /blueprint-setup', async ($, on) => {
   // Nothing in the session's folder or any above it.
   on('session.cwd', () => ({ value: '/home/me/project/sub' }))

@@ -48,6 +48,9 @@ function notion(on: On) {
 }
 
 for (const surface of ['terminal', 'desktop'] as const) {
+  // @scenario blueprint/ui: Comment on a block
+  // @scenario blueprint/ui: Suggest wording
+  // @scenario blueprint/ui: Switch pages
   test(`comment and suggest on blocks, pending review, on ${surface}`, async ($, on) => {
     notion(on)
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -108,6 +111,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+// @scenario blueprint/ui: Submit
 test('Submit review writes one file, runs /blueprint review with it, and clears the batch', async ($, on) => {
   notion(on)
   const ran: { command: string; args?: string }[] = []

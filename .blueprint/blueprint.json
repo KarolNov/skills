@@ -322,5 +322,16 @@
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       }
     }
+  },
+  "tests": {
+    "kinds": {
+      "integration": [
+        "skills/**/test_*.py"
+      ],
+      "unit": [
+        "mods/**/*.test.ts",
+        "mods/**/*.test.tsx"
+      ]
+    }
   }
 }
