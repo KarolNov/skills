@@ -32,11 +32,7 @@ Headings stop at level 4 everywhere, because Notion and Confluence have no deepe
 
 ### Scenario tags
 
-A test claims a scenario with a comment on the line or lines above it:
-
-```text
-// @scenario auth/session: Expired session redirects to login
-```
+A test claims a scenario with a comment on the line or lines above it, such as `// @scenario auth/session: Expired session redirects to login`. (Examples in docs stay inline like this one: a line that starts with a comment marker and `@scenario` counts as a real tag wherever it sits, Markdown included.)
 
 - The key is `<capability>: <scenario name>`, with no requirement name, so renaming a requirement never breaks a tag. Names match case-insensitively with whitespace collapsed; anything else (a typo, the old wording) is an orphan.
 - Any line comment holds it (`//`, `#`, `--`, `/* */`, `*`, `<!-- -->`), so JS/TS, Rust, Go and Python tests are tagged the same way. One test may carry several tags, and many tests may claim one scenario.

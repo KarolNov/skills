@@ -103,6 +103,7 @@ class Extract(GraphTest):
         },
     }
 
+    # @scenario blueprint/map: Domain
     def test_nodes_and_domains(self):
         d = self.repo(self.FILES, self.STATE).data()
         by = {n["id"]: n for n in d["nodes"]}
@@ -113,6 +114,7 @@ class Extract(GraphTest):
         self.assertEqual(by["core/jams"]["files"],
                          ["shared/a.ts", "shared/b.ts", "shared/c.ts", "worker/index.ts"])
 
+    # @scenario blueprint/map: Shared files
     def test_links_weighted_by_shared_files(self):
         d = self.repo(self.FILES, self.STATE).data()
         links = {(e["source"], e["target"]): e for e in d["edges"]}
@@ -128,6 +130,7 @@ class Extract(GraphTest):
         d = self.repo(self.FILES, state).data()
         self.assertIsNone(d["nodes"][0]["domain"])
 
+    # @scenario blueprint/sync: Excluded tests
     def test_excluded_and_blueprint_files_not_matched(self):
         files = {"src/x.ts": "", "src/x.test.ts": ""}
         state = {"specs": {"a": spec("src/**", "!**/*.test.ts"), "b": spec("**")}}
@@ -138,6 +141,7 @@ class Extract(GraphTest):
 
 
 class FilesDefault(GraphTest):
+    # @scenario blueprint/map: No shared files
     def test_on_when_nothing_is_shared(self):
         files = {"a/x.ts": "", "b/y.ts": ""}
         state = {"specs": {"a": spec("a/**"), "b": spec("b/**")}}
@@ -166,6 +170,7 @@ class Baseline(GraphTest):
 class Drift(GraphTest):
     FILES = {"sync/a.py": "one", "sync/b.py": "two"}
 
+    # @scenario blueprint/map: Code moved
     def test_in_sync_then_code_moved(self):
         r = self.repo(self.FILES, {"specs": {"sync": stamped(self.FILES, "sync/**")}})
         n = r.data()["nodes"][0]
@@ -195,6 +200,7 @@ class Artifacts(GraphTest):
         return {"type": kind, "value": value, "description": "Help article", "capabilities": caps,
                 "checkedFiles": hashes}
 
+    # @scenario blueprint/map: Artifacts as nodes
     def test_direct_and_through_domain(self):
         arts = {"help": self.art("webpage", "https://help.example.com/x", ["billing/invoices"],
                                  ["billing/invoices.py"]),
@@ -210,6 +216,7 @@ class Artifacts(GraphTest):
         self.assertEqual((a["help"]["stale"], a["guide"]["stale"]), (False, False))
         self.assertEqual(a["help"]["description"], "Help article")
 
+    # @scenario blueprint/map: Stale article
     def test_stale_after_code_changes(self):
         arts = {"help": self.art("webpage", "https://help.example.com/x", ["billing/invoices"],
                                  ["billing/invoices.py"])}
@@ -341,6 +348,7 @@ class Page(GraphTest):
     STATE = {"domains": {"core": {"purpose": "</script><b>x</b>"}},
              "specs": {"core/a": spec("a.ts"), "core/b": spec("a.ts")}}
 
+    # @scenario blueprint/map: First run
     def test_writes_self_contained_page(self):
         r = self.repo({"a.ts": ""}, self.STATE)
         out = r.graph()

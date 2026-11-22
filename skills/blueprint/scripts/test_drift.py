@@ -79,6 +79,7 @@ class Overlaps(DriftTest):
         "room": spec("worker/board.ts", "worker/index.ts"),
     }}
 
+    # @scenario blueprint/sync: Overlap listed
     def test_broad_glob_and_entry_point(self):
         r = self.repo(self.FILES, self.STATE)
         out = r.drift("overlaps")
@@ -191,6 +192,7 @@ class Rename(DriftTest):
         r = self.repo(self.FILES, self.STATE)
         self.assertIn("unknown capability", r.drift("rename", "nope", "x").stderr)
 
+    # @scenario blueprint/sync: Rename rewrites tags
     def test_rewrites_scenario_tags(self):
         files = dict(self.FILES, **{
             "tests/ui.test.ts": "// @scenario ui: Empty query\n"
@@ -264,6 +266,7 @@ class Rename(DriftTest):
 
 
 class Hint(DriftTest):
+    # @scenario blueprint/sync: Growing flat list
     def test_more_than_ten_without_domain(self):
         r = self.repo({}, {"specs": {f"c{i}": spec(f"c{i}/**") for i in range(11)}})
         out = r.drift("hint")
@@ -369,6 +372,7 @@ class Artifacts(DriftTest):
         self.assertEqual(list(r.state()["artifacts"]),
                          ["search-how-it-ranks-results", "search-how-it-ranks-results-2"])
 
+    # @scenario blueprint/sync: Code changes after a check
     def test_code_change_lists_artifact_with_file(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "billing/invoices", id="invoices-help")
@@ -382,6 +386,7 @@ class Artifacts(DriftTest):
         self.assertEqual(text, f"invoices-help  webpage  {self.URL}\n    Invoices help\n"
                                "      billing/invoices.ts\n")
 
+    # @scenario blueprint/sync: Spec synced, artifact not checked
     def test_spec_stamp_does_not_clear_it(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "billing/invoices", id="invoices-help")
@@ -392,6 +397,7 @@ class Artifacts(DriftTest):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(self.stale(r), {})
 
+    # @scenario blueprint/sync: Domain-wide artifact
     def test_domain_covers_capability_added_later(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "billing", id="billing-help")
@@ -421,6 +427,7 @@ class Artifacts(DriftTest):
         (r.root / "search/index.ts").unlink()
         self.assertEqual(self.stale(r), {"search-help": ["search/index.ts"]})
 
+    # @scenario blueprint/sync: Unknown type
     def test_refuses_bad_input_and_writes_nothing(self):
         r = self.repo(self.FILES, self.STATE)
         before = r.state()
@@ -442,6 +449,7 @@ class Artifacts(DriftTest):
         self.add(r, "search", id="dup")
         self.assertIn("already exists", self.add(r, "search", id="dup").stderr)
 
+    # @scenario blueprint/sync: Page in the same backend
     def test_value_shapes_and_links(self):
         r = self.repo(self.FILES, self.STATE)
         ok = {
@@ -496,6 +504,7 @@ class Artifacts(DriftTest):
         out = r.drift("artifacts", "checked", "--all")
         self.assertEqual(out.returncode, 0, out.stderr)
 
+    # @scenario blueprint/sync: Capability removed by hand
     def test_dangling_capability_is_reported_and_blocks_checked(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "search", id="search-help")
