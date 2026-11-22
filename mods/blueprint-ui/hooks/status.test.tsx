@@ -103,6 +103,11 @@ type Caller = { tool: { call: EngineInterface['tool']['call'] } }
 const call = ($: Caller, input: Record<string, unknown>) => $.tool.call(input as unknown as Parameters<EngineInterface['tool']['call']>[0])
 
 for (const surface of ['terminal', 'desktop'] as const) {
+  // @scenario blueprint/ui: Code moved
+  // @scenario blueprint/ui: Uncovered files
+  // @scenario blueprint/ui: Specs not checked yet
+  // @scenario blueprint/ui: Sync a capability
+  // @scenario blueprint/ui: Apply a change
   test(`the board puts what needs a step first, on ${surface}`, async ($, on) => {
     const r = repo()
     world(on, r)
@@ -147,6 +152,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+// @scenario blueprint/ui: Teammate edited a spec
+// @scenario blueprint/ui: Blueprint wrote a spec
 test('Check specs finds a teammate edit; a write blueprint stamps puts it back in sync', async ($, on) => {
   const r = repo()
   r.drift = r.drift!.map(d => ({ ...(d as object), status: (d as { status: string }).status === 'no-spec' ? 'no-spec' : 'in-sync', changed: undefined }))
@@ -176,6 +183,7 @@ test('Check specs finds a teammate edit; a write blueprint stamps puts it back i
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: Command missing
 test('both sides moved reads drift → sync; a missing command toasts and runs nothing', async ($, on) => {
   const r = repo()
   r.commands = [{ name: 'blueprint:blueprint' }]
@@ -193,6 +201,7 @@ test('both sides moved reads drift → sync; a missing command toasts and runs n
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: Drift tool missing
 test('without drift.py the board says code status is unavailable and suggests /blueprint-setup', async ($, on) => {
   const r = repo()
   r.drift = null
@@ -205,6 +214,7 @@ test('without drift.py the board says code status is unavailable and suggests /b
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: Session in a subfolder
 test('a session in a subfolder finds the nearest .blueprint/ and runs drift.py from there', async ($, on) => {
   const r = repo()
   const cwds: string[] = []
@@ -239,6 +249,8 @@ test('a run that rejects: stopped by the session, or never started, each says so
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: Step while Claude works
+// @scenario blueprint/ui: Sync all
 test('while Claude works a ▶ step shows as queued, once; sync all sends bare /blueprint-sync', async ($, on) => {
   const r = repo()
   r.drift = r.drift!.map(d => ((d as { capability: string }).capability === 'blueprint/propose' ? { capability: 'blueprint/propose', status: 'code-moved', changed: ['p'] } : d))

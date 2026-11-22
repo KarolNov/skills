@@ -34,11 +34,13 @@ const plan = (over: Partial<BlueprintUiSplit> = {}): BlueprintUiSplit => {
   return got
 }
 
+// @scenario blueprint/ui: Proposed plan
 test('the tree nests a stacked group under its base, parallel ones as siblings, Specs last', async () => {
   const rows = treeOf(plan()).map(r => `${r.prefix}${r.group.id}`)
   expect(rows).toEqual(['├── 1', '│   └── 2', '├── 3', '└── specs'])
 })
 
+// @scenario blueprint/ui: Stacked group waits
 test('a group is ready once approved and its base is main or has a PR; Specs once every group merged', async () => {
   const p = plan()
   expect(p.groups.filter(g => isReady(p, g)).map(g => g.id)).toEqual(['1', '3'])
@@ -75,6 +77,8 @@ function host(on: On) {
   return sent
 }
 
+// @scenario blueprint/ui: Proposed plan
+// @scenario blueprint/ui: Start a group
 test('the split tool shows the plan in the pane; ▶ start sends the prompt once approved', async ($, on) => {
   const sent = host(on)
   const proposed = await $.tool.call({ tool: 'mcp__blueprint-ui__split', ...PLAN, isApproved: false } as never)
@@ -110,6 +114,7 @@ test('the split tool returns its note as text, the shape an MCP tool result take
   expect(String(got.result)).toContain('ready to start')
 })
 
+// @scenario blueprint/ui: Plan for a change not in blueprint.json
 test('a plan whose change is not in blueprint.json still has a way back from the board', async ($, on) => {
   host(on)
   await $.tool.call({ tool: 'mcp__blueprint-ui__split', ...PLAN, change: 'add-sso-demo', isApproved: true } as never)
