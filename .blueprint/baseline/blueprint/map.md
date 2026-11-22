@@ -98,3 +98,20 @@ The details panel of a capability SHALL list the artifacts that cover it, direct
   - **GIVEN** artifacts are switched on under "Show as nodes"
   - **WHEN** the map is drawn
   - **THEN** each artifact sits by the capabilities it covers as a diamond, red when stale, and clicking it opens its details
+
+### Requirement: Coverage on the map
+
+When `tests.kinds` is set, the details panel of a capability SHALL say how many of its scenarios are claimed, list under each scenario the tests that claim it (`file:line`, kind), and mark the uncovered ones, and the overview SHALL list orphan tags. The "Show as nodes" setting SHALL gain **tests**, drawing each test file that claims a scenario as a node tied to the capabilities whose scenarios it claims, shaped unlike file and artifact nodes, and off at first. Without `tests.kinds`, the map SHALL draw without coverage and its legend SHALL say that `/blueprint coverage` sets it up. The map SHALL say "claimed", never "verified" or "passing".
+
+- **Scenario: Uncovered scenarios in the panel**
+  - **GIVEN** `blueprint/sync` has 12 scenarios and tests claim 9 of them
+  - **WHEN** the user opens `blueprint/sync` on the map
+  - **THEN** the panel says 9 of 12 scenarios claimed, lists the claiming tests under each, and marks the other 3 uncovered
+- **Scenario: Tests as nodes**
+  - **GIVEN** tests are switched on under "Show as nodes"
+  - **WHEN** the map is drawn
+  - **THEN** each claiming test file sits by the capabilities it claims scenarios of, and clicking it lists those scenarios
+- **Scenario: Map without kinds**
+  - **GIVEN** `blueprint.json` has no `tests.kinds`
+  - **WHEN** the map is written
+  - **THEN** it draws with no coverage and the legend points to `/blueprint coverage`
