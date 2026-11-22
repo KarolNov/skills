@@ -190,14 +190,26 @@ def _keeps(a, b):
     return all(w in rest for w in a.split())
 
 
+_KEPT_MARGIN = 0.1  # how much closer as text a name may be and still lose to a kept one
+
+
 def nearest(word, names):
     """The closest of names, or None. A close name that keeps word's words in order, or whose
     words word keeps (words added or dropped: how a scenario is usually reworded), wins over one
-    closer as text, so `Filters buyer` suggests `Filters buyer quickly`, not `Flags buyer`."""
+    a little closer as text, so `Filters buyer` suggests `Filters buyer quickly`, not
+    `Flags buyer`. A name much closer still wins: `Rejects expird token` is a typo of
+    `Rejects expired token`, not a longer `Rejects token`."""
     w, normed = norm(word), {norm(n): n for n in reversed(names)}
-    close = difflib.get_close_matches(w, list(normed), n=len(normed), cutoff=0.6)
-    kept = [c for c in close if _keeps(w, c) or _keeps(c, w)]
-    return normed[(kept or close)[0]] if close else None
+    if not normed:
+        return None
+    score = {c: difflib.SequenceMatcher(None, w, c).ratio()
+             for c in difflib.get_close_matches(w, list(normed), n=len(normed), cutoff=0.6)}
+    if not score:
+        return None
+    best = max(score, key=score.get)
+    kept = [c for c in score if score[c] >= score[best] - _KEPT_MARGIN
+            and (_keeps(w, c) or _keeps(c, w))]
+    return normed[kept[0] if kept else best]
 
 
 def build(state=None, files=None, delta=None, only=None):

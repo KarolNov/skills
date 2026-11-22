@@ -269,6 +269,35 @@ class Problems(TestCase):
                          ["Filters tax-exempt buyer quickly", "Rejects an empty basket",
                           "Expired session redirects to login"])
 
+    def test_typo_beats_a_shorter_sibling(self):
+        """A name much closer as text wins over one that only keeps the tag's words."""
+        md = SESSION_MD + ("\n### Requirement: Tokens\n\nTokens SHALL be checked.\n\n"
+                           "- **Scenario: Rejects expired token**\n  - **THEN** rejected\n"
+                           "- **Scenario: Rejects token**\n  - **THEN** rejected\n"
+                           "- **Scenario: Rejects empty inputs**\n  - **THEN** rejected\n"
+                           "- **Scenario: Rejects input**\n  - **THEN** rejected\n")
+        r = self.repo({".blueprint/baseline/auth/session.md": md,
+                       "tests/a.py": tag("#", "auth/session: Rejects expird token")
+                       + tag("#", "auth/session: Rejects empty input")})
+        self.assertEqual([o["suggestion"] for o in r.data()["orphans"]],
+                         ["Rejects expired token", "Rejects empty inputs"])
+
+    def test_nothing_to_suggest(self):
+        """No scenarios, or no capabilities: orphans without a suggestion, not a crash."""
+        empty = "## Purpose\n\nP.\n\n## Requirements\n\n### Requirement: R\n\nIt SHALL be.\n"
+        r = self.repo({".blueprint/baseline/auth/session.md": empty,
+                       "tests/a.py": tag("#", "auth/session: Anything")})
+        self.assertEqual([(o["reason"], o["suggestion"]) for o in r.data()["orphans"]],
+                         [("unknown scenario", None)])
+        bare = self.repo({"tests/a.py": tag("#", "billing: Charges card")},
+                         {"version": 2, "specs": {}, "tests": {"kinds": KINDS}})
+        self.assertEqual([(o["reason"], o["suggestion"]) for o in bare.data()["orphans"]],
+                         [("unknown capability", None)])
+        out = bare.run("billing")
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn("unknown capability: billing", out.stderr)
+        self.assertNotIn("Traceback", out.stderr)
+
     def test_unknown_capability_and_malformed_tag(self):
         r = self.repo({"tests/a.py": tag("#", "auth/sessions: Fresh session stays")
                        + tag("#", "no colon here")})
