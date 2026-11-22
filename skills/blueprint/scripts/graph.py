@@ -143,7 +143,12 @@ def scenario_coverage(state, files, by_id):
     kinds = state.get("tests")
     if not isinstance(kinds, dict) or kinds.get("kinds") is None:
         return None, None, []
-    import coverage  # here, not at the top: coverage.py imports this module
+    # Here, not at the top: coverage.py imports this module. By path, not `import coverage`,
+    # which would get the PyPI package when it is already loaded (coverage run, pytest-cov).
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("blueprint_coverage", HERE / "coverage.py")
+    coverage = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(coverage)
     try:
         data = coverage.build(state, files)
     except coverage.Usage as e:

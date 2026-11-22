@@ -953,20 +953,22 @@ const claimCount = (scen) => scen.filter((s) => s.claims.length).length;
 // The small markdown a requirement body holds: paragraphs, nested bullet lists, `code` and **bold**.
 // scenarios (from coverage, when on): each scenario bullet gets its claims right under its name.
 function md(text, scenarios) {
-  const left = new Map((scenarios || []).map((s) => [scenKey(s.name), s]));
+  // A list per name, so a scenario written twice gets one entry per bullet.
+  const left = new Map();
+  for (const s of scenarios || []) left.set(scenKey(s.name), [...(left.get(scenKey(s.name)) || []), s]);
   const out = [];
   let depth = 0, para = [];
   const flush = () => { if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`); para = []; };
   const close = (to) => { while (depth > to) { out.push("</ul>"); depth--; } };
   for (const line of String(text || "").split("\n")) {
-    const li = /^(\s*)[-*] (.*)$/.exec(line), h = /^#+\s+(.*)$/.exec(line);
+    // A scenario bullet counts with any spacing after its dash, as coverage.py reads it.
+    const li = /^(\s*)[-*] (.*)$/.exec(line) || /^(\s*)[-*]\s*((?:\*\*|<b>)\s*Scenario:.*)$/.exec(line), h = /^#+\s+(.*)$/.exec(line);
     if (li) {
       flush();
       const lvl = Math.floor(li[1].length / 2) + 1;
       close(lvl);
       while (depth < lvl) { out.push("<ul>"); depth++; }
-      const sc = /^(?:\*\*|<b>)\s*Scenario:\s*(.+?)\s*(?:\*\*|<\/b>)/.exec(li[2]), hit = sc && left.get(scenKey(sc[1]));
-      if (hit) left.delete(scenKey(sc[1]));
+      const sc = /^(?:\*\*|<b>)\s*Scenario:\s*(.+?)\s*(?:\*\*|<\/b>)/.exec(li[2].trimStart()), hit = sc && (left.get(scenKey(sc[1])) || []).shift();
       out.push(`<li>${inline(li[2])}${hit ? claims(hit) : ""}</li>`);
     } else if (h) { flush(); close(0); out.push(`<p><b>${inline(h[1])}</b></p>`); }
     else if (!line.trim()) { flush(); close(0); }
@@ -976,7 +978,7 @@ function md(text, scenarios) {
   }
   flush(); close(0);
   // Any scenario the body's bullets didn't hold (written another way) is still listed.
-  for (const s of left.values()) out.push(`<p><b>Scenario: ${esc(s.name)}</b></p>${claims(s)}`);
+  for (const s of [...left.values()].flat()) out.push(`<p><b>Scenario: ${esc(s.name)}</b></p>${claims(s)}`);
   return out.join("");
 }
 
