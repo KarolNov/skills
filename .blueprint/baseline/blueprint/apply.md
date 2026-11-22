@@ -63,12 +63,14 @@ Before building a brief with no PR plan, apply SHALL judge its size. When it is 
 
 ### Requirement: One task at a time
 
-Apply SHALL build the unticked tasks in order. After each one passes its checks, it SHALL close that task's ticket and tick it in the brief. When a session gets long, it MAY stop after a task and name the next one.
+Apply SHALL build the unticked tasks in order. Each test it writes for a delta scenario SHALL carry that scenario's `@scenario` tag. After each task passes its checks, it SHALL close that task's ticket and tick it in the brief. When a session gets long, it MAY stop after a task and name the next one.
 
 - **Scenario: Task done**
   - **WHEN** a task is built and its checks pass
   - **THEN** its ticket is closed with a note and its checkbox is ticked
-
+- **Scenario: Test for a new scenario**
+  - **WHEN** apply writes a test for an ADDED scenario
+  - **THEN** the test carries `@scenario <capability>: <scenario name>`
 ### Requirement: Brief amended before code diverges
 
 When a task can't be built as written, or the delta turns out wrong, apply SHALL stop and propose an amendment. After the user's yes, the brief is updated first (with a "Changed during build" decision), the review is rebuilt, and then building continues.
@@ -79,15 +81,18 @@ When a task can't be built as written, or the delta turns out wrong, apply SHALL
 
 ### Requirement: Verify against the delta
 
-Before the last task, apply SHALL check every delta requirement and scenario against the code and record evidence for each as covered, missing or contradicts. It SHALL also propose anchors for changed files no capability covers.
+Before the last task, apply SHALL check every delta requirement and scenario against the code and record evidence for each as covered, missing or contradicts, taking test evidence from `coverage.py --delta` on the brief. It SHALL also propose anchors for changed files no capability covers.
 
 - **Scenario: Missing evidence**
   - **WHEN** a scenario has no test or code path
   - **THEN** it is fixed, or the brief is amended with the user's yes, before the delta is folded
-
+- **Scenario: Untagged scenario**
+  - **GIVEN** an ADDED scenario no tag claims
+  - **WHEN** apply verifies
+  - **THEN** it is listed as missing test evidence
 ### Requirement: Fold the delta into specs
 
-Apply SHALL merge the delta in the order RENAMED, REMOVED, MODIFIED (replacing whole blocks by name), then ADDED. A new capability's page SHALL be created inside its domain when its name has one, after checking the name against the naming rule. Apply SHALL show each merged spec as a diff and write it after approval, followed by the spec bookkeeping. When a folded capability belongs to a domain, apply SHALL refresh that domain overview's capability list. It SHALL then mark the brief `applied`, and end its report with the `drift.py hint` line when there is one.
+Apply SHALL merge the delta in the order RENAMED, REMOVED, MODIFIED (replacing whole blocks by name), then ADDED. When a MODIFIED block renames a scenario, apply SHALL rewrite the tags that claim the old name, and it SHALL list tags left orphaned by REMOVED requirements. A new capability's page SHALL be created inside its domain when its name has one, after checking the name against the naming rule. Apply SHALL show each merged spec as a diff and write it after approval, followed by the spec bookkeeping. When a folded capability belongs to a domain, apply SHALL refresh that domain overview's capability list. It SHALL then mark the brief `applied`, and end its report with the `drift.py hint` line when there is one.
 
 - **Scenario: Not-yet-built marker**
   - **GIVEN** a requirement carries `Not yet built → <this blueprint>`
@@ -96,7 +101,10 @@ Apply SHALL merge the delta in the order RENAMED, REMOVED, MODIFIED (replacing w
 - **Scenario: New capability in a domain**
   - **WHEN** a delta adds `board/pads` under domain `board`
   - **THEN** the `board` overview's Capabilities list gains `board/pads`, and the rest of the overview is untouched
-
+- **Scenario: Scenario renamed in a MODIFIED block**
+  - **GIVEN** a MODIFIED block renames scenario `Expired token` to `Expired session token`
+  - **WHEN** the delta is folded
+  - **THEN** tags claiming `Expired token` in that capability are rewritten to the new name
 ### Requirement: Pending target repo
 
 When `blueprint.json` has `targetRepo`, apply SHALL build the task that creates the repo first. It SHALL then move the pending setup into the new repo as `.blueprint/`, with `drift.py`, and remove `targetRepo`.

@@ -23,7 +23,7 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
 
 ### Requirement: Anchor helpers
 
-`drift.py files <capability> [anchor…]` SHALL list the files a capability's anchors match, or the given anchors instead, writing nothing. `drift.py unanchored [--since REF]` SHALL list changed files that no capability covers. `drift.py overlaps [--json]` SHALL list files matched by two or more capabilities, with the capabilities and the anchors that match. `drift.py rename <old> <new>` SHALL move a capability's key and baseline file, keeping its stamps, and refuse when a baseline already sits at the new name. `drift.py prune <capability>` SHALL drop the stamps of files its anchors no longer match, keeping the rest. `drift.py version` SHALL print the format version of `blueprint.json`, 1 when absent. Anchors SHALL be git-style globs with `**` and `!` exclusions.
+`drift.py files <capability> [anchor…]` SHALL list the files a capability's anchors match, or the given anchors instead, writing nothing. `drift.py unanchored [--since REF]` SHALL list changed files that no capability covers. `drift.py overlaps [--json]` SHALL list files matched by two or more capabilities, with the capabilities and the anchors that match. `drift.py rename <old> <new>` SHALL move a capability's key and baseline file, keeping its stamps, rewrite `@scenario <old>:` tags to the new name, and refuse when a baseline already sits at the new name. `drift.py prune <capability>` SHALL drop the stamps of files its anchors no longer match, keeping the rest. `drift.py version` SHALL print the format version of `blueprint.json`, 1 when absent. Anchors SHALL be git-style globs with `**` and `!` exclusions.
 
 - **Scenario: Excluded tests**
   - **GIVEN** anchors `["src/auth/**", "!**/*.test.ts"]`
@@ -33,7 +33,10 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
   - **GIVEN** two capabilities whose anchors both match `worker/index.ts`
   - **WHEN** `drift.py overlaps` runs
   - **THEN** `worker/index.ts` is listed once with both capabilities
-
+- **Scenario: Rename rewrites tags**
+  - **GIVEN** tests tagged `@scenario search: Empty query`
+  - **WHEN** `drift.py rename search catalog/search` runs
+  - **THEN** those tags read `@scenario catalog/search: Empty query`
 ### Requirement: Status table
 
 Sync and drift SHALL both start from one status table that combines the code side (`drift.py check`) with the spec side (the backend's version marker compared with `specVersion`). The table SHALL suggest drift or sync depending on which side is right.
