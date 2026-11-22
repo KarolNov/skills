@@ -104,7 +104,7 @@ A step runs once the session is idle. While Claude is working, the board SHALL s
 
 ### Requirement: PR plan
 
-When `/blueprint apply` splits a change, it SHALL be able to show the plan in the pane, in place of the board, through the mod's `split` tool: a tree of branches under the default branch, with a stacked group under its base, parallel groups as siblings and Specs last, each group with its tasks and state. Until the plan is approved, the pane SHALL show it as a proposal with no buttons. Once it is approved, each group that can start now SHALL get ▶ start, and two or more such groups a ▶ start all ready (n). A press SHALL send Claude a message, as the user's, asking to start those groups, each in a new session with the prompt apply wrote for it, and SHALL show them as starting. A stacked group can start once its base's PR is open, and Specs once every other group has merged. A change with a plan SHALL get a PRs link on its board row. A plan whose change has no row in `blueprint.json` SHALL get its own row under Changes, marked as not in `blueprint.json`, with a PRs link, so leaving the plan for the board never strands it.
+When `/blueprint apply` splits a change, it SHALL be able to show the plan in the pane, in place of the board, through the mod's `split` tool: a tree of branches under the default branch, with a stacked group under its base, parallel groups as siblings and Specs last, each group with its tasks and state. Until the plan is approved, the pane SHALL show it as a proposal with no buttons. Once it is approved, each group that can start now SHALL get ▶ start, and two or more such groups a ▶ start all ready (n). A press SHALL send Claude a message, as the user's, asking to start those groups, each in a new session with the prompt apply wrote for it, and SHALL show them as starting. A stacked group can start once its base's PR is open, a group that waits on other groups (its `after`) once they have all merged, and Specs once every other group has merged. Until then, a waiting group SHALL read which groups it still waits on. The `split` tool SHALL refuse a group that waits on itself, on Specs, or on no group. A change with a plan SHALL get a PRs link on its board row. A plan whose change has no row in `blueprint.json` SHALL get its own row under Changes, marked as not in `blueprint.json`, with a PRs link, so leaving the plan for the board never strands it.
 
 - **Scenario: Proposed plan**
   - **GIVEN** apply proposes group 1, group 2 stacked on 1, group 3 and Specs
@@ -117,6 +117,10 @@ When `/blueprint apply` splits a change, it SHALL be able to show the plan in th
 - **Scenario: Stacked group waits**
   - **GIVEN** the plan is approved and group 1's PR is not open
   - **THEN** group 2 has no ▶ start and reads "waits for group 1's PR"
+- **Scenario: Group waits for others to merge**
+  - **GIVEN** the plan is approved and group 4 is cut from the default branch after groups 1, 2 and 3
+  - **WHEN** groups 1 and 3 have merged
+  - **THEN** group 4 has no ▶ start and reads "after group 2 merges", and gets ▶ start once group 2 merges too
 - **Scenario: Plan for a change not in blueprint.json**
   - **GIVEN** the pane shows a plan for a change `blueprint.json` doesn't list
   - **WHEN** the user goes back to the board
