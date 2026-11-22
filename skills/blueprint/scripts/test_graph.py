@@ -399,5 +399,26 @@ class Page(GraphTest):
         self.assertIn('"core/a"', (r.root / "sub/dir/map.html").read_text())
 
 
+class Demo(unittest.TestCase):
+    def test_demo_repo_draws(self):
+        """demo_map.py builds its shop and draws it, with every kind of node and problem in it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = subprocess.run([sys.executable, str(GRAPH.parent / "demo_map.py"), str(Path(tmp) / "shop")],
+                                 capture_output=True, text=True, env=ENV)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            path, summary = out.stdout.strip().splitlines()[:2]
+            self.assertTrue(Path(path).is_file())
+            self.assertEqual(summary, "22 capabilities, 5 domains; code-drifted: orders/checkout; 1 stale artifact; "
+                                      "104 of 227 scenarios claimed, 2 orphan tags")
+            # A rerun replaces its own demo; any other folder is left alone.
+            again = subprocess.run([sys.executable, str(GRAPH.parent / "demo_map.py"), str(Path(tmp) / "shop")],
+                                   capture_output=True, text=True, env=ENV)
+            self.assertEqual(again.returncode, 0, again.stderr)
+            refused = subprocess.run([sys.executable, str(GRAPH.parent / "demo_map.py"), tmp],
+                                     capture_output=True, text=True, env=ENV)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("isn't an earlier demo", refused.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
