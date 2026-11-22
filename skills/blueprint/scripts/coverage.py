@@ -38,8 +38,7 @@ import drift  # noqa: E402  (finds the repo root on import)
 from graph import parse_baseline  # noqa: E402
 from notion_normalize import normalize  # noqa: E402
 
-MAX_BYTES = 1 << 20
-_TAG = re.compile(r"^\s*(?://+!?|#+|--+|/\*+!?|\*+|<!--)\s*@scenario\b[ \t]*(.*?)\s*$")
+_TAG = drift.TAG  # one tag grammar, shared with drift.py rename
 _TAG_END = re.compile(r"\s*(?:\*+/|-->)\s*$")
 _SCENARIO = re.compile(r"^\s*[-*]\s*(?:\*\*|<b>)\s*Scenario:\s*(.+?)\s*(?:\*\*|</b>)", re.M)
 _DELTA = re.compile(r"^## Spec delta[ \t]*\n(.*?)(?=^## |\Z)", re.S | re.M)
@@ -177,18 +176,7 @@ def scan_text(text):
 def scan(files):
     """[{file, line, capability, scenario}] across the repo's text files."""
     tags = []
-    for path in files:
-        if path.startswith(".blueprint/"):
-            continue
-        full = drift.ROOT / path
-        try:
-            if full.stat().st_size > MAX_BYTES:
-                continue
-            data = full.read_bytes()
-        except OSError:
-            continue
-        if b"@scenario" not in data or b"\0" in data[:8192]:
-            continue
+    for path, data in drift.tag_files(files):
         for line, cap, name in scan_text(data.decode("utf-8-sig", "replace")):
             tags.append({"file": path, "line": line, "capability": cap, "scenario": name})
     return tags
