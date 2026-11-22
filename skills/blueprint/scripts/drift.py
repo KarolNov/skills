@@ -12,7 +12,8 @@ since its spec was last synced. It never talks to the spec backend.
                                                the given anchors instead (writes nothing)
     drift.py unanchored [--since REF]          changed files no capability covers
     drift.py overlaps [--json]                 files two or more capabilities' anchors match
-    drift.py rename OLD NEW                    rename a capability, keeping its stamps
+    drift.py rename OLD NEW                    rename a capability, keeping its stamps; also
+                                               renames it in artifacts and @scenario tags
     drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match
     drift.py hint                              one line suggesting /blueprint-tidy, or nothing
     drift.py artifacts [--json] [--] [CAPABILITY|DOMAIN ...]
@@ -315,6 +316,60 @@ def collision(name, specs, domains, ignore=None):
     return None
 
 
+MAX_TAG_BYTES = 1 << 20  # larger files are data, not tests
+# A tag is a line comment holding `@scenario <capability>: <scenario name>`; coverage.py
+# parses it, rename rewrites it, and both use this one grammar.
+TAG = re.compile(r"^\s*(?://+!?|#+|--+|/\*+!?|\*+|<!--)\s*@scenario\b[ \t]*(.*?)\s*$")
+
+
+def tag_files(files, unreadable=None):
+    """(path, bytes) for each repo file that may hold @scenario tags: regular files (not
+    symlinks) up to MAX_TAG_BYTES outside .blueprint/, holding `@scenario`, with no NUL in
+    their first 8 KB. Files that can't be read are skipped, and named in `unreadable`
+    ("path (reason)") when a list is given."""
+    for f in files:
+        if f.startswith(".blueprint/"):
+            continue
+        full = ROOT / f
+        try:
+            if full.is_symlink() or full.stat().st_size > MAX_TAG_BYTES:
+                continue
+            data = full.read_bytes()
+        except OSError as e:
+            if unreadable is not None:
+                unreadable.append(f"{f} ({e.strerror or e})")
+            continue
+        if b"@scenario" not in data or b"\0" in data[:8192]:
+            continue
+        yield f, data
+
+
+def tag_line(line):
+    """The text after `@scenario` when this line (bytes, any encoding) is a tag, else None."""
+    m = TAG.match(line.decode("utf-8", "replace").lstrip("\ufeff"))
+    return m and m.group(1)
+
+
+def tag_rewrites(old, new):
+    """({path: (new bytes, tags rewritten)}, [unreadable "path (reason)"]) pointing
+    `@scenario OLD: …` tags at NEW. Reads only. Bytes are edited in place, so encodings and
+    line endings survive."""
+    # The colon right after the name keeps `board` from matching `@scenario board/ops: …`;
+    # coverage also accepts the name in backticks.
+    tag = re.compile(rb"(@scenario[ \t]+`?)" + re.escape(old.encode()) + rb"(`?[ \t]*:)")
+    out, unreadable = {}, []
+    for f, data in tag_files(repo_files(), unreadable):
+        lines = data.split(b"\n")
+        hits = 0
+        for i, line in enumerate(lines):
+            if tag_line(line) is not None:
+                lines[i], n = tag.subn(lambda m: m.group(1) + new.encode() + m.group(2), line, 1)
+                hits += n
+        if hits:
+            out[f] = (b"\n".join(lines), hits)
+    return out, unreadable
+
+
 def cmd_rename(args):
     if len(args) != 2:
         sys.exit("rename takes OLD NEW")
@@ -327,6 +382,8 @@ def cmd_rename(args):
         sys.exit(f"capability already exists: {new}")
     if why := collision(new, specs, state.get("domains", {}), ignore=old):
         sys.exit(f"can't rename {old} to {new}: {why}")
+    # Read the tags before changing anything, so every edit is known before the first write.
+    rewrites, unreadable = tag_rewrites(old, new)
     base = ROOT / ".blueprint" / "baseline"
     src, dst = base / f"{old}.md", base / f"{new}.md"
     if dst.exists():
@@ -349,8 +406,22 @@ def cmd_rename(args):
             parent.rmdir()
             parent = parent.parent
     save(state)
+    failed, tags = [], 0
+    for f, (data, n) in rewrites.items():
+        try:
+            (ROOT / f).write_bytes(data)
+            tags += n
+        except OSError as e:
+            failed.append(f"{f} ({e.strerror or e})")
     print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else "")
-          + (f"; {len(renamed)} artifacts updated" if renamed else ""))
+          + (f"; {len(renamed)} artifacts updated" if renamed else "")
+          + (f"; {tags} tags rewritten" if tags else ""))
+    if failed:
+        print(f"  couldn't rewrite the {old} tags in: " + ", ".join(failed)
+              + f"; change them to {new} by hand", file=sys.stderr)
+    if unreadable:
+        print("  couldn't read, so any tags in them still name "
+              + f"{old}: " + ", ".join(unreadable), file=sys.stderr)
     print(f"  the backend still names it {old}: rename its page and the briefs that list it",
           file=sys.stderr)
     return 0

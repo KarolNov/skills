@@ -79,6 +79,7 @@ class Overlaps(DriftTest):
         "room": spec("worker/board.ts", "worker/index.ts"),
     }}
 
+    # @scenario blueprint/sync: Overlap listed
     def test_broad_glob_and_entry_point(self):
         r = self.repo(self.FILES, self.STATE)
         out = r.drift("overlaps")
@@ -191,8 +192,81 @@ class Rename(DriftTest):
         r = self.repo(self.FILES, self.STATE)
         self.assertIn("unknown capability", r.drift("rename", "nope", "x").stderr)
 
+    # @scenario blueprint/sync: Rename rewrites tags
+    def test_rewrites_scenario_tags(self):
+        files = dict(self.FILES, **{
+            "tests/ui.test.ts": "// @scenario ui: Empty query\n"
+                                "// @scenario ui : Spaced colon\nit('x')\n",
+            "tests/test_ui.py": "# @scenario ui: Empty query\r\n"
+                                "# @scenario ui/other: Not this one\r\n",
+            "tests/other.rs": "// @scenario board: Untouched\n",
+            ".blueprint/notes.md": "@scenario ui: inside .blueprint stays\n",
+            "tests/blob.bin": "@scenario ui: binary\0\n",
+        })
+        r = self.repo(files, self.STATE)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout, "renamed ui to catalog/ui; 3 tags rewritten\n")
+        read = lambda p: (r.root / p).read_bytes().decode()
+        self.assertEqual(read("tests/ui.test.ts"), "// @scenario catalog/ui: Empty query\n"
+                                                   "// @scenario catalog/ui : Spaced colon\nit('x')\n")
+        self.assertEqual(read("tests/test_ui.py"), "# @scenario catalog/ui: Empty query\r\n"
+                                                   "# @scenario ui/other: Not this one\r\n")
+        for path in ("tests/other.rs", ".blueprint/notes.md", "tests/blob.bin"):
+            self.assertEqual(read(path), files[path], path)
+
+    def test_rewrites_only_what_coverage_reads(self):
+        files = dict(self.FILES, **{
+            "tests/fixture.py": 'FIX = "// @scenario ui: Empty query\\n"\n',
+            "README.md": "Tag a test with `@scenario ui: Empty query`.\n",
+            "tests/tick.ts": "// @scenario `ui`: Empty query\n" + "x" * 9000 + "\0\n",
+        })
+        r = self.repo(files, self.STATE)
+        (r.root / "tests/latin.py").write_bytes(b"# @scenario ui: Caf\xe9\n")
+        outside = tempfile.NamedTemporaryFile("w", suffix=".ts", delete=False)
+        outside.write("// @scenario ui: Outside\n")
+        outside.close()
+        self.addCleanup(os.unlink, outside.name)
+        (r.root / "tests/link.ts").symlink_to(outside.name)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.stdout, "renamed ui to catalog/ui; 2 tags rewritten\n", out.stderr)
+        read = lambda p: (r.root / p).read_bytes()
+        self.assertEqual(read("tests/latin.py"), b"# @scenario catalog/ui: Caf\xe9\n")
+        self.assertTrue(read("tests/tick.ts").startswith(b"// @scenario `catalog/ui`: Empty query\n"))
+        for path in ("tests/fixture.py", "README.md"):
+            self.assertEqual(read(path).decode(), files[path], path)
+        self.assertEqual(Path(outside.name).read_text(), "// @scenario ui: Outside\n")
+
+    def test_unwritable_tag_file_is_named(self):
+        files = dict(self.FILES, **{"tests/a.test.ts": "// @scenario ui: A\n"})
+        r = self.repo(files, self.STATE)
+        (r.root / "tests/a.test.ts").chmod(0o444)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("couldn't rewrite the ui tags in: tests/a.test.ts", out.stderr)
+        self.assertIn("catalog/ui", r.state()["specs"])
+
+    def test_unreadable_file_is_named(self):
+        files = dict(self.FILES, **{"tests/a.test.ts": "// @scenario ui: A\n",
+                                    "tests/b.test.ts": "// @scenario ui: B\n"})
+        r = self.repo(files, self.STATE)
+        (r.root / "tests/b.test.ts").chmod(0o000)
+        self.addCleanup((r.root / "tests/b.test.ts").chmod, 0o644)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout, "renamed ui to catalog/ui; 1 tags rewritten\n")
+        self.assertIn("couldn't read, so any tags in them still name ui: tests/b.test.ts (",
+                      out.stderr)
+        self.assertEqual((r.root / "tests/a.test.ts").read_text(), "// @scenario catalog/ui: A\n")
+
+    def test_no_tags_no_count(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = r.drift("rename", "ui", "ui/app")
+        self.assertEqual(out.stdout, "renamed ui to ui/app\n")
+
 
 class Hint(DriftTest):
+    # @scenario blueprint/sync: Growing flat list
     def test_more_than_ten_without_domain(self):
         r = self.repo({}, {"specs": {f"c{i}": spec(f"c{i}/**") for i in range(11)}})
         out = r.drift("hint")
@@ -298,6 +372,7 @@ class Artifacts(DriftTest):
         self.assertEqual(list(r.state()["artifacts"]),
                          ["search-how-it-ranks-results", "search-how-it-ranks-results-2"])
 
+    # @scenario blueprint/sync: Code changes after a check
     def test_code_change_lists_artifact_with_file(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "billing/invoices", id="invoices-help")
@@ -311,6 +386,7 @@ class Artifacts(DriftTest):
         self.assertEqual(text, f"invoices-help  webpage  {self.URL}\n    Invoices help\n"
                                "      billing/invoices.ts\n")
 
+    # @scenario blueprint/sync: Spec synced, artifact not checked
     def test_spec_stamp_does_not_clear_it(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "billing/invoices", id="invoices-help")
@@ -321,6 +397,7 @@ class Artifacts(DriftTest):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(self.stale(r), {})
 
+    # @scenario blueprint/sync: Domain-wide artifact
     def test_domain_covers_capability_added_later(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "billing", id="billing-help")
@@ -350,6 +427,7 @@ class Artifacts(DriftTest):
         (r.root / "search/index.ts").unlink()
         self.assertEqual(self.stale(r), {"search-help": ["search/index.ts"]})
 
+    # @scenario blueprint/sync: Unknown type
     def test_refuses_bad_input_and_writes_nothing(self):
         r = self.repo(self.FILES, self.STATE)
         before = r.state()
@@ -371,6 +449,7 @@ class Artifacts(DriftTest):
         self.add(r, "search", id="dup")
         self.assertIn("already exists", self.add(r, "search", id="dup").stderr)
 
+    # @scenario blueprint/sync: Page in the same backend
     def test_value_shapes_and_links(self):
         r = self.repo(self.FILES, self.STATE)
         ok = {
@@ -425,6 +504,7 @@ class Artifacts(DriftTest):
         out = r.drift("artifacts", "checked", "--all")
         self.assertEqual(out.returncode, 0, out.stderr)
 
+    # @scenario blueprint/sync: Capability removed by hand
     def test_dangling_capability_is_reported_and_blocks_checked(self):
         r = self.repo(self.FILES, self.STATE)
         self.add(r, "search", id="search-help")

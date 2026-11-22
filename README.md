@@ -97,6 +97,7 @@ notes tool, builds it, and keeps the specs and the code honest in both direction
 | `/blueprint <your solution>` | Plays the solution back, sketches it, grills it in at most three rounds of five short questions, and writes a **blueprint** as two linked documents side by side: a text **brief** for agents (decisions, spec delta, tasks; the source of truth) and a visual **review** for people. |
 | `/blueprint apply [change]` | Builds the blueprint task by task, verifies each requirement against the code, then folds the delta into the capability specs. |
 | `/blueprint map` | Writes `.blueprint/map.html` and opens it: one local page (d3 inlined, works offline) with capabilities as nodes, domains as outlines, lines between capabilities that share files, code-drifted ones in red, a details panel with each capability's requirements and scenarios, and search across names, requirements and file paths. Kept out of git by `.blueprint/.gitignore` and regenerated on demand. |
+| `/blueprint coverage [capability \| suggest]` | **Scenario coverage**: a test claims a spec scenario with a comment tag above it, `@scenario <capability>: <scenario name>`, in any language's line comment. Reports per capability which scenarios tests claim, by kind (unit, e2e, … from globs in `blueprint.json`, proposed on first run), the scenarios no test claims, and tags that point at nothing; `suggest` proposes tags for existing tests as a diff. Static: nothing is run, so a scenario is "claimed", never "passing". `--strict` gates CI on orphan tags. The map shows the same per scenario. |
 | `/blueprint-drift [capability]` | **Intent drift**: the spec is right. Judges the code against it requirement by requirement, including spec edits people made outside the code, and fixes the code or turns the gap into a blueprint or tickets. |
 | `/blueprint-sync [capability]` | **Spec sync**: the code is right. Reads what the code changed since the spec last matched it and updates the spec, or writes a spec from the code for a capability that has none. |
 | `/blueprint-tidy [--dry-run]` | **Tidy**, on demand: migrates `.blueprint/` to the current format, groups capabilities into **domains** (each with an overview page that holds its specs like a folder), renames a name that is both a domain and a capability, and reports anchors that overlap through broad globs. Shows one move table and writes nothing until you approve it (a migration asks first on its own); renames keep each page and its history, so nothing reads as drift. |
@@ -136,7 +137,9 @@ code-side drift only; `/blueprint-sync` reports specs edited in the backend.
 `blueprint/*` capabilities (propose, apply, backends, setup, sync, drift) to the skill files that
 define them, with each spec's last-synced text in [`.blueprint/baseline/`](.blueprint/baseline). Changes
 to blueprint, starting with a review pane that shows specs inside Claude Code, are planned as
-blueprints against those specs. The specs themselves live in a private Notion workspace.
+blueprints against those specs. The specs themselves live in a private Notion workspace. Its tests
+(`skills/blueprint/scripts/test_*.py` as integration, the review pane's `*.test.ts(x)` as unit) carry
+`@scenario` tags, so `/blueprint coverage` and the map show which scenarios they claim.
 
 **Needs:** Python 3, git, and the connector for your backend (Notion, Linear, Atlassian) or `gh`. Rendering diagrams to images (Notion) needs Python Playwright with Chromium, the same one `walkthrough-setup` installs.
 

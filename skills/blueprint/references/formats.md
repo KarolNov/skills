@@ -28,6 +28,17 @@ Headings stop at level 4 everywhere, because Notion and Confluence have no deepe
 - One behavior per requirement; edge cases go in scenarios, not in the requirement text.
 - Every requirement has at least one scenario, and every scenario a WHEN and a THEN.
 - The requirement name is its identity. Sync and deltas match on it, so rename only through a delta's RENAMED section.
+- Scenario names are unique within a capability, not only within their requirement: a test's tag names the scenario without its requirement (below). `coverage.py` reports a duplicate as a problem naming both requirements.
+
+### Scenario tags
+
+A test claims a scenario with a comment on the line or lines above it, such as `// @scenario auth/session: Expired session redirects to login`. (Examples in docs stay inline like this one: a line that starts with a comment marker and `@scenario` counts as a real tag wherever it sits, Markdown included.)
+
+- The key is `<capability>: <scenario name>`, with no requirement name, so renaming a requirement never breaks a tag. Names match case-insensitively with whitespace collapsed; anything else (a typo, the old wording) is an orphan.
+- Any line comment holds it (`//`, `#`, `--`, `/* */`, `*`, `<!-- -->`), so JS/TS, Rust, Go and Python tests are tagged the same way. One test may carry several tags, and many tests may claim one scenario.
+- A tag says the test **claims** the scenario, never that it verifies it or passes: nothing is run. A skipped test still claims.
+- The test's kind (unit, e2e, …) comes from where its file sits, by `tests.kinds` in `blueprint.json` below, never from the tag.
+- Tags live in the tests, never in specs or `blueprint.json`. `drift.py rename` rewrites them when a capability is renamed, and apply when a MODIFIED block renames a scenario; [coverage.md](coverage.md) reports the rest.
 
 ## Domain overview
 
@@ -211,6 +222,12 @@ Each change has two documents that sit side by side in the backend and link to e
       "capabilities": ["auth"],
       "checkedFiles": { "src/auth/session.ts": "<content hash, written by drift.py artifacts add / checked, trimmed by prune>" }
     }
+  },
+  "tests": {
+    "kinds": {
+      "e2e": ["e2e/**"],
+      "unit": ["**/*.test.ts", "**/*_test.go"]
+    }
   }
 }
 ```
@@ -229,3 +246,6 @@ Each change has two documents that sit side by side in the backend and link to e
   - `checkedFiles` is the artifact's own stamp: a hash per file its capabilities' anchors matched when someone last checked it. The artifact is **stale** from the moment one of those files is added, removed or edited until it is marked checked again, whether or not the spec was synced in between.
   - Manage them only through `drift.py`: `artifacts add --id <id> --type <type> --value <value> --description <text> <capability>…` adds one, stamped as checked (`--id` is derived from the description when left out, and the value's shape is checked per type); `add` refuses an unknown type, a value of the wrong shape, an empty description, a name that is neither a capability nor a domain, and an id that isn't kebab-case or is taken. `artifacts checked <id>… | --all` restamps; `artifacts remove <id>` drops one; `artifacts [--json] [--] [capability|domain…]` lists the stale ones with their changed files and exits 0 unless a filter names no capability or domain (`--` lets a filter be named `add`, `checked` or `remove`). It also lists, under any filter, an artifact whose `capabilities` names something that is no longer a capability or a domain, marked unknown; `checked` refuses such an artifact until its `capabilities` are fixed. `drift.py rename` renames a capability in every artifact too, and `drift.py prune` trims the stamps of artifacts over the pruned capability. Never edit `checkedFiles` by hand.
   - Artifacts are bookkeeping, like anchors: they stay in this file, never on spec pages.
+- **tests** (optional) says how `/blueprint coverage` reads the repo's tests. Older readers ignore the key, so it needs no format version bump, and only coverage requires it.
+  - `kinds` maps each kind name to git-style globs, in order; a test file gets the first kind whose globs match it. Kinds are free-form (`contract` or `visual` beside `unit`, `integration`, `e2e`). There are no default globs: without `kinds`, `coverage.py` exits 2 naming the key. The coverage mode proposes kinds from the repo's test layout on first run and writes them on the user's yes ([coverage.md](coverage.md)).
+  - A tag in a file no kind matches still claims its scenario and is reported as unclassified, so a missing glob shows up without hiding coverage.

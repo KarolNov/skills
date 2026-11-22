@@ -103,6 +103,7 @@ class Extract(GraphTest):
         },
     }
 
+    # @scenario blueprint/map: Domain
     def test_nodes_and_domains(self):
         d = self.repo(self.FILES, self.STATE).data()
         by = {n["id"]: n for n in d["nodes"]}
@@ -113,6 +114,7 @@ class Extract(GraphTest):
         self.assertEqual(by["core/jams"]["files"],
                          ["shared/a.ts", "shared/b.ts", "shared/c.ts", "worker/index.ts"])
 
+    # @scenario blueprint/map: Shared files
     def test_links_weighted_by_shared_files(self):
         d = self.repo(self.FILES, self.STATE).data()
         links = {(e["source"], e["target"]): e for e in d["edges"]}
@@ -128,6 +130,7 @@ class Extract(GraphTest):
         d = self.repo(self.FILES, state).data()
         self.assertIsNone(d["nodes"][0]["domain"])
 
+    # @scenario blueprint/sync: Excluded tests
     def test_excluded_and_blueprint_files_not_matched(self):
         files = {"src/x.ts": "", "src/x.test.ts": ""}
         state = {"specs": {"a": spec("src/**", "!**/*.test.ts"), "b": spec("**")}}
@@ -138,6 +141,7 @@ class Extract(GraphTest):
 
 
 class FilesDefault(GraphTest):
+    # @scenario blueprint/map: No shared files
     def test_on_when_nothing_is_shared(self):
         files = {"a/x.ts": "", "b/y.ts": ""}
         state = {"specs": {"a": spec("a/**"), "b": spec("b/**")}}
@@ -166,6 +170,7 @@ class Baseline(GraphTest):
 class Drift(GraphTest):
     FILES = {"sync/a.py": "one", "sync/b.py": "two"}
 
+    # @scenario blueprint/map: Code moved
     def test_in_sync_then_code_moved(self):
         r = self.repo(self.FILES, {"specs": {"sync": stamped(self.FILES, "sync/**")}})
         n = r.data()["nodes"][0]
@@ -195,6 +200,7 @@ class Artifacts(GraphTest):
         return {"type": kind, "value": value, "description": "Help article", "capabilities": caps,
                 "checkedFiles": hashes}
 
+    # @scenario blueprint/map: Artifacts as nodes
     def test_direct_and_through_domain(self):
         arts = {"help": self.art("webpage", "https://help.example.com/x", ["billing/invoices"],
                                  ["billing/invoices.py"]),
@@ -210,6 +216,7 @@ class Artifacts(GraphTest):
         self.assertEqual((a["help"]["stale"], a["guide"]["stale"]), (False, False))
         self.assertEqual(a["help"]["description"], "Help article")
 
+    # @scenario blueprint/map: Stale article
     def test_stale_after_code_changes(self):
         arts = {"help": self.art("webpage", "https://help.example.com/x", ["billing/invoices"],
                                  ["billing/invoices.py"])}
@@ -255,10 +262,93 @@ class Artifacts(GraphTest):
         self.assertEqual((d["artifacts"], d["nodes"][0]["artifacts"]), ([], []))
 
 
+class Coverage(GraphTest):
+    KINDS = {"kinds": {"e2e": ["e2e/**"], "unit": ["**/test_*.py"]}}
+    FILES = {
+        ".blueprint/baseline/blueprint/sync.md": SYNC_MD, "drift.py": "", "graph.py": "",
+        "tests/test_sync.py": "# @scenario blueprint/sync: anchored FILE   edited\ndef test_a(): pass\n",
+        "e2e/sync.spec.ts": "x\n// @scenario blueprint/sync: Anchored file edited\n"
+                            "// @scenario blueprint/sync: Anchored file gone\n"
+                            "// @scenario nope/cap: Whatever\n",
+    }
+
+    def state(self, tests=KINDS):
+        s = {"domains": {"blueprint": {}},
+             "specs": {"blueprint/sync": spec("drift.py"), "blueprint/map": spec("graph.py")}}
+        if tests is not None:
+            s["tests"] = tests
+        return s
+
+    # @scenario blueprint/map: Uncovered scenarios in the panel
+    def test_claims_per_scenario(self):
+        d = self.repo(self.FILES, self.state()).data()
+        by = {n["id"]: n for n in d["nodes"]}
+        sync = by["blueprint/sync"]
+        self.assertEqual(sync["coverage"], {"claimed": 1, "total": 1})
+        [scen] = sync["requirements"][0]["scenarios"]
+        self.assertEqual(scen["name"], "Anchored file edited")
+        self.assertEqual([(c["file"], c["line"], c["kind"]) for c in scen["claims"]],
+                         [("e2e/sync.spec.ts", 2, "e2e"), ("tests/test_sync.py", 1, "unit")])
+        self.assertEqual(sync["requirements"][1]["scenarios"], [])  # Stamping has none
+        # Requirements keep their title and body beside the scenarios.
+        self.assertEqual(sync["requirements"][0]["title"], "Code drift detection")
+        # No baseline: nothing to count.
+        self.assertIsNone(by["blueprint/map"]["coverage"])
+        self.assertEqual(d["coverage"]["summary"], {"claimed": 1, "total": 1, "byKind": {"e2e": 1, "unit": 1}})
+        self.assertNotIn("capabilities", d["coverage"])
+
+    # @scenario blueprint/map: Tests as nodes
+    def test_claiming_test_files(self):
+        d = self.repo(self.FILES, self.state()).data()
+        self.assertEqual([t["file"] for t in d["tests"]], ["e2e/sync.spec.ts", "tests/test_sync.py"])
+        e2e = d["tests"][0]
+        self.assertEqual((e2e["kind"], e2e["covers"]), ("e2e", ["blueprint/sync"]))
+        self.assertEqual(e2e["claims"], [{"capability": "blueprint/sync", "scenario": "Anchored file edited", "line": 2}])
+        by = {n["id"]: n["tests"] for n in d["nodes"]}
+        self.assertEqual(by, {"blueprint/sync": ["e2e/sync.spec.ts", "tests/test_sync.py"], "blueprint/map": []})
+
+    def test_orphans_and_summary_line(self):
+        r = self.repo(self.FILES, self.state())
+        orphans = {(o["capability"], o["reason"], o["suggestion"]) for o in r.data()["coverage"]["orphans"]}
+        self.assertEqual(orphans, {("blueprint/sync", "unknown scenario", "Anchored file edited"),
+                                   ("nope/cap", "unknown capability", None)})
+        out = r.graph("--out", "m.html")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("code-drifted: none; 1 of 1 scenario claimed, 2 orphan tags", out.stdout)
+
+    # @scenario blueprint/map: Map without kinds
+    def test_without_kinds(self):
+        r = self.repo(self.FILES, self.state(tests=None))
+        d = r.data()
+        self.assertEqual((d["coverage"], d["coverageError"], d["tests"]), (None, None, []))
+        self.assertTrue(all(n["coverage"] is None and n["tests"] == [] for n in d["nodes"]))
+        self.assertNotIn("scenarios", d["nodes"][0]["requirements"][0])
+        out = r.graph()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn("scenario", out.stdout)
+        html = (r.root / ".blueprint/map.html").read_text()
+        legend = re.search(r'<details class="legend".*?</details>', html, re.S).group(0)
+        self.assertIn("<code>tests.kinds</code>", legend)
+        self.assertIn("/blueprint coverage", legend)
+
+    def test_coverage_problem_does_not_stop_the_map(self):
+        """What makes coverage.py exit 2 (here a synced spec with no baseline) leaves the map drawn."""
+        state = self.state()
+        state["specs"]["blueprint/map"]["ref"] = "page"
+        r = self.repo(self.FILES, state)
+        d = r.data()
+        self.assertIsNone(d["coverage"])
+        self.assertIn("no .blueprint/baseline/blueprint/map.md", d["coverageError"])
+        out = r.graph()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("coverage not shown: blueprint/map has a spec but no", out.stdout)
+
+
 class Page(GraphTest):
     STATE = {"domains": {"core": {"purpose": "</script><b>x</b>"}},
              "specs": {"core/a": spec("a.ts"), "core/b": spec("a.ts")}}
 
+    # @scenario blueprint/map: First run
     def test_writes_self_contained_page(self):
         r = self.repo({"a.ts": ""}, self.STATE)
         out = r.graph()
@@ -287,10 +377,14 @@ class Page(GraphTest):
         r.graph()
         html = (r.root / ".blueprint/map.html").read_text()
         self.assertIn('id="q"', html)  # search box
-        # One "Show as nodes" menu holds the files and artifacts switches.
+        # One "Show as nodes" menu holds the files, artifacts and tests switches.
         menu = re.search(r'<details class="nodes".*?</details>', html, re.S).group(0)
         self.assertIn('id="files"', menu)
         self.assertIn('id="artifacts"', menu)
+        self.assertIn('id="tests"', menu)
+        # The map says "claimed", never that a test passed or verified anything.
+        template = (GRAPH.parent / "map_template.html").read_text()
+        self.assertNotRegex(template, r"(?i)\b(passing|passes|verified)\b")
         self.assertIn('id="panel"', html)  # details panel
         # The legend says spec-side drift is not drawn and where it is reported.
         legend = re.search(r'<details class="legend".*?</details>', html, re.S).group(0)

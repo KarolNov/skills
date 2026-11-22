@@ -41,6 +41,7 @@ const REF = 'notion-file-block://a/b?space_id=s&name=flow.svg'
 const DIAGRAM = `## Picture\n\n<image source="${REF.replace('&', '&amp;')}">\nThe flow\n</image>\n\n<image source="notion-file-block://c/d?name=shot.png">A shot</image>\n`
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
 
+// @scenario blueprint/ui: Review with diagrams on the desktop
 test('an uploaded SVG diagram is downloaded and drawn on the desktop; the terminal keeps the link', async ($, on) => {
   const asked: unknown[] = []
   const fetched: string[] = []
@@ -82,6 +83,7 @@ test('an uploaded SVG diagram is downloaded and drawn on the desktop; the termin
 const DRAWN = '┌──────┐\n│ open │\n└──┬───┘\n   ▼\n Board'
 const WITH_TEXT = `<image source="${REF.replace('&', '&amp;')}">\nThe flow\n</image>\n\n<toggle>\n<span color="gray">Mermaid source</span>\n\n\`\`\`mermaid\nflowchart TD\n  A --> B\n\`\`\`\n\n<span color="gray">Terminal version</span>\n\n\`\`\`text\n${DRAWN}\n\`\`\`\n</toggle>\n`
 
+// @scenario blueprint/ui: Review with diagrams in the terminal
 test("the terminal draws a diagram's text version in place of its image; the desktop keeps the SVG", async ($, on) => {
   on('fs.read', () => ({ value: map('notion') }))
   on('tool.list', () => ({ value: [{ name: 'mcp__3c44__notion-fetch', description: 'Fetch', mcp: true }] }))
@@ -111,6 +113,7 @@ test("the terminal draws a diagram's text version in place of its image; the des
   await desktop.unmount()
 })
 
+// @scenario blueprint/ui: Diagram without a terminal version
 test('a diagram that does not download stays a link', async ($, on) => {
   on('fs.read', () => ({ value: map('notion') }))
   on('tool.list', () => ({ value: [{ name: 'mcp__3c44__notion-fetch', description: 'Fetch', mcp: true }] }))
@@ -131,6 +134,7 @@ test('a diagram that does not download stays a link', async ($, on) => {
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: No Notion connection
 test('no Notion server: the pane waits for it, then names what it tried and the setting', async ($, on) => {
   const clock = mock.clock(on)
   on('fs.read', () => ({ value: map('notion') }))
@@ -148,6 +152,7 @@ test('no Notion server: the pane waits for it, then names what it tried and the 
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: Other backend
 test('another backend: not supported yet, with the link', async ($, on) => {
   on('fs.read', () => ({ value: map('obsidian') }))
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -156,6 +161,7 @@ test('another backend: not supported yet, with the link', async ($, on) => {
   await ui.unmount()
 })
 
+// @scenario blueprint/ui: Connection comes up during the wait
 test('a Notion connection that comes up within the wait is read', async ($, on) => {
   const clock = mock.clock(on)
   let isUp = false

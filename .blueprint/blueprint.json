@@ -33,16 +33,16 @@
         "skills/blueprint/scripts/render_mermaid.py",
         "skills/blueprint/scripts/text_diagram.py"
       ],
-      "specVersion": "92dc619be9a16e54",
+      "specVersion": "d54ff7e063b584d7",
       "anchorsFiles": {
-        "skills/blueprint/SKILL.md": "ce83009d6f73",
-        "skills/blueprint/references/formats.md": "fbdfb902e565",
+        "skills/blueprint/SKILL.md": "83f63e06ec33",
+        "skills/blueprint/references/formats.md": "2f49cad1fd59",
         "skills/blueprint/references/propose.md": "cf21b736ad29",
         "skills/blueprint/references/visuals.md": "7450ec7d84b7",
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/apply": {
       "ref": "https://app.notion.com/p/41c43cce21f281bbb3fef91cff515a26",
@@ -50,12 +50,12 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "a30507991af4a9fe",
+      "specVersion": "5dcbaa8a583f81b8",
       "anchorsFiles": {
-        "skills/blueprint/references/apply.md": "0752e17d882d",
+        "skills/blueprint/references/apply.md": "365935f3be26",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/backends": {
       "ref": "https://app.notion.com/p/41c43cce21f28136b9ded9fc8d7d6011",
@@ -94,13 +94,13 @@
         "skills/blueprint/scripts/drift.py",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "eae60faf73496c20",
+      "specVersion": "c15a281d7ac604d9",
       "anchorsFiles": {
         "skills/blueprint-sync/SKILL.md": "12c01a689528",
         "skills/blueprint/references/status.md": "a7f94fed610e",
-        "skills/blueprint/scripts/drift.py": "49f64b8ab8f3"
+        "skills/blueprint/scripts/drift.py": "00c8741137ce"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
@@ -121,10 +121,10 @@
       ],
       "specVersion": "fb311da69bc03e7e",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "24c0704d4ec9",
-        "README.md": "6b3dbcbc9f85"
+        ".claude-plugin/marketplace.json": "3d1d8d48ac62",
+        "README.md": "27c2074eb7fc"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -136,28 +136,28 @@
         "mods/blueprint-ui/.claude-plugin/plugin.json": "6b7771ba4d56",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
         "mods/blueprint-ui/hooks/blocks.ts": "9efd548adfa7",
-        "mods/blueprint-ui/hooks/board.test.ts": "4e8cf28f8bb6",
+        "mods/blueprint-ui/hooks/board.test.ts": "1c814ad14052",
         "mods/blueprint-ui/hooks/board.ts": "458d09dba972",
         "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
-        "mods/blueprint-ui/hooks/comment.test.tsx": "325fb554a04a",
-        "mods/blueprint-ui/hooks/follow.test.tsx": "f6e1fb556628",
+        "mods/blueprint-ui/hooks/comment.test.tsx": "d15029007825",
+        "mods/blueprint-ui/hooks/follow.test.tsx": "491ed00c4d94",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
         "mods/blueprint-ui/hooks/notion.ts": "8e0bdd11af69",
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
-        "mods/blueprint-ui/hooks/read.test.tsx": "e9f3acdcd6d3",
-        "mods/blueprint-ui/hooks/register.test.tsx": "fe974e8c0b62",
+        "mods/blueprint-ui/hooks/read.test.tsx": "15759035f3fe",
+        "mods/blueprint-ui/hooks/register.test.tsx": "5ea41ead50c4",
         "mods/blueprint-ui/hooks/register.tsx": "c1eaa561a874",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
-        "mods/blueprint-ui/hooks/split.test.tsx": "a92484fa4a86",
+        "mods/blueprint-ui/hooks/split.test.tsx": "14d50caec221",
         "mods/blueprint-ui/hooks/split.ts": "e05d22940a37",
-        "mods/blueprint-ui/hooks/status.test.tsx": "896b369c577f",
+        "mods/blueprint-ui/hooks/status.test.tsx": "17c17f39489d",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
         "mods/blueprint-ui/types/index.d.ts": "fa81c68ff04c"
       },
-      "syncedCommit": "87b279a1fb9d6470fdf52a46f7dd86f4b2398133"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
@@ -176,12 +176,12 @@
         "skills/blueprint-tidy/**",
         "skills/blueprint/references/upgrades.md"
       ],
-      "specVersion": "3c9410ab03d13d26",
+      "specVersion": "8bf981e5a456b254",
       "anchorsFiles": {
-        "skills/blueprint-tidy/SKILL.md": "37744fa8b66b",
+        "skills/blueprint-tidy/SKILL.md": "0ec4c7c0275f",
         "skills/blueprint/references/upgrades.md": "4914621f1e65"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/map": {
       "ref": "https://app.notion.com/p/41e43cce21f281799c04c08c812c0e01",
@@ -192,22 +192,28 @@
         "skills/blueprint/scripts/vendor/**",
         "skills/blueprint/references/map.md"
       ],
-      "specVersion": "c7f507b2d9ca2d44",
+      "specVersion": "a3597569ea9525a3",
       "anchorsFiles": {
-        "skills/blueprint/references/map.md": "d74aff7898fa",
-        "skills/blueprint/scripts/graph.py": "8a7de11875b9",
-        "skills/blueprint/scripts/map_template.html": "1e002b73b26c",
-        "skills/blueprint/scripts/test_graph.py": "a1369b0f8383",
+        "skills/blueprint/references/map.md": "2f87fd47ed27",
+        "skills/blueprint/scripts/graph.py": "508edab65058",
+        "skills/blueprint/scripts/map_template.html": "b40f1a43aba6",
+        "skills/blueprint/scripts/test_graph.py": "8b54d0ab82b4",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     },
     "blueprint/coverage": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/42043cce21f2815795a4de5f5139807a",
       "anchors": [
         "skills/blueprint/scripts/coverage.py",
         "skills/blueprint/references/coverage.md"
-      ]
+      ],
+      "specVersion": "0c1f1403d09d8583",
+      "anchorsFiles": {
+        "skills/blueprint/references/coverage.md": "46407ac6a8c6",
+        "skills/blueprint/scripts/coverage.py": "12735925a1b3"
+      },
+      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
     }
   },
   "changes": {
@@ -255,8 +261,10 @@
     "scenario-test-coverage": {
       "brief": "https://app.notion.com/p/41f43cce21f2813eba98ebd764c684d8",
       "review": "https://app.notion.com/p/41f43cce21f28102a9fec8dc35cb66a8",
-      "status": "approved",
-      "baseCommit": "011e7d3e97c8b7422865ed5cd402b49fc0e6a2da"
+      "status": "applied",
+      "baseCommit": "011e7d3e97c8b7422865ed5cd402b49fc0e6a2da",
+      "branch": "kn/blueprint-coverage-specs",
+      "pr": "https://github.com/KarolNov/skills/pull/55"
     }
   },
   "artifacts": {
@@ -321,6 +329,17 @@
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       }
+    }
+  },
+  "tests": {
+    "kinds": {
+      "integration": [
+        "skills/**/test_*.py"
+      ],
+      "unit": [
+        "mods/**/*.test.ts",
+        "mods/**/*.test.tsx"
+      ]
     }
   }
 }
