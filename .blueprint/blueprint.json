@@ -325,6 +325,9 @@
   },
   "tests": {
     "kinds": {
+      "e2e": [
+        "skills/**/e2e/**"
+      ],
       "integration": [
         "skills/**/test_*.py"
       ],

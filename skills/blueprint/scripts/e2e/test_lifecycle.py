@@ -2,11 +2,14 @@
 """End-to-end tests on the demo shop: drift.py, coverage.py and graph.py run on the same repo
 as it is synced, drifts, is renamed and re-synced, and must agree at every step.
 
-    python3 skills/blueprint/scripts/test_lifecycle.py
+    python3 skills/blueprint/scripts/e2e/test_lifecycle.py
 
-The per-script edge cases live in test_drift.py, test_coverage.py and test_graph.py.
+The e2e kind in this repo's tests.kinds; the per-script edge cases live in ../test_drift.py,
+../test_coverage.py and ../test_graph.py. Tags are built so coverage reads them: each sits on
+its own line above the test, and claims a scenario only where the test checks its WHEN and THEN.
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -85,12 +88,22 @@ class AsBuilt(ShopTest):
 
 
 class Drifting(ShopTest):
+    # @scenario blueprint/sync: Anchored file edited
+    # @scenario blueprint/sync: Code changes after a check
+    # @scenario blueprint/map: Code moved
     def test_shared_file_drifts_every_capability_that_anchors_it(self):
         r = self.repo()
         r.edit("src/shared/money.ts")
+        check = r.drift("check", "--json")
+        self.assertEqual(check.returncode, 1)
+        for c in json.loads(check.stdout):
+            if c["capability"] in SHARED["src/shared/money.ts"]:
+                self.assertIn("src/shared/money.ts", c["changed"], c["capability"])
         self.assertEqual(r.moved(), sorted({DRIFTED, *SHARED["src/shared/money.ts"]}))
         # billing-help covers the billing domain, which anchors money.ts.
         self.assertEqual(r.stale(), sorted(["billing-help", STALE]))
+        arts = {a["id"]: a for a in json.loads(r.drift("artifacts", "--json").stdout)}
+        self.assertIn("src/shared/money.ts", arts["billing-help"]["changed"])
         m, _ = agree(self, r)
         for n in m["nodes"]:
             if n["id"] in SHARED["src/shared/money.ts"]:
@@ -115,9 +128,11 @@ class Drifting(ShopTest):
         _, cov = agree(self, r)
         self.assertEqual(claimed(cov, cap), claimed(before, cap) + 1)
 
+    # @scenario blueprint/sync: Spec synced, artifact not checked
     def test_resync_clears_drift_and_staleness(self):
         r = self.repo()
         r.sync(DRIFTED)
+        self.assertEqual((r.moved(), r.stale()), ([], [STALE]))
         r.checked_run("drift.py", "artifacts", "checked", STALE)
         self.assertEqual((r.moved(), r.stale()), ([], []))
         agree(self, r)
@@ -125,6 +140,7 @@ class Drifting(ShopTest):
 
 
 class Renaming(ShopTest):
+    # @scenario blueprint/sync: Rename rewrites tags
     def test_rename_carries_drift_artifacts_tags_and_baseline(self):
         r = self.repo()
         before = r.coverage()
@@ -160,12 +176,16 @@ class Demo(unittest.TestCase):
         return subprocess.run([sys.executable, str(FAKEREPO), str(folder)], capture_output=True,
                               text=True, env=ENV)
 
+    # @scenario blueprint/map: Elsewhere
     def test_draws_reruns_and_refuses_other_folders(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = self.run_demo(Path(tmp) / "shop")
             self.assertEqual(out.returncode, 0, out.stderr)
             path, summary = out.stdout.strip().splitlines()
+            self.assertEqual(Path(path), (Path(tmp) / "shop/map.html").resolve())
             self.assertTrue(Path(path).is_file())
+            # Written with --out, so no ignore line is added.
+            self.assertFalse((Path(tmp) / "shop/.blueprint/.gitignore").exists())
             self.assertEqual(summary, "22 capabilities, 5 domains; code-drifted: orders/checkout; "
                                       "1 stale artifact; 104 of 227 scenarios claimed, 2 orphan tags")
             again = self.run_demo(Path(tmp) / "shop")

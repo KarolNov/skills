@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fake repos for testing blueprint's scripts end to end, and a realistic one to look at.
 
-    python3 fakerepo.py [DIR]     build the demo shop in DIR and draw its map
+    python3 skills/blueprint/scripts/e2e/fakerepo.py [DIR]   build the demo shop and draw its map
 
 As a library (the tests import it):
 
@@ -30,7 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+SCRIPTS = Path(__file__).resolve().parent.parent  # the scripts under test
 # Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
 ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
            GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
@@ -135,7 +135,7 @@ class FakeRepo:
 
     # The scripts. Each returns the CompletedProcess; the helpers below parse --json.
     def run(self, script, *args):
-        return subprocess.run([sys.executable, str(HERE / script), *args], cwd=self.root,
+        return subprocess.run([sys.executable, str(SCRIPTS / script), *args], cwd=self.root,
                               capture_output=True, text=True, env=ENV)
 
     def drift(self, *args):
@@ -261,7 +261,7 @@ def shop(root=None, seed=7):
         r.write(f, f"// shared {f}\nexport const y = 1;\n")
     _tests(r, rnd, scenarios)
     r.kinds(unit=["src/**/*.test.ts"], e2e=["e2e/**"])
-    r.write(MARK, "Made by skills/blueprint/scripts/fakerepo.py; safe to delete.\n")
+    r.write(MARK, "Made by skills/blueprint/scripts/e2e/fakerepo.py; safe to delete.\n")
     r.sync()
     r.artifact("billing-help", "webpage", "https://help.shop.example/billing", "Billing help centre",
                "billing")
