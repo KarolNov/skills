@@ -157,7 +157,8 @@ class Renaming(ShopTest):
 
 
 class Rewording(ShopTest):
-    def test_reworded_scenario_orphans_its_tags(self):
+    # @scenario blueprint/coverage: Scenario reworded
+    def test_reworded_scenario_orphans_its_tags_and_suggests_the_new_name(self):
         r = self.repo()
         cap = "catalog/search"
         old = self.scenarios[cap][0]  # the one smoke.test.ts and others claim
@@ -167,7 +168,9 @@ class Rewording(ShopTest):
         _, after = agree(self, r)
         new = [o for o in after["orphans"] if o["capability"] == cap]
         self.assertTrue(new)
-        self.assertEqual({(o["scenario"], o["reason"]) for o in new}, {(old, "unknown scenario")})
+        self.assertEqual({(o["scenario"], o["reason"], o["suggestion"]) for o in new},
+                         {(old, "unknown scenario", f"{old} quickly")})
+        self.assertIn(f"nearest: {old} quickly", r.run("coverage.py").stdout)
         self.assertLess(after["summary"]["claimed"], before["summary"]["claimed"])
 
 

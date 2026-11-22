@@ -184,9 +184,20 @@ def scan(files):
 
 # ---- the report ------------------------------------------------------------------------
 
+def _keeps(a, b):
+    """Whether b holds a's words in order (words added around or between them)."""
+    rest = iter(b.split())
+    return all(w in rest for w in a.split())
+
+
 def nearest(word, names):
-    hit = difflib.get_close_matches(norm(word), [norm(n) for n in names], n=1, cutoff=0.6)
-    return next((n for n in names if norm(n) == hit[0]), None) if hit else None
+    """The closest of names, or None. A close name that keeps word's words in order, or whose
+    words word keeps (words added or dropped: how a scenario is usually reworded), wins over one
+    closer as text, so `Filters buyer` suggests `Filters buyer quickly`, not `Flags buyer`."""
+    w, normed = norm(word), {norm(n): n for n in reversed(names)}
+    close = difflib.get_close_matches(w, list(normed), n=len(normed), cutoff=0.6)
+    kept = [c for c in close if _keeps(w, c) or _keeps(c, w)]
+    return normed[(kept or close)[0]] if close else None
 
 
 def build(state=None, files=None, delta=None, only=None):

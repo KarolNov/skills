@@ -254,6 +254,21 @@ class Problems(TestCase):
         self.assertEqual(o["suggestion"], "Expired session redirects to login")
         self.assertIn("nearest: Expired session redirects to login", r.run().stdout)
 
+    def test_reworded_beats_a_closer_sibling(self):
+        """A name that keeps the old words in order wins over one that scores higher as text."""
+        md = SESSION_MD + ("\n### Requirement: Tax\n\nTax SHALL be handled.\n\n"
+                           "- **Scenario: Flags tax-exempt buyer**\n  - **THEN** flagged\n"
+                           "- **Scenario: Filters tax-exempt buyer quickly**\n  - **THEN** filtered\n"
+                           "- **Scenario: Rejects an empty basket**\n  - **THEN** rejected\n"
+                           "- **Scenario: Retries empty basket**\n  - **THEN** retried\n")
+        r = self.repo({".blueprint/baseline/auth/session.md": md,
+                       "tests/a.py": tag("#", "auth/session: Filters tax-exempt buyer")
+                       + tag("#", "auth/session: Rejects empty basket")
+                       + tag("#", "auth/session: Expired session redirect to login")})
+        self.assertEqual([o["suggestion"] for o in r.data()["orphans"]],
+                         ["Filters tax-exempt buyer quickly", "Rejects an empty basket",
+                          "Expired session redirects to login"])
+
     def test_unknown_capability_and_malformed_tag(self):
         r = self.repo({"tests/a.py": tag("#", "auth/sessions: Fresh session stays")
                        + tag("#", "no colon here")})
