@@ -25,6 +25,12 @@ export const SPLIT_SPEC = {
             name: { type: 'string' },
             tasks: { type: 'string', description: "The brief's task numbers, such as \"1, 2\"." },
             base: { type: 'string', description: 'The default branch, or the id of the group it is stacked on.' },
+            after: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Ids of groups that must merge before this one can start: for a group cut from the default branch that needs code they add. Specs waits for every group without it.',
+            },
             prompt: {
               type: 'string',
               description:
@@ -62,25 +68,39 @@ export function splitOf(input: unknown): BlueprintUiSplit | { error: string } {
       base: String(raw.base ?? defaultBranch).trim() || defaultBranch,
       prompt: String(raw.prompt ?? ''),
       status,
+      ...(Array.isArray(raw.after) && raw.after.length ? { after: [...new Set(raw.after.map(a => String(a).trim()).filter(Boolean))] } : {}),
       ...(typeof raw.pr === 'string' && raw.pr ? { pr: raw.pr } : {}),
     })
   }
   for (const g of groups) {
     if (g.base === g.id) return { error: `group ${g.id} can't be stacked on itself.` }
     if (g.base !== defaultBranch && !groups.some(o => o.id === g.base)) return { error: `group ${g.id}'s base "${g.base}" is neither ${defaultBranch} nor a group.` }
+    for (const a of g.after ?? []) {
+      if (a === g.id) return { error: `group ${g.id} can't wait for itself.` }
+      const o = groups.find(x => x.id === a)
+      if (!o) return { error: `group ${g.id} waits for "${a}", which is no group.` }
+      if (isSpecs(o)) return { error: `group ${g.id} can't wait for Specs, which merges last.` }
+    }
   }
   return { change: i.change.trim(), defaultBranch, isApproved: i.isApproved === true, groups }
 }
 
 export const isSpecs = (g: BlueprintUiGroup) => g.id.toLowerCase() === 'specs'
 
+/** The groups a group still waits on to merge, from its `after`. */
+export function waitsOn(split: BlueprintUiSplit, g: BlueprintUiGroup): string[] {
+  return (g.after ?? []).filter(a => split.groups.find(o => o.id === a)?.status !== 'merged')
+}
+
 /**
- * Whether a group can start now: approved, not yet started, and either cut from the default branch
- * or stacked on a group whose PR is open. Specs waits for every other group to merge.
+ * Whether a group can start now: approved, not yet started, every group in its `after` merged, and
+ * either cut from the default branch or stacked on a group whose PR is open. Specs waits for every
+ * other group to merge.
  */
 export function isReady(split: BlueprintUiSplit, g: BlueprintUiGroup): boolean {
   if (!split.isApproved || g.status !== 'planned') return false
   if (isSpecs(g)) return split.groups.every(o => o === g || o.status === 'merged')
+  if (waitsOn(split, g).length) return false
   if (g.base === split.defaultBranch) return true
   const base = split.groups.find(o => o.id === g.base)
   return !!base && (base.status === 'pr' || base.status === 'merged')
@@ -125,6 +145,8 @@ export function stateOf(split: BlueprintUiSplit, g: BlueprintUiGroup): string {
   }
   if (isSpecs(g)) return 'after every group merges'
   if (isReady(split, g)) return stacked ? `ready · ${stacked}` : 'ready'
+  const waits = waitsOn(split, g)
+  if (waits.length) return waits.length === 1 ? `after group ${waits[0]} merges` : `after groups ${waits.join(', ')} merge`
   if (!split.isApproved) return stacked || `from ${split.defaultBranch}`
   return `waits for group ${g.base}'s PR`
 }

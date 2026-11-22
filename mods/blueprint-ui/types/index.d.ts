@@ -23,6 +23,8 @@ export type BlueprintUiGroup = {
   tasks: string
   /** The default branch's name, or the id of the group it is stacked on. */
   base: string
+  /** Groups that must merge before it can start, for a group cut from the default branch that needs their code. */
+  after?: string[]
   /** What its session starts with: `/blueprint apply <change> <group>` and a short brief, written by apply. */
   prompt: string
   status: 'planned' | 'starting' | 'started' | 'pr' | 'merged'
