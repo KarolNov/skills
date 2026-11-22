@@ -342,6 +342,9 @@
       "unit": [
         "mods/**/*.test.ts",
         "mods/**/*.test.tsx"
+      ],
+      "consistency": [
+        "tests/test_*.py"
       ]
     }
   }

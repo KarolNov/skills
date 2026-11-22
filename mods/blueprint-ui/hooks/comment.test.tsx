@@ -144,3 +144,35 @@ test('Submit review writes one file, runs /blueprint review with it, and clears 
   expect(await ui.find({ type: 'Text', text: /Pending review/ })).toBeUndefined()
   await ui.unmount()
 })
+
+// @scenario blueprint/ui: Command doesn't start
+test("a /blueprint review that doesn't start toasts and keeps the pending items", async ($, on) => {
+  notion(on)
+  const toasts: string[] = []
+  let runs = 0
+  on('command.list', () => ({ value: [{ name: 'blueprint:blueprint', description: 'Blueprint', source: 'plugin' as const }] }))
+  on('fs.write', () => ({ value: undefined }))
+  on('command.run', () => {
+    runs++
+    throw new Error('the command could not be queued')
+  })
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'spec:upload/retry' })
+  await ui.press({ key: 'plus-2' })
+  await typeInto(ui, 'comment-2', 'why five?')
+  await ui.press({ key: 'submit' })
+
+  expect(runs).toBe(1)
+  // The engine reports the rejection in its own words; the toast carries it.
+  expect(toasts).toHaveLength(1)
+  expect(toasts[0]).toMatch(/^Submit failed: \/blueprint:blueprint didn't start \(.+\)\. The review is still pending\.$/)
+  expect(await ui.find({ type: 'Text', text: /Pending review · 1 comment/ })).toBeDefined()
+  // Still there to submit again.
+  expect(await ui.find({ key: 'submit' })).toBeDefined()
+  await ui.unmount()
+})
