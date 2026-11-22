@@ -191,7 +191,6 @@ class Rename(DriftTest):
         r = self.repo(self.FILES, self.STATE)
         self.assertIn("unknown capability", r.drift("rename", "nope", "x").stderr)
 
-    # @scenario blueprint/sync: Rename rewrites tags
     def test_rewrites_scenario_tags(self):
         files = dict(self.FILES, **{
             "tests/ui.test.ts": "// @scenario ui: Empty query\n"
@@ -213,6 +212,37 @@ class Rename(DriftTest):
                                                    "# @scenario ui/other: Not this one\r\n")
         for path in ("tests/other.rs", ".blueprint/notes.md", "tests/blob.bin"):
             self.assertEqual(read(path), files[path], path)
+
+    def test_rewrites_only_what_coverage_reads(self):
+        files = dict(self.FILES, **{
+            "tests/fixture.py": 'FIX = "// @scenario ui: Empty query\\n"\n',
+            "README.md": "Tag a test with `@scenario ui: Empty query`.\n",
+            "tests/tick.ts": "// @scenario `ui`: Empty query\n" + "x" * 9000 + "\0\n",
+        })
+        r = self.repo(files, self.STATE)
+        (r.root / "tests/latin.py").write_bytes(b"# @scenario ui: Caf\xe9\n")
+        outside = tempfile.NamedTemporaryFile("w", suffix=".ts", delete=False)
+        outside.write("// @scenario ui: Outside\n")
+        outside.close()
+        self.addCleanup(os.unlink, outside.name)
+        (r.root / "tests/link.ts").symlink_to(outside.name)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.stdout, "renamed ui to catalog/ui; 2 tags rewritten\n", out.stderr)
+        read = lambda p: (r.root / p).read_bytes()
+        self.assertEqual(read("tests/latin.py"), b"# @scenario catalog/ui: Caf\xe9\n")
+        self.assertTrue(read("tests/tick.ts").startswith(b"// @scenario `catalog/ui`: Empty query\n"))
+        for path in ("tests/fixture.py", "README.md"):
+            self.assertEqual(read(path).decode(), files[path], path)
+        self.assertEqual(Path(outside.name).read_text(), "// @scenario ui: Outside\n")
+
+    def test_unwritable_tag_file_is_named(self):
+        files = dict(self.FILES, **{"tests/a.test.ts": "// @scenario ui: A\n"})
+        r = self.repo(files, self.STATE)
+        (r.root / "tests/a.test.ts").chmod(0o444)
+        out = r.drift("rename", "ui", "catalog/ui")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("couldn't rewrite the ui tags in: tests/a.test.ts", out.stderr)
+        self.assertIn("catalog/ui", r.state()["specs"])
 
     def test_no_tags_no_count(self):
         r = self.repo(self.FILES, self.STATE)

@@ -316,35 +316,54 @@ def collision(name, specs, domains, ignore=None):
     return None
 
 
-MAX_TAG_FILE = 1 << 20  # larger files are data, not tests
+MAX_TAG_BYTES = 1 << 20  # larger files are data, not tests
+# A tag is a line comment holding `@scenario <capability>: <scenario name>`; coverage.py
+# parses it, rename rewrites it, and both use this one grammar.
+TAG = re.compile(r"^\s*(?://+!?|#+|--+|/\*+!?|\*+|<!--)\s*@scenario\b[ \t]*(.*?)\s*$")
 
 
-def tag_files():
-    """Repo files that may hold @scenario tags: text files under 1 MB, outside .blueprint/."""
-    for f in repo_files():
-        path = ROOT / f
-        if f.startswith(".blueprint/") or path.stat().st_size > MAX_TAG_FILE:
+def tag_files(files):
+    """(path, bytes) for each repo file that may hold @scenario tags: regular files (not
+    symlinks) up to MAX_TAG_BYTES outside .blueprint/, holding `@scenario`, with no NUL in
+    their first 8 KB. Files that can't be read are skipped."""
+    for f in files:
+        if f.startswith(".blueprint/"):
             continue
-        raw = path.read_bytes()
-        if b"\0" in raw:
-            continue
+        full = ROOT / f
         try:
-            yield path, raw.decode("utf-8")
-        except UnicodeDecodeError:
+            if full.is_symlink() or full.stat().st_size > MAX_TAG_BYTES:
+                continue
+            data = full.read_bytes()
+        except OSError:
             continue
+        if b"@scenario" not in data or b"\0" in data[:8192]:
+            continue
+        yield f, data
 
 
-def rewrite_tags(old, new):
-    """Point `@scenario OLD: …` tags at NEW, in place. Returns how many were rewritten."""
-    # The colon right after the name keeps `board` from matching `@scenario board/ops: …`.
-    tag = re.compile(r"(@scenario[ \t]+)" + re.escape(old) + r"([ \t]*:)")
-    count = 0
-    for path, text in tag_files():
-        out, n = tag.subn(lambda m: m.group(1) + new + m.group(2), text)
-        if n:
-            path.write_bytes(out.encode("utf-8"))
-            count += n
-    return count
+def tag_line(line):
+    """The text after `@scenario` when this line (bytes, any encoding) is a tag, else None."""
+    m = TAG.match(line.decode("utf-8", "replace").lstrip("\ufeff"))
+    return m and m.group(1)
+
+
+def tag_rewrites(old, new):
+    """{path: (new bytes, tags rewritten)} pointing `@scenario OLD: …` tags at NEW. Reads only.
+    Bytes are edited in place, so encodings and line endings survive."""
+    # The colon right after the name keeps `board` from matching `@scenario board/ops: …`;
+    # coverage also accepts the name in backticks.
+    tag = re.compile(rb"(@scenario[ \t]+`?)" + re.escape(old.encode()) + rb"(`?[ \t]*:)")
+    out = {}
+    for f, data in tag_files(repo_files()):
+        lines = data.split(b"\n")
+        hits = 0
+        for i, line in enumerate(lines):
+            if tag_line(line) is not None:
+                lines[i], n = tag.subn(lambda m: m.group(1) + new.encode() + m.group(2), line, 1)
+                hits += n
+        if hits:
+            out[f] = (b"\n".join(lines), hits)
+    return out
 
 
 def cmd_rename(args):
@@ -359,6 +378,8 @@ def cmd_rename(args):
         sys.exit(f"capability already exists: {new}")
     if why := collision(new, specs, state.get("domains", {}), ignore=old):
         sys.exit(f"can't rename {old} to {new}: {why}")
+    # Read the tags before changing anything, so a file that can't be read leaves no half rename.
+    rewrites = tag_rewrites(old, new)
     base = ROOT / ".blueprint" / "baseline"
     src, dst = base / f"{old}.md", base / f"{new}.md"
     if dst.exists():
@@ -381,10 +402,19 @@ def cmd_rename(args):
             parent.rmdir()
             parent = parent.parent
     save(state)
-    tags = rewrite_tags(old, new)
+    failed, tags = [], 0
+    for f, (data, n) in rewrites.items():
+        try:
+            (ROOT / f).write_bytes(data)
+            tags += n
+        except OSError as e:
+            failed.append(f"{f} ({e.strerror or e})")
     print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else "")
           + (f"; {len(renamed)} artifacts updated" if renamed else "")
           + (f"; {tags} tags rewritten" if tags else ""))
+    if failed:
+        print(f"  couldn't rewrite the {old} tags in: " + ", ".join(failed)
+              + f"; change them to {new} by hand", file=sys.stderr)
     print(f"  the backend still names it {old}: rename its page and the briefs that list it",
           file=sys.stderr)
     return 0

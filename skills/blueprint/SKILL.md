@@ -2,7 +2,7 @@
 name: blueprint
 description: Architect a larger change from a solution you already have in mind. Grills it briefly, writes it as a spec change in Notion, Obsidian, Linear, Jira, GitHub or a notes folder, builds it, and keeps specs and code in sync in either direction.
 disable-model-invocation: true
-argument-hint: <the change you have in mind> | apply [change] [group] | map | coverage [capability|suggest] | review <file>
+argument-hint: <the change you have in mind> | apply [change] [group] | map | coverage [capability | suggest [capability]] | review <file>
 ---
 
 # Blueprint
