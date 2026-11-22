@@ -6,14 +6,14 @@
 :root {
   --bg: #fbfaf8; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e4e2dd;
   --node: #ffffff; --node-line: #b9b6ae; --domain: #f1efe9; --domain-line: #d9d5cb;
-  --accent: #2f6fde; --edge: #8f8b82; --file: #a9a59c; --art: #8a5cd6; --ok: #2b8a3e;
+  --accent: #2f6fde; --edge: #8f8b82; --file: #a9a59c; --art: #8a5cd6; --test: #138a8a; --ok: #2b8a3e;
   --drift: #d93b30; --drift-bg: #fdecea; --hit: #f4b400;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #161617; --panel: #1f1f21; --ink: #ececee; --muted: #9a9aa0; --line: #333336;
     --node: #2a2a2d; --node-line: #55555a; --domain: #222225; --domain-line: #3a3a3e;
-    --accent: #6ea0ff; --edge: #77777d; --file: #6c6c72; --art: #b08cf5; --ok: #5cc27a;
+    --accent: #6ea0ff; --edge: #77777d; --file: #6c6c72; --art: #b08cf5; --test: #4cc3c3; --ok: #5cc27a;
     --drift: #ff6b5f; --drift-bg: #3a1f1d; --hit: #f4b400;
   }
 }
@@ -71,6 +71,12 @@ ul.files li.changed::after { content: " · changed"; font-family: -apple-system,
 .art-card.stale { border-color: var(--drift); background: var(--drift-bg); }
 .art-card .val { font-size: 13px; word-break: break-all; margin: 2px 0; }
 .art-card p { font-size: 13px; }
+/* Coverage: under each scenario, the tests that claim it (or "uncovered"). */
+.claims { font-size: 12px; margin: 2px 0 4px; color: var(--muted); }
+.claims .claim { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.claims .claim .kind { font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted); }
+.pill.uncov { color: var(--muted); border-style: dashed; }
+details.req summary .pill { margin: 0 0 0 6px; font-weight: 400; vertical-align: 1px; }
 .result { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
 .result:hover { border-color: var(--accent); }
 .result .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
@@ -93,10 +99,13 @@ a.link:hover { text-decoration: underline; }
 .sw.line { height: 4px; background: var(--edge); border-radius: 2px; }
 .sw.file { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--file); }
 .sw.art { width: 9px; height: 9px; margin: 0 7px; background: var(--art); transform: rotate(45deg); border-radius: 1px; }
+.sw.test { width: 0; height: 0; margin: 0 7px; border-radius: 0; border: 5px solid transparent;
+  border-bottom: 9px solid var(--test); border-top: 0; }
 .sw.bubble { width: 16px; height: 16px; margin: 0 3px; border-radius: 50%; background: var(--panel); border: 1.5px solid var(--file); }
 /* Rows for node kinds that are switched off stay, faded, so the legend never changes size. */
-.legend .row.files, .legend .row.arts, .legend .row.groups { opacity: .4; transition: opacity .2s; }
-.legend.files .row.files, .legend.arts .row.arts, .legend.files .row.groups, .legend.arts .row.groups { opacity: 1; }
+.legend .row.files, .legend .row.arts, .legend .row.tests, .legend .row.groups { opacity: .4; transition: opacity .2s; }
+.legend.files .row.files, .legend.arts .row.arts, .legend.tests .row.tests,
+.legend.files .row.groups, .legend.arts .row.groups, .legend.tests .row.groups { opacity: 1; }
 
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh 1fr; }
@@ -129,11 +138,13 @@ svg:active { cursor: grabbing; }
 .file.drift circle { fill: var(--drift); }
 .file.art .mark { fill: var(--art); stroke: var(--panel); stroke-width: 1; }
 .file.art.drift .mark { fill: var(--drift); }
+.file.test .mark { fill: var(--test); stroke: var(--panel); stroke-width: 1; }
 /* Zoomed out, a big group is one bubble with its count; zoomed in, each file is a dot. */
 .fgroup .file, .fgroup.split .bubble, .fgroup.split .count { display: none; }
 .fgroup.split .file { display: inline; }
 .bubble { fill: var(--panel); stroke: var(--file); stroke-width: 1.5; cursor: zoom-in; }
 .bubble.art { stroke: var(--art); stroke-dasharray: 3 2; }
+.bubble.test { stroke: var(--test); stroke-dasharray: 1 2; }
 .bubble.drift { stroke: var(--drift); }
 .bubble.hit { stroke: var(--hit); stroke-width: 2.5; }
 .bubble.sel { stroke: var(--accent); stroke-width: 3; }
@@ -170,6 +181,7 @@ svg:active { cursor: grabbing; }
       <div class="menu">
         <label><input type="checkbox" id="files"><span class="sw file"></span>files: what the anchors match</label>
         <label><input type="checkbox" id="artifacts"><span class="sw art"></span>artifacts: outside resources</label>
+        <label><input type="checkbox" id="tests"><span class="sw test"></span>tests: files claiming scenarios</label>
       </div></details>
     <button id="fit">Fit</button></header>
   <div id="graph">
@@ -180,13 +192,15 @@ svg:active { cursor: grabbing; }
       <div class="row"><span class="sw line"></span>shares files; the label says how many, and lines between domains run bundled</div>
       <div class="row files"><span class="sw file"></span>anchored file: a capability's own files sit under it, shared ones between the capabilities, tied by thin lines</div>
       <div class="row arts"><span class="sw art"></span>artifact: a resource outside the repo describing the capabilities it is tied to; red when stale (its code changed since it was checked)</div>
-      <div class="row groups"><span class="sw bubble"></span>a group of files (or of artifacts, dashed), with its count: zoom in or click it to see each</div>
+      <div class="row tests"><span class="sw test"></span><span>test file: claims scenarios of the capabilities it is tied to, through <code>@scenario</code> tags</span></div>
+      <div class="row groups"><span class="sw bubble"></span>a group of files (of artifacts, dashed; of tests, dotted), with its count: zoom in or click it to see each</div>
       <p>Only code-side drift is shown. A spec edited since its last sync is not: <code>/blueprint-sync</code> reports that.</p>
+      <p id="cov-note">Test coverage isn't shown: <code>blueprint.json</code> has no <code>tests.kinds</code>. <code>/blueprint coverage</code> sets it up.</p>
       <p>Hover or select a capability to bring its lines forward · scroll to zoom · drag the background to pan · drag a capability to pin it · double-click to free it.</p>
     </details>
   </div>
   <aside>
-    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files, artifacts…" autocomplete="off">
+    <div class="search"><input type="search" id="q" placeholder="Search names, purposes, requirements, files, artifacts, tests…" autocomplete="off">
       <div class="count" id="count"></div></div>
     <div id="panel"></div>
   </aside>
@@ -205,15 +219,22 @@ const fileChanged = (f) => fileOwners[f].some((id) => byId[id].changed.includes(
 // Outside resources describing capabilities: listed in their panels and, when switched on, drawn
 // like files (as diamonds), tied to the capabilities they cover.
 const artById = Object.fromEntries((DATA.artifacts || []).map((a) => [a.id, a]));
+// Test files claiming scenarios (coverage.py's tags), when blueprint.json has tests.kinds: listed
+// under each scenario in the panels and, when switched on, drawn like files (as triangles).
+const testByFile = Object.fromEntries((DATA.tests || []).map((t) => [t.file, t]));
 
-// show: which extras are drawn as nodes, { files, artifacts }. Both go through the same groups
-// and placement; an artifact's "owners" are the capabilities it covers now.
+// show: which extras are drawn as nodes, { files, artifacts, tests }. All go through the same groups
+// and placement; an artifact's "owners" are the capabilities it covers now, a test file's the
+// capabilities whose scenarios it claims.
 function toGraph(d, show) {
   const files = show.files ? Object.keys(fileOwners).sort().map((f) => ({
     id: "file:" + f, kind: "file", path: f, label: f.split("/").pop(), owners: fileOwners[f], drift: fileChanged(f) })) : [];
   if (show.artifacts) for (const a of d.artifacts || []) {
     if (a.covers.length) files.push({ id: "art:" + a.id, kind: "art", path: a.description || a.value, label: a.id,
       owners: a.covers, drift: a.stale });
+  }
+  if (show.tests) for (const t of d.tests || []) {
+    files.push({ id: "test:" + t.file, kind: "test", path: t.file, label: t.file.split("/").pop(), owners: t.covers, drift: false });
   }
   return {
     domains: d.domains.filter((dom) => d.nodes.some((n) => n.domain === dom.id)),
@@ -751,17 +772,19 @@ const Canvas = (function () {
       groupSel = fileG.selectAll("g").data(groups).join("g").attr("class", (x) => "fgroup" + (isNew(x) ? " enter" : ""))
         .on("mouseenter", (e, d) => { hovered = d; focus(); })
         .on("mouseleave", () => { hovered = null; focus(); });
-      groupSel.append("circle").attr("class", (d) => "bubble" + (d.kind === "art" ? " art" : "") + (d.files.some((f) => f.drift) ? " drift" : ""))
+      groupSel.append("circle").attr("class", (d) => "bubble" + (d.kind === "file" ? "" : " " + d.kind) + (d.files.some((f) => f.drift) ? " drift" : ""))
         .on("click", (e, d) => { e.stopPropagation(); centre(d.x, d.y, SPLIT_AT * 1.15); });
       groupSel.append("text").attr("class", "count").attr("text-anchor", "middle").text((d) => d.files.length);
-      groupSel.append("title").text((d) => `${d.kind === "art" ? plural(d.files.length, "artifact", "artifacts") : plural(d.files.length, "file", "files")} · ${d.owners.join(", ")}`);
+      const noun = { file: ["file", "files"], art: ["artifact", "artifacts"], test: ["test file", "test files"] };
+      groupSel.append("title").text((d) => `${plural(d.files.length, ...noun[d.kind])} · ${d.owners.join(", ")}`);
       fileSel = groupSel.selectAll("g.file").data((d) => d.files).join("g")
-        .attr("class", (d) => "file" + (d.kind === "art" ? " art" : "") + (d.drift ? " drift" : ""))
+        .attr("class", (d) => "file" + (d.kind === "file" ? "" : " " + d.kind) + (d.drift ? " drift" : ""))
         .on("click", (e, d) => { e.stopPropagation(); onSelect(d.id); });
       fileSel.append("circle").attr("class", "pad").attr("r", DOT / 2);  // an easier target than the dot
-      // A file is a dot; an artifact a slightly bigger diamond, so it stands out among them.
-      fileSel.filter((d) => d.kind !== "art").append("circle").attr("r", 3.5);
+      // A file is a dot; an artifact a slightly bigger diamond, a test file a triangle, so each stands out.
+      fileSel.filter((d) => d.kind === "file").append("circle").attr("r", 3.5);
       fileSel.filter((d) => d.kind === "art").append("path").attr("class", "mark").attr("d", "M0,-5L5,0L0,5L-5,0Z");
+      fileSel.filter((d) => d.kind === "test").append("path").attr("class", "mark").attr("d", "M0,-5L4.6,3.5L-4.6,3.5Z");
       fileSel.append("title").text((d) => d.path);
       fileSel.on("mouseenter", (e, d) => { hoveredFile = d; tip(); }).on("mouseleave", () => { hoveredFile = null; tip(); });
       tipSel = labelG.append("g").attr("class", "file-tip").attr("display", "none");
@@ -830,7 +853,7 @@ const Canvas = (function () {
 
 // ---- search -------------------------------------------------------------
 // A capability matches when every typed word appears somewhere in its name, purpose, requirements
-// (title, text and scenarios), file paths or artifacts. What matched is the fields holding the most words.
+// (title, text and scenarios), file paths, artifacts or claiming test files. What matched is the fields holding the most words.
 const Search = {
   terms: [],
   set(q) { this.terms = q.toLowerCase().split(/\s+/).filter(Boolean); },
@@ -847,6 +870,7 @@ const Search = {
         ...n.files.map((f) => ({ kind: "file", label: f, text: f })),
         ...n.artifacts.map((id) => artById[id]).filter(Boolean)
           .map((a) => ({ kind: "artifact", id: a.id, label: "artifact " + a.id, text: [a.id, a.value, a.description].join("\n") })),
+        ...(n.tests || []).map((f) => ({ kind: "test", label: "test " + f, text: f })),
       ];
       const all = fields.map((f) => f.text).join("\n").toLowerCase();
       if (!this.terms.every((w) => all.includes(w))) continue;
@@ -855,7 +879,8 @@ const Search = {
       const why = scored.filter((f) => f.s === best);
       // Every file holding a typed word stays lit on the canvas, not only the best-scoring ones.
       out.push({ id: n.id, why, files: scored.filter((f) => f.kind === "file").map((f) => f.text),
-        arts: scored.filter((f) => f.kind === "artifact").map((f) => f.id) });
+        arts: scored.filter((f) => f.kind === "artifact").map((f) => f.id),
+        tests: scored.filter((f) => f.kind === "test").map((f) => f.text) });
     }
     return out;
   },
@@ -916,8 +941,19 @@ const STATUS = {
   "no-spec": ["no spec yet", ""], "no-anchors": ["no anchors", ""],
 };
 
+// Scenario names as coverage.py matches them: markup dropped, whitespace collapsed, case folded.
+const scenKey = (s) => String(s).replace(/<\/?(?:b|code|i|em|strong)>|\*\*|`/g, "").split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+// Under a scenario: the tests that claim it (file:line, kind), or that none does. "Claimed", since nothing is run.
+function claims(s) {
+  if (!s.claims.length) return `<div class="claims"><span class="pill uncov">uncovered</span>${s.pending ? " pending" : ""}</div>`;
+  return `<div class="claims">${s.claims.map((c) => `<span class="claim"><a class="link" data-id="test:${esc(c.file)}">${esc(c.file)}:${c.line}</a> <span class="kind">${esc(c.kind || "unclassified")}</span></span>`).join("")}</div>`;
+}
+const claimCount = (scen) => scen.filter((s) => s.claims.length).length;
+
 // The small markdown a requirement body holds: paragraphs, nested bullet lists, `code` and **bold**.
-function md(text) {
+// scenarios (from coverage, when on): each scenario bullet gets its claims right under its name.
+function md(text, scenarios) {
+  const left = new Map((scenarios || []).map((s) => [scenKey(s.name), s]));
   const out = [];
   let depth = 0, para = [];
   const flush = () => { if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`); para = []; };
@@ -929,7 +965,9 @@ function md(text) {
       const lvl = Math.floor(li[1].length / 2) + 1;
       close(lvl);
       while (depth < lvl) { out.push("<ul>"); depth++; }
-      out.push(`<li>${inline(li[2])}</li>`);
+      const sc = /^(?:\*\*|<b>)\s*Scenario:\s*(.+?)\s*(?:\*\*|<\/b>)/.exec(li[2]), hit = sc && left.get(scenKey(sc[1]));
+      if (hit) left.delete(scenKey(sc[1]));
+      out.push(`<li>${inline(li[2])}${hit ? claims(hit) : ""}</li>`);
     } else if (h) { flush(); close(0); out.push(`<p><b>${inline(h[1])}</b></p>`); }
     else if (!line.trim()) { flush(); close(0); }
     // An indented line under a bullet continues that bullet.
@@ -937,6 +975,8 @@ function md(text) {
     else { close(0); para.push(line.trim()); }
   }
   flush(); close(0);
+  // Any scenario the body's bullets didn't hold (written another way) is still listed.
+  for (const s of left.values()) out.push(`<p><b>Scenario: ${esc(s.name)}</b></p>${claims(s)}`);
   return out.join("");
 }
 
@@ -950,8 +990,23 @@ const Page = {
       <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(new Set(d.nodes.map((n) => n.domain).filter(Boolean)).size, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
       ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
       ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
+      ${this.coverage()}
       ${stale.length ? `<h3>Stale artifacts</h3>${stale.map((a) => `<p><a class="link" data-id="art:${esc(a.id)}">${esc(a.description || a.value)}</a> <span class="pill drift">${esc(a.type)}</span><br>${a.covers.map(capLink).join(" · ")}</p>`).join("")}` : ""}
-      <p class="empty">Click a capability, line, file, artifact or domain outline for its details. Search covers names, purposes, requirements, scenarios, file paths and artifacts.</p>`;
+      <p class="empty">Click a capability, line, file, artifact, test or domain outline for its details. Search covers names, purposes, requirements, scenarios, file paths, artifacts and test files.</p>`;
+  },
+
+  // The overview's coverage: scenarios claimed per kind, then tags that point at nothing.
+  coverage() {
+    const c = DATA.coverage;
+    if (!c) return DATA.coverageError ? `<p class="muted">Test coverage isn't shown: ${inline(DATA.coverageError)}</p>` : "";
+    const s = c.summary, kinds = Object.entries(s.byKind).filter(([, n]) => n).map(([k, n]) => `${esc(k)} ${n}`).join(" · ");
+    const where = (t) => `<code>${esc(t.file)}:${t.line}</code>`;
+    return `<p>${s.claimed} of ${plural(s.total, "scenario", "scenarios")} claimed by tests${kinds ? ` (${kinds})` : ""}</p>
+      ${c.orphans.length ? `<h3>Orphan tags (${c.orphans.length})</h3>${c.orphans.map((o) => `<p>${where(o)} ${esc(o.capability ? o.capability + ": " + o.scenario : o.scenario)}<br>
+        <span class="muted">${esc(o.reason)}${o.suggestion ? `; nearest: ${o.reason === "unknown capability" && byId[o.suggestion] ? capLink(o.suggestion) : esc(o.suggestion)}` : ""}</span></p>`).join("")}` : ""}
+      ${c.unclassified.length ? `<p class="muted">${plural(c.unclassified.length, "tag sits", "tags sit")} in files no <code>tests.kinds</code> glob matches. <code>/blueprint coverage</code> lists them.</p>` : ""}
+      ${c.noSpec.length ? `<p class="muted">${plural(c.noSpec.length, "tag names a capability", "tags name capabilities")} with no spec yet: ${[...new Set(c.noSpec.map((t) => t.capability))].map((x) => `<code>${esc(x)}</code>`).join(", ")}.</p>` : ""}
+      ${c.duplicates.length ? `<p class="muted">${plural(c.duplicates.length, "scenario name is", "scenario names are")} used twice in one capability: ${c.duplicates.map((d) => `${capLink(d.capability)} <code>${esc(d.scenario)}</code>`).join(", ")}.</p>` : ""}`;
   },
 
   resultList(res) {
@@ -970,10 +1025,11 @@ const Page = {
     const scores = n.requirements.map((r) => Search.score(Search.reqText(r))), best = Math.max(0, ...scores);
     const reqs = n.requirements.map((r, i) => {
       const hit = best > 0 && scores[i] === best;
-      return `<details class="req${hit ? " match" : ""}"${hit ? " open" : ""}><summary>${inline(r.title)}</summary><div class="body">${md(r.body)}</div></details>`;
+      const cov = r.scenarios && r.scenarios.length ? ` <span class="pill${claimCount(r.scenarios) === r.scenarios.length ? " ok" : ""}">${claimCount(r.scenarios)}/${r.scenarios.length}</span>` : "";
+      return `<details class="req${hit ? " match" : ""}"${hit ? " open" : ""}><summary>${inline(r.title)}${cov}</summary><div class="body">${md(r.body, r.scenarios)}</div></details>`;
     }).join("");
     return `<h2>${esc(n.id)}</h2>
-      <span class="pill ${cls}">${label}</span>${n.domain ? `<a class="pill link" data-id="dom:${esc(n.domain)}">${esc(n.domain)}</a>` : ""}
+      <span class="pill ${cls}">${label}</span>${n.domain ? `<a class="pill link" data-id="dom:${esc(n.domain)}">${esc(n.domain)}</a>` : ""}${n.coverage && n.coverage.total ? `<span class="pill${n.coverage.claimed === n.coverage.total ? " ok" : ""}">${n.coverage.claimed} of ${plural(n.coverage.total, "scenario", "scenarios")} claimed</span>` : ""}
       ${/^https?:\/\//i.test(n.ref || "") ? `<a class="link" href="${esc(n.ref)}" target="_blank" rel="noopener">open spec ↗</a>`
         : n.ref ? `<p class="muted">Spec: <code>${esc(n.ref)}</code></p>` : ""}
       ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
@@ -981,6 +1037,7 @@ const Page = {
       ${neighbours.length ? `<h3>Shares files with</h3>${neighbours.map((x) => `<p>${capLink(x.id)} <a class="pill link" data-id="edge:${esc([n.id, x.id].sort().join("~"))}">${plural(x.count, "file", "files")}</a></p>`).join("")}` : ""}
       ${n.artifacts.length ? `<h3>Artifacts (${n.artifacts.length})</h3>${artList(n.artifacts, n)}` : ""}
       ${n.hasBaseline ? `<h3>Requirements (${n.requirements.length})</h3>${reqs || `<p class="muted">None.</p>`}` : ""}
+      ${n.tests && n.tests.length ? `<h3>Tests claiming its scenarios (${n.tests.length})</h3><ul class="files">${n.tests.map((f) => `<li><a class="link" data-id="test:${esc(f)}">${esc(f)}</a> · ${plural(testByFile[f].claims.filter((c) => c.capability === n.id).length, "claim", "claims")}</li>`).join("")}</ul>` : ""}
       <h3>Files (${n.files.length})</h3>
       <ul class="files">${n.files.map((f) => `<li class="${n.changed.includes(f) ? "changed" : ""}"><a class="link" data-id="file:${esc(f)}">${esc(f)}</a></li>`).join("")}</ul>
       ${removed.length ? `<p class="muted">Removed since the last sync:</p><ul class="files">${removed.map((f) => `<li class="changed">${esc(f)}</li>`).join("")}</ul>` : ""}`;
@@ -1000,6 +1057,17 @@ const Page = {
     return `<h2>${esc(path)}</h2>
       ${fileChanged(path) ? `<span class="pill drift">changed since the last sync</span>` : ""}
       <h3>Anchored by</h3>${owners.map((id) => `<p>${capLink(id)}</p>`).join("")}`;
+  },
+
+  // A test file: the scenarios it claims, by capability, each with the tag's line.
+  test(file) {
+    const t = testByFile[file];
+    if (!t) return this.overview();
+    const by = d3.group(t.claims, (c) => c.capability);
+    return `<h2>${esc(file)}</h2><span class="pill">test</span><span class="pill">${esc(t.kind || "unclassified")}</span>
+      <p>Claims ${plural(t.claims.length, "scenario", "scenarios")} through <code>@scenario</code> tags. A claim only says the test points at the scenario; nothing is run.</p>
+      <h3>Scenarios claimed</h3>${[...by].map(([cap, cs]) => `<p>${capLink(cap)}</p><ul class="files">${cs.map((c) => `<li>${esc(c.scenario)} · line ${c.line}</li>`).join("")}</ul>`).join("")}
+      ${fileOwners[file] ? `<h3>Also anchored by</h3>${fileOwners[file].map((id) => `<p>${capLink(id)}</p>`).join("")}` : ""}`;
   },
 
   artifact(id) {
@@ -1030,6 +1098,7 @@ const Page = {
       else if (s.startsWith("file:")) html = back + this.file(s.slice(5));
       else if (s.startsWith("dom:")) html = back + this.domain(s.slice(4));
       else if (s.startsWith("art:")) html = back + this.artifact(s.slice(4));
+      else if (s.startsWith("test:")) html = back + this.test(s.slice(5));
       else if (byId[s]) html = back + this.capability(byId[s]);
       else html = this.overview();
     }
@@ -1049,7 +1118,7 @@ const Page = {
   search(q, keep) {
     Search.set(q);
     this.results = Search.run();
-    const ids = this.results && new Set(this.results.flatMap((r) => [r.id, ...r.files.map((f) => "file:" + f), ...r.arts.map((a) => "art:" + a)]));
+    const ids = this.results && new Set(this.results.flatMap((r) => [r.id, ...r.files.map((f) => "file:" + f), ...r.arts.map((a) => "art:" + a), ...r.tests.map((f) => "test:" + f)]));
     Canvas.dim(ids);
     this.choose(keep ? this.selected : null);
   },
@@ -1057,18 +1126,26 @@ const Page = {
 
 window.addEventListener("DOMContentLoaded", () => {
   const graph = document.getElementById("graph"), q = document.getElementById("q");
-  const files = document.getElementById("files"), arts = document.getElementById("artifacts");
+  const files = document.getElementById("files"), arts = document.getElementById("artifacts"), tests = document.getElementById("tests");
   const legend = document.getElementById("legend"), nodes = document.getElementById("nodes");
   document.getElementById("repo").textContent = DATA.repo;
   files.checked = !!DATA.filesDefault;
   arts.checked = (DATA.artifacts || []).some((a) => a.covers.length);
   arts.disabled = !arts.checked;  // nothing to draw
-  const show = () => ({ files: files.checked, artifacts: arts.checked });
+  // Off at first: a well-tested repo has more test files than capabilities.
+  tests.checked = false;
+  tests.disabled = !(DATA.tests || []).length;
+  // The legend's note says, without tests.kinds, that /blueprint coverage sets it up; otherwise this.
+  const note = document.getElementById("cov-note");
+  if (DATA.coverage) note.innerHTML = "A scenario is <b>claimed</b> when a test carries its <code>@scenario</code> tag. Nothing is run: a claim only says a test points at the scenario.";
+  else if (DATA.coverageError) note.innerHTML = `Test coverage isn't shown: ${inline(DATA.coverageError)}`;
+  const show = () => ({ files: files.checked, artifacts: arts.checked, tests: tests.checked });
   const label = () => {
-    const on = [files.checked && "files", arts.checked && "artifacts"].filter(Boolean);
+    const on = [files.checked && "files", arts.checked && "artifacts", tests.checked && "tests"].filter(Boolean);
     document.getElementById("nodes-on").textContent = on.join(", ") || "none";
     legend.classList.toggle("files", files.checked);
     legend.classList.toggle("arts", arts.checked);
+    legend.classList.toggle("tests", tests.checked);
   };
   label();
 
@@ -1081,7 +1158,7 @@ window.addEventListener("DOMContentLoaded", () => {
   Canvas.fit(0);
 
   // Switching keeps the view where it is (refitting only when new nodes would fall outside it).
-  files.onchange = arts.onchange = () => { label(); redraw(); Canvas.reveal(); };
+  files.onchange = arts.onchange = tests.onchange = () => { label(); redraw(); Canvas.reveal(); };
   // Close the menu on a press anywhere else (captured, since the canvas swallows its own presses).
   document.addEventListener("pointerdown", (e) => { if (!nodes.contains(e.target)) nodes.open = false; }, true);
   q.oninput = () => Page.search(q.value);
