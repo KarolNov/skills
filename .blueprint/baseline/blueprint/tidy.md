@@ -45,7 +45,7 @@ Tidy SHALL list files matched by two or more capabilities (from `drift.py overla
 
 ### Requirement: One approved move table
 
-Tidy SHALL show every proposed change (new domains, renames, moves, anchor edits) as one table and write nothing until the user approves it. On approval it SHALL apply the whole table: backend titles, parents and paths; `blueprint.json` keys; `baseline/` files; domain overview pages; and open blueprints that name a renamed capability, whose reviews it rebuilds. A blueprint SHALL count as open when either `changes` or the backend marks it so, and a status that differs between the two SHALL be reported, not changed.
+Tidy SHALL show every proposed change (new domains, renames, moves, anchor edits) as one table and write nothing until the user approves it. On approval it SHALL apply the whole table: backend titles, parents and paths; `blueprint.json` keys; `baseline/` files; tests' `@scenario` tags; domain overview pages; and open blueprints that name a renamed capability, whose reviews it rebuilds. A blueprint SHALL count as open when either `changes` or the backend marks it so, and a status that differs between the two SHALL be reported, not changed.
 
 - **Scenario: Rename with an open blueprint**
   - **GIVEN** an approved blueprint touches `board`

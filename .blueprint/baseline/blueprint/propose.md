@@ -6,7 +6,7 @@ Turns a solution the user already has in mind into an approved blueprint: a brie
 
 ### Requirement: Mode selection
 
-`/blueprint` SHALL go into propose mode when its arguments describe a change or are empty, into apply mode when the first word is `apply`, into map mode when the arguments are `map` alone or followed only by its options (`--out PATH`, `--json`), and into review mode only when the first word is `review` followed by a `.json` review file that exists. Any other text starting with "review" or "map" SHALL be treated as a change description.
+`/blueprint` SHALL go into propose mode when its arguments describe a change or are empty, into apply mode when the first word is `apply`, into map mode when the arguments are `map` alone or followed only by its options (`--out PATH`, `--json`), into coverage mode when the arguments are `coverage` alone, with a capability name, or with `suggest`, and into review mode only when the first word is `review` followed by a `.json` review file that exists. Any other text starting with "review", "map" or "coverage" SHALL be treated as a change description.
 
 - **Scenario: Change described**
   - **WHEN** the user runs `/blueprint add SSO login`
@@ -26,7 +26,12 @@ Turns a solution the user already has in mind into an approved blueprint: a brie
 - **Scenario: Change that starts with "map"**
   - **WHEN** the user runs `/blueprint map pads to sounds by default`
   - **THEN** propose mode starts with that solution
-
+- **Scenario: Coverage for one capability**
+  - **WHEN** the user runs `/blueprint coverage auth/session`
+  - **THEN** coverage mode reports that capability
+- **Scenario: Change that starts with "coverage"**
+  - **WHEN** the user runs `/blueprint coverage should count skipped tests`
+  - **THEN** propose mode starts with that solution
 ### Requirement: Setup first in an unset repo
 
 When `.blueprint/blueprint.json` is missing, blueprint SHALL say so in one line, run setup inline, and then return to the request. When setup and propose run together, their questions SHALL be asked in a single round.
