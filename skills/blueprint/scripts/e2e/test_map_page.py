@@ -193,14 +193,15 @@ class Shop(MapPage):
         fitted = self.state(page)
         cx, cy = (fitted["box"][0] + fitted["box"][2]) / 2, fitted["box"][1] + 30
         page.wheel(cx, cy, -400)
-        page.sleep(0.3)
+        self.settle(page)
         self.assertGreater(self.state(page)["k"], fitted["k"])
         before = self.state(page)
         page.drag((cx, cy), (cx + 120, cy + 60))
+        self.settle(page)
         after = self.state(page)
         self.assertAlmostEqual(after["tx"] - before["tx"], 120, delta=2)
         self.click(page, "#fit")
-        page.sleep(0.7)
+        self.settle(page)
         self.assertAlmostEqual(self.state(page)["k"], fitted["k"], delta=0.02)
         # The legend opens.
         self.assertFalse(page.eval("document.getElementById('legend').open"))
