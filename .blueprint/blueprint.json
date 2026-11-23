@@ -123,10 +123,10 @@
       ],
       "specVersion": "fb311da69bc03e7e",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "3d1d8d48ac62",
+        ".claude-plugin/marketplace.json": "4b0050802290",
         "README.md": "27c2074eb7fc"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "266c29c2b96581eed1ee50d95ff0a0bc5736ac7b"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -135,7 +135,7 @@
       ],
       "specVersion": "5905ce6a2e3aa2b7",
       "anchorsFiles": {
-        "mods/blueprint-ui/.claude-plugin/plugin.json": "6b7771ba4d56",
+        "mods/blueprint-ui/.claude-plugin/plugin.json": "6361b79a3669",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
         "mods/blueprint-ui/hooks/blocks.ts": "9efd548adfa7",
         "mods/blueprint-ui/hooks/board.test.ts": "ff27882fc891",
@@ -159,7 +159,7 @@
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
         "mods/blueprint-ui/types/index.d.ts": "5120823a1d59"
       },
-      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
+      "syncedCommit": "266c29c2b96581eed1ee50d95ff0a0bc5736ac7b"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
