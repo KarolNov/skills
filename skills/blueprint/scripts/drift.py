@@ -9,7 +9,7 @@ since its spec was last synced. It never talks to the spec backend.
     drift.py check [--json] [CAPABILITY ...]   each capability's status, drift chance (0-1),
                                                confidence and reasons; exit 1 if any is
                                                code-moved or deps-moved, 2 on a bad
-                                               drift.scoring setting
+                                               drift.scoring setting or unknown capability
     drift.py stamp CAPABILITY ... | --all      record the current state as synced
     drift.py files CAPABILITY [ANCHOR ...]     list the files a capability's anchors match, or
                                                the given anchors instead (writes nothing)
@@ -179,7 +179,10 @@ def unit(value):
 
 def scoring(state):
     """drift.scoring with every absent key at its default, or SettingError naming the key."""
-    raw = state.get("drift", {}).get("scoring", {})
+    drift = state.get("drift", {})
+    if not isinstance(drift, dict):
+        raise SettingError("drift must be an object")
+    raw = drift.get("scoring", {})
     if not isinstance(raw, dict):
         raise SettingError("drift.scoring must be an object")
     out = dict(SCORING_DEFAULTS, packages={})
@@ -245,7 +248,7 @@ def assess(spec, paths, settings, hashes=file_hashes):
     chance = combine(s for s, _ in signals)
     if changed:
         status = "code-moved"
-    elif chance >= settings["threshold"]:
+    elif chance > 0 and chance >= settings["threshold"]:
         status = "deps-moved"
     elif chance > 0:
         status = "possibly-affected"
@@ -283,7 +286,8 @@ def cmd_check(args):
         print(f"bad setting: {e}", file=sys.stderr)
         return 2
     if unknown := [n for n in names if n not in specs]:
-        sys.exit(f"unknown capability: {', '.join(unknown)}")
+        print(f"unknown capability: {', '.join(unknown)}", file=sys.stderr)
+        return 2
     hashes = cached_hashes()
     report = []
     for name in names or specs:

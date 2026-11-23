@@ -653,6 +653,24 @@ class Scoring(DriftTest):
                 self.assertIn(key, out.stderr)
                 self.assertEqual(out.stdout, "")
 
+    def test_drift_not_an_object(self):
+        r = self.repo({"a.py": ""}, {"specs": {"a": spec("a.py")}, "drift": None})
+        out = r.drift("check", "--json")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("drift must be an object", out.stderr)
+
+    def test_zero_threshold_keeps_untouched_in_sync(self):
+        r = self.stamped({"a.py": ""}, {"specs": {"a": spec("a.py")},
+                                        "drift": {"scoring": {"threshold": 0}}})
+        out, rows = self.check(r)
+        self.assertEqual((out.returncode, rows["a"]["status"]), (0, "in-sync"))
+
+    def test_unknown_capability_exits_2(self):
+        r = self.stamped({"a.py": ""}, {"specs": {"a": spec("a.py")}})
+        out = r.drift("check", "nope")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unknown capability: nope", out.stderr)
+
     def test_good_settings_accepted(self):
         r = self.stamped({"a.py": ""}, {"specs": {"a": spec("a.py")}, "drift": {"scoring": {
             "decay": 1, "packageWeight": 0, "lockfileWeight": 0.3, "threshold": 0.9,

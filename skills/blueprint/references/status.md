@@ -6,7 +6,7 @@ Shared by `blueprint-drift` and `blueprint-sync`, and by `blueprint` when it wri
 
 For each capability in scope:
 
-- **Code side**: `python3 .blueprint/drift.py check --json <capabilities>` gives `in-sync`, `code-moved` (with the files added, removed or edited since the last stamp), `no-spec` or `no-anchors`.
+- **Code side**: `python3 .blueprint/drift.py check --json <capabilities>` gives `in-sync`, `code-moved` (with the files added, removed or edited since the last stamp), `deps-moved`, `possibly-affected`, `no-spec` or `no-anchors`, plus each capability's drift `chance` (0-1), `confidence` (`high` or `low`) and the `reasons` behind both. It exits 1 when any capability is `code-moved` or `deps-moved`, and 2 on a bad `drift.scoring` setting or an unknown capability: report that error instead of a status.
 - **Spec side**: fetch the page's current version marker (see the backend file) and compare it with `specVersion`. Different means the spec moved: someone edited intent outside the code. Diff `baseline/<capability>.md` against the current page, matching requirements by name, to see which requirements changed.
 
 Show one table:
