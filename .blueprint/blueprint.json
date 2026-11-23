@@ -274,7 +274,8 @@
       "playground": "embedded in the review (transitive-drift-playground.html)",
       "status": "applied",
       "baseCommit": "a4645688e90c862c2bb236ee90c6749f87b6cf29",
-      "branch": "kn/transitive-drift-specs"
+      "branch": "kn/transitive-drift-specs",
+      "pr": "https://github.com/KarolNov/skills/pull/65"
     }
   },
   "artifacts": {
