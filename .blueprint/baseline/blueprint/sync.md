@@ -27,7 +27,7 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
 
 ### Requirement: Stamping
 
-`drift.py stamp` SHALL record a content hash per anchored file and the commit holding the synced code. For a capability with TS/JS anchored files, it SHALL also record its import closure in `.blueprint/closure/<capability>.json`: each reachable file or symbol with its distance, the packages crossed, and a content hash, plus the locked version of each external dependency it imports. It SHALL warn when anchored files are uncommitted.
+`drift.py stamp` SHALL record a content hash per anchored file and the commit holding the synced code. For a capability with TS/JS anchored files, it SHALL also record its import closure in `.blueprint/closure/<capability>.json`: each reachable file or symbol with its distance, the packages crossed, and a content hash, plus the locked version of each external dependency it imports. Files git ignores SHALL be left out, since another checkout won't have them. It SHALL warn when anchored files are uncommitted.
 
 - **Scenario: Uncommitted code**
   - **WHEN** stamp runs while anchored files have uncommitted changes
@@ -36,6 +36,10 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
   - **GIVEN** a TS capability whose anchored file imports two symbols from a workspace package
   - **WHEN** stamp runs
   - **THEN** `.blueprint/closure/<capability>.json` lists both symbols, their distance and hashes
+- **Scenario: Ignored file left out**
+  - **GIVEN** an anchored file imports a type from a git-ignored generated file
+  - **WHEN** stamp runs, and check runs in a checkout without that file
+  - **THEN** the closure doesn't list the file, and the capability stays `in-sync`
 
 ### Requirement: Anchor helpers
 

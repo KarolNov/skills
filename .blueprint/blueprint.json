@@ -95,14 +95,14 @@
         "skills/blueprint/scripts/drift_ts.mjs",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "a212a1e7834a816f",
+      "specVersion": "5edf192615ade967",
       "anchorsFiles": {
         "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
         "skills/blueprint/references/status.md": "7d6ca146666d",
-        "skills/blueprint/scripts/drift.py": "db03a198a74d",
+        "skills/blueprint/scripts/drift.py": "c79f9af4957a",
         "skills/blueprint/scripts/drift_ts.mjs": "aab54a05a96e"
       },
-      "syncedCommit": "4f91fb6ffeb2177e5fca00926698493cbc590cb7"
+      "syncedCommit": "e049cf8d77b2532b72a43c77b919ecd196123389"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
