@@ -1,0 +1,4 @@
+.blueprint/closure/** linguist-generated=true
+.blueprint/drift.py linguist-generated=true
+.blueprint/drift_ts.mjs linguist-generated=true
+.blueprint/notion_normalize.py linguist-generated=true

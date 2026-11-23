@@ -304,18 +304,24 @@ Without Node or the repo's `typescript` (a CI checkout with no install, say), im
 
 The import closure of a TS/JS capability (one whose anchored files include `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` or `.cjs`), written by `drift.py stamp` beside `baseline/` and committed with it, so `check` compares hashes and needs no PR base. `drift.py rename` moves it, and refuses when one already sits at the new name; `drift.py prune` drops what the narrowed anchors no longer reach and keeps the stamped hashes of the rest. Another capability's stamp never touches it. Never edit it by hand: a stamp rewrites it.
 
+It is plain JSON, written one entry per line (each file, symbol, external package and locked version on a line of its own, sorted), so a restamp diffs by the entries that moved:
+
 ```json
 {
   "mode": "symbol",
   "files": {
-    "packages/core/src/token.ts": { "distance": 1, "via": ["@company/core"], "hash": "<content hash>", "whole": false },
-    "packages/polyfills/src/fill.ts": { "distance": 1, "via": ["@company/polyfills"], "hash": "<content hash>", "whole": true }
+    "packages/core/src/token.ts": {"distance": 1, "via": ["@company/core"], "hash": "<content hash>", "whole": false},
+    "packages/polyfills/src/fill.ts": {"distance": 1, "via": ["@company/polyfills"], "hash": "<content hash>", "whole": true}
   },
   "symbols": [
-    { "file": "packages/core/src/token.ts", "symbol": "signToken", "distance": 1, "via": ["@company/core"], "hash": "<declaration hash>" }
+    {"file": "packages/core/src/token.ts", "symbol": "signToken", "distance": 1, "via": ["@company/core"], "hash": "<declaration hash>"}
   ],
-  "external": ["zod"],
-  "locked": { "zod": "3.22.0" }
+  "external": [
+    "zod"
+  ],
+  "locked": {
+    "zod": "3.22.0"
+  }
 }
 ```
 

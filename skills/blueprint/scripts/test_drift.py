@@ -1235,6 +1235,24 @@ class Transitive(unittest.TestCase):
         self.assertEqual(self.closure(r, "web/login")["why"], "node not found")
 
     @NEEDS_NODE
+    def test_closure_written_one_entry_per_line(self):
+        # So a restamp diffs by the entries that moved, and a big closure stays short.
+        r = self.workspace(typescript=None)
+        text = r.read(".blueprint/closure/web/login.json")
+        closure = json.loads(text)
+        lines = text.splitlines()
+        # Braces, mode, why, symbols ([]), and an opening and closing line for each of files,
+        # external and locked, around one line per entry.
+        self.assertEqual(len(lines), 11 + len(closure["files"]) + len(closure["external"])
+                         + len(closure["locked"]))
+        self.assertIn('  "symbols": [],', lines)
+        for f, rec in closure["files"].items():
+            self.assertIn(f"    {json.dumps(f)}: {json.dumps(rec)}",
+                          [line.rstrip(",") for line in lines])
+        self.assertEqual(sorted(closure["files"]), list(closure["files"]))
+        r.sync()
+        self.assertEqual(r.read(".blueprint/closure/web/login.json"), text)  # stable
+
     def test_stamp_without_typescript_follows_files(self):
         r = self.workspace(typescript=None)
         closure = self.closure(r, "web/login")
