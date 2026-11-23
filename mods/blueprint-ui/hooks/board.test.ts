@@ -55,6 +55,27 @@ test('each capability gets the reason and next step status.md gives it', () => {
   expect(b.quiet.map(q => q.name)).toEqual(['d/quiet'])
 })
 
+test('imports moved needs a sync with its score; possibly affected stays quiet, marked, with no step', () => {
+  const report: BlueprintUiDriftRow[] = [
+    { capability: 'a/code', status: 'deps-moved', chance: 0.5, confidence: 'medium', reasons: [] },
+    { capability: 'b/spec', status: 'deps-moved', chance: 0.75, confidence: 'low', reasons: [] },
+    { capability: 'c/both', status: 'code-moved', changed: ['w'], chance: 1, confidence: 'high', reasons: [] },
+    { capability: 'd/quiet', status: 'possibly-affected', chance: 0.1306, confidence: 'medium', reasons: [] },
+    { capability: 'e/noref', status: 'no-spec' },
+    { capability: 'f/noanchors', status: 'no-anchors' },
+  ]
+  const b = boardOf(MAP, code(report), SPECS, none)
+  const by = Object.fromEntries(b.attention.map(r => [r.name, r]))
+  expect(by['a/code']).toMatchObject({ side: 'code', reason: 'imports moved', score: '0.5 · medium', step: { command: 'blueprint-sync', args: 'a/code', label: '▶ sync' } })
+  // Imported code and spec both moved: drift first, as when the code itself moved.
+  expect(by['b/spec']).toMatchObject({ side: 'both', reason: 'imports and spec moved', score: '0.75 · low', step: { command: 'blueprint-drift', label: '▶ drift → sync' } })
+  expect(by['c/both']).toMatchObject({ reason: 'code and spec moved', score: '1 · high' })
+  expect(by['d/quiet']).toBeUndefined()
+  expect(b.quiet).toEqual([{ name: 'd/quiet', page: 'spec:d/quiet', maybe: '0.1306 · medium', pending: 0 }])
+  // An older drift.py gives no chance: the row reads as before.
+  expect(boardOf(MAP, code(DRIFT), SPECS, none).attention.find(r => r.name === 'a/code')!.score).toBeUndefined()
+})
+
 test('before Check specs only the code side counts, and an unread spec stays quiet with its reason', () => {
   const b = boardOf(MAP, code(DRIFT), NO_SPECS, none)
   expect(b.attention.find(r => r.name === 'b/spec')).toBeUndefined()

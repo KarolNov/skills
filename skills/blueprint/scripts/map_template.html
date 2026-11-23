@@ -8,6 +8,8 @@
   --node: #ffffff; --node-line: #b9b6ae; --domain: #f1efe9; --domain-line: #d9d5cb;
   --accent: #2f6fde; --edge: #8f8b82; --file: #a9a59c; --art: #8a5cd6; --test: #138a8a; --ok: #2b8a3e;
   --drift: #d93b30; --drift-bg: #fdecea; --hit: #f4b400;
+  /* Possibly affected: a lighter tint of the drift color. */
+  --maybe: #e58a83; --maybe-bg: #fef7f6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -15,6 +17,7 @@
     --node: #2a2a2d; --node-line: #55555a; --domain: #222225; --domain-line: #3a3a3e;
     --accent: #6ea0ff; --edge: #77777d; --file: #6c6c72; --art: #b08cf5; --test: #4cc3c3; --ok: #5cc27a;
     --drift: #ff6b5f; --drift-bg: #3a1f1d; --hit: #f4b400;
+    --maybe: #c47870; --maybe-bg: #2a1f1e;
   }
 }
 * { box-sizing: border-box; }
@@ -55,6 +58,9 @@ aside { border-left: 1px solid var(--line); background: var(--panel); display: f
 .pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line);
   color: var(--muted); margin: 0 4px 4px 0; }
 .pill.drift { color: var(--drift); border-color: var(--drift); background: var(--drift-bg); }
+.pill.maybe { color: var(--maybe); border-color: var(--maybe); background: var(--maybe-bg); }
+ul.reasons { margin: 4px 0; padding-left: 18px; font-size: 13px; }
+ul.reasons li { margin: 2px 0; word-break: break-word; }
 .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 details.req { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
 details.req summary { cursor: pointer; font-weight: 500; }
@@ -95,6 +101,7 @@ a.link:hover { text-decoration: underline; }
 .sw { flex: none; display: inline-block; width: 22px; height: 12px; border-radius: 3px; }
 .sw.cap { background: var(--node); border: 1.5px solid var(--node-line); }
 .sw.drift { background: var(--drift-bg); border: 2px solid var(--drift); }
+.sw.maybe { background: var(--maybe-bg); border: 1.5px solid var(--maybe); }
 .sw.dom { background: var(--domain); border: 1.5px dashed var(--domain-line); border-radius: 6px; }
 .sw.line { height: 4px; background: var(--edge); border-radius: 2px; }
 .sw.file { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--file); }
@@ -132,6 +139,8 @@ svg:active { cursor: grabbing; }
 .cap text { fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
 .cap.drift rect { fill: var(--drift-bg); stroke: var(--drift); stroke-width: 2.5; }
 .cap.drift text { fill: var(--drift); }
+.cap.maybe rect { fill: var(--maybe-bg); stroke: var(--maybe); stroke-width: 2; }
+.cap.maybe text { fill: var(--maybe); }
 .cap.pinned rect { stroke-dasharray: 4 2; }
 .file { cursor: pointer; }
 .file circle { fill: var(--file); }
@@ -187,7 +196,8 @@ svg:active { cursor: grabbing; }
   <div id="graph">
     <details class="legend" id="legend"><summary>Legend <span class="hint">· code-side drift only</span></summary>
       <div class="row"><span class="sw cap"></span>capability</div>
-      <div class="row"><span class="sw drift"></span>code drifted: anchored files changed since its last sync</div>
+      <div class="row"><span class="sw drift"></span>code drifted: anchored files, or code they import, changed since its last sync</div>
+      <div class="row"><span class="sw maybe"></span>possibly affected: imported code changed, with a drift chance below the threshold</div>
       <div class="row"><span class="sw dom"></span>domain</div>
       <div class="row"><span class="sw line"></span>shares files; the label says how many, and lines between domains run bundled</div>
       <div class="row files"><span class="sw file"></span>anchored file: a capability's own files sit under it, shared ones between the capabilities, tied by thin lines</div>
@@ -213,6 +223,8 @@ const DATA = /*DATA*/;
 // capabilities sharing files (weighted by the count), one outline per domain and, with files on,
 // the anchored files in groups: the files matched by the same capabilities go together.
 const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
+// What `drift.py check` exits 1 for: drawn in the drift color. possibly-affected gets the lighter tint.
+const DRIFTED = new Set(["code-moved", "deps-moved"]);
 const fileOwners = {};
 for (const n of DATA.nodes) for (const f of n.files) (fileOwners[f] = fileOwners[f] || []).push(n.id);
 const fileChanged = (f) => fileOwners[f].some((id) => byId[id].changed.includes(f));
@@ -238,7 +250,7 @@ function toGraph(d, show) {
   }
   return {
     domains: d.domains.filter((dom) => d.nodes.some((n) => n.domain === dom.id)),
-    caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain, drift: n.status === "code-moved" })),
+    caps: d.nodes.map((n) => ({ id: n.id, label: n.id, domain: n.domain, drift: DRIFTED.has(n.status), maybe: n.status === "possibly-affected" })),
     files,
     links: d.edges.map((e) => ({ id: e.source + "~" + e.target, source: e.source, target: e.target, count: e.count })),
     groups: groupFiles(files),
@@ -744,7 +756,7 @@ const Canvas = (function () {
         .attr("class", "share-label").attr("text-anchor", "middle").text((d) => d.count);
 
       capSel = capG.selectAll("g").data(caps, (d) => d.id).join("g")
-        .attr("class", (d) => "cap" + (d.drift ? " drift" : "") + (d.fx != null ? " pinned" : ""))
+        .attr("class", (d) => "cap" + (d.drift ? " drift" : d.maybe ? " maybe" : "") + (d.fx != null ? " pinned" : ""))
         .on("click", (e, d) => { e.stopPropagation(); onSelect(d.id); })
         .on("dblclick", (e, d) => {
           e.stopPropagation();
@@ -938,6 +950,7 @@ const artList = (ids, from) => ids.map((id) => artById[id]).filter(Boolean)
 
 const STATUS = {
   "in-sync": ["in sync", "ok"], "code-moved": ["code drifted", "drift"],
+  "deps-moved": ["imports moved", "drift"], "possibly-affected": ["possibly affected", "maybe"],
   "no-spec": ["no spec yet", ""], "no-anchors": ["no anchors", ""],
 };
 
@@ -982,16 +995,31 @@ function md(text, scenarios) {
   return out.join("");
 }
 
+// A drift chance as check prints it: up to four decimals, trailing zeros dropped.
+const fmtChance = (c) => String(Math.round((c || 0) * 1e4) / 1e4);
+// A capability's drift chance, confidence and every reason, when anything scored above 0.
+function chancePanel(n) {
+  if (!(n.chance > 0)) return "";
+  const cls = DRIFTED.has(n.status) ? "drift" : "maybe";
+  return `<h3>Drift chance</h3>
+    <p><span class="pill ${cls}">${fmtChance(n.chance)}</span><span class="pill">confidence ${esc(n.confidence || "unknown")}</span></p>
+    ${n.reasons && n.reasons.length ? `<ul class="reasons">${n.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}`;
+}
+const chancePill = (n) => `<span class="pill ${DRIFTED.has(n.status) ? "drift" : "maybe"}">${fmtChance(n.chance)} · ${esc(n.confidence || "unknown")}</span>`;
+
 const Page = {
   selected: null, results: null,
 
   overview() {
-    const d = DATA, drifted = d.nodes.filter((n) => n.status === "code-moved");
+    const d = DATA, drifted = d.nodes.filter((n) => DRIFTED.has(n.status));
+    const maybe = d.nodes.filter((n) => n.status === "possibly-affected");
     const stale = (d.artifacts || []).filter((a) => a.stale);
     return `<h2>${esc(d.repo)}</h2>
       <p>${plural(d.nodes.length, "capability", "capabilities")} · ${plural(new Set(d.nodes.map((n) => n.domain).filter(Boolean)).size, "domain", "domains")} · ${plural(d.edges.length, "shared-file link", "shared-file links")}</p>
       ${d.edges.length ? "" : `<p class="muted">No two capabilities share a file, so files are drawn as nodes.</p>`}
-      ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} <span class="pill drift">${plural(n.changed.length, "file", "files")}</span></p>`).join("")}` : ""}
+      ${d.scoringError ? `<p class="muted">Drift chances use the default scoring: ${esc(d.scoringError)}.</p>` : ""}
+      ${drifted.length ? `<h3>Code drifted</h3>${drifted.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">${plural(n.changed.length, "file", "files")}</span>` : `<span class="pill drift">imports moved</span>`}${chancePill(n)}</p>`).join("")}` : ""}
+      ${maybe.length ? `<h3>Possibly affected</h3>${maybe.map((n) => `<p>${capLink(n.id)} ${chancePill(n)}</p>`).join("")}` : ""}
       ${this.coverage()}
       ${stale.length ? `<h3>Stale artifacts</h3>${stale.map((a) => `<p><a class="link" data-id="art:${esc(a.id)}">${esc(a.description || a.value)}</a> <span class="pill drift">${esc(a.type)}</span><br>${a.covers.map(capLink).join(" · ")}</p>`).join("")}` : ""}
       <p class="empty">Click a capability, line, file, artifact, test or domain outline for its details. Search covers names, purposes, requirements, scenarios, file paths, artifacts and test files.</p>`;
@@ -1036,6 +1064,9 @@ const Page = {
         : n.ref ? `<p class="muted">Spec: <code>${esc(n.ref)}</code></p>` : ""}
       ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
       ${n.status === "code-moved" ? `<p class="muted">${plural(n.changed.length, "anchored file changed", "anchored files changed")} since the last sync (marked below). <code>/blueprint-sync ${esc(n.id)}</code> settles it.</p>` : ""}
+      ${n.status === "deps-moved" ? `<p class="muted">Code it imports changed since the last sync, enough to reach the threshold. <code>/blueprint-sync ${esc(n.id)}</code> settles it.</p>` : ""}
+      ${n.status === "possibly-affected" ? `<p class="muted">Code it imports changed since the last sync, below the threshold: worth a look, not counted as drift.</p>` : ""}
+      ${chancePanel(n)}
       ${neighbours.length ? `<h3>Shares files with</h3>${neighbours.map((x) => `<p>${capLink(x.id)} <a class="pill link" data-id="edge:${esc([n.id, x.id].sort().join("~"))}">${plural(x.count, "file", "files")}</a></p>`).join("")}` : ""}
       ${n.artifacts.length ? `<h3>Artifacts (${n.artifacts.length})</h3>${artList(n.artifacts, n)}` : ""}
       ${n.hasBaseline ? `<h3>Requirements (${n.requirements.length})</h3>${reqs || `<p class="muted">None.</p>`}` : ""}
@@ -1085,7 +1116,7 @@ const Page = {
     const arts = (DATA.artifacts || []).filter((a) => a.capabilities.includes(id)).map((a) => a.id);
     return `<h2>${esc(id)}</h2><span class="pill">domain</span>
       ${dom.purpose ? `<p>${inline(dom.purpose)}</p>` : ""}
-      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${n.status === "code-moved" ? `<span class="pill drift">code drifted</span>` : ""}</p>`).join("")}
+      <h3>Capabilities (${caps.length})</h3>${caps.map((n) => `<p>${capLink(n.id)} ${DRIFTED.has(n.status) || n.status === "possibly-affected" ? `<span class="pill ${STATUS[n.status][1]}">${STATUS[n.status][0]}</span>` : ""}</p>`).join("")}
       ${arts.length ? `<h3>Artifacts for the whole domain (${arts.length})</h3>${artList(arts, null)}` : ""}`;
   },
 

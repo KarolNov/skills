@@ -59,24 +59,35 @@ def build(state=None, files=None):
     specs, domains = state.get("specs", {}), state.get("domains", {})
 
     nodes, owners, hashes, memo = [], {}, drift.cached_hashes(), {}
+    # Scored as `drift.py check` scores it; a bad drift.scoring value still draws the map, at the
+    # defaults, and says why (check itself refuses to report).
+    try:
+        if not isinstance(state.get("drift", {}), dict):
+            raise drift.SettingError("drift must be an object")
+        settings, scoring_error = drift.scoring(state), None
+    except drift.SettingError as e:
+        settings, scoring_error = drift.scoring({}), str(e)
     for name, spec in specs.items():
         mine = memo[name] = drift.matched(spec, files)
         for f in mine:
             owners.setdefault(f, []).append(name)
-        status, changed = drift.code_status(spec, mine, hashes)
+        row = drift.assess(spec, mine, settings, hashes)
         baseline = drift.ROOT / ".blueprint" / "baseline" / f"{name}.md"
         has_baseline = baseline.is_file()
         purpose, reqs = parse_baseline(baseline.read_text(encoding="utf-8")) if has_baseline else ("", [])
         nodes.append({
             "id": name,
             "domain": domain_of(name, domains),
-            "status": status,
+            "status": row["status"],
+            "chance": row["chance"],
+            "confidence": row["confidence"],
+            "reasons": row["reasons"],
             "ref": spec.get("ref"),
             "hasBaseline": has_baseline,
             "purpose": purpose,
             "requirements": reqs,
             "files": mine,
-            "changed": changed,
+            "changed": row["changed"],
             "artifacts": [],
         })
 
@@ -105,6 +116,8 @@ def build(state=None, files=None):
         "coverage": cov,
         "coverageError": cov_error,
         "tests": tests,
+        # Set when drift.scoring holds a value check refuses: the map is scored at the defaults.
+        "scoringError": scoring_error,
         # With no shared files there are no lines, so the page starts with files drawn as nodes.
         "filesDefault": not edges,
     }
@@ -235,7 +248,8 @@ def ignore_map(path):
 
 def summary(data):
     """One line for the report: counts, the capabilities whose code moved, and coverage when on."""
-    moved = [n["id"] for n in data["nodes"] if n["status"] == "code-moved"]
+    moved = [n["id"] for n in data["nodes"] if n["status"] in drift.DRIFTED]
+    maybe = sum(n["status"] == "possibly-affected" for n in data["nodes"])
     stale = sum(a["stale"] for a in data.get("artifacts", []))
     shared = "" if data["edges"] else "; no shared files, so files start as nodes"
     n, d = len(data["nodes"]), len(data["domains"])
@@ -248,6 +262,8 @@ def summary(data):
         scen = f"; coverage not shown: {data['coverageError']}"
     return (f"{n} capabilit{'y' if n == 1 else 'ies'}, {d} domain{'' if d == 1 else 's'}; "
             f"code-drifted: {', '.join(moved) or 'none'}"
+            + (f"; {maybe} possibly affected" if maybe else "")
+            + (f"; scored at the defaults: {data['scoringError']}" if data.get("scoringError") else "")
             + (f"; {stale} stale artifact{'' if stale == 1 else 's'}" if stale else "") + scen + shared)
 
 

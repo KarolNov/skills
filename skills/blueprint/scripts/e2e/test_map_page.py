@@ -430,5 +430,68 @@ class OneDomain(MapPage):
         self.assertTrue(all("enter" in cls for cls, _ in seen))
 
 
+class Scored(MapPage):
+    """The studio with check output no fixture produces yet: pads imports moved, metronome possibly affected."""
+
+    MAYBE = "src/shared/tempo.ts bpm changed, 2 imports away, via @studio/core (weight 0.5) → 0.13"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._tmp = tempfile.TemporaryDirectory()
+        repo = studio(Path(cls._tmp.name) / "studio")
+        out = subprocess.run([sys.executable, str(FAKEREPO.parent.parent / "graph.py"), "--json"], cwd=repo.root,
+                             capture_output=True, text=True, env=ENV, check=True)
+        data = json.loads(out.stdout)
+        rows = {"studio/pads": {"status": "deps-moved", "chance": 0.5, "confidence": "medium",
+                                "reasons": ["src/shared/hit.ts velocity changed, 1 import away → 0.5",
+                                            "confidence medium: no test results given"]},
+                "studio/metronome": {"status": "possibly-affected", "chance": 0.13, "confidence": "medium",
+                                     "reasons": [cls.MAYBE, "confidence medium: no test results given"]}}
+        for n in data["nodes"]:
+            n.update(rows.get(n["id"], {}))
+        # Rendered in a child run inside the fake repo: graph imports drift, which finds the repo on import.
+        cls.map = repo.root / "scored.html"
+        render = ("import json, sys; sys.path.insert(0, sys.argv[1]); import graph; "
+                  "sys.stdout.write(graph.render(json.load(sys.stdin)))")
+        page = subprocess.run([sys.executable, "-c", render, str(FAKEREPO.parent.parent)], cwd=repo.root,
+                              input=json.dumps(data), capture_output=True, text=True, env=ENV, check=True)
+        cls.map.write_text(page.stdout, encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls._tmp.cleanup()
+
+    # @scenario blueprint/map: Possibly affected
+    def test_possibly_affected_is_tinted_and_its_panel_explains_it(self):
+        page = self.open(self.map)
+        caps = self.state(page)["caps"]
+        self.assertIn("maybe", caps["studio/metronome"]["cls"].split())
+        self.assertNotIn("drift", caps["studio/metronome"]["cls"].split())
+        self.assertIn("drift", caps["studio/pads"]["cls"].split())
+        # The lighter tint: a different, paler fill than the drift color's.
+        fill = lambda cap: page.evaluate(f"getComputedStyle(document.querySelector('g.cap.{cap} rect')).fill")
+        self.assertNotEqual(fill("maybe"), fill("drift"))
+        self.click_cap(page, "studio/metronome")
+        panel = page.evaluate("document.getElementById('panel').textContent")
+        self.assertIn("possibly affected", panel)
+        self.assertIn("0.13", panel)
+        self.assertIn("confidence medium", panel)
+        self.assertIn(self.MAYBE, panel)
+
+    def test_imports_moved_panel_and_overview(self):
+        page = self.open(self.map)
+        overview = page.evaluate("document.getElementById('panel').textContent")
+        self.assertIn("Code drifted", overview)
+        self.assertIn("imports moved", overview)
+        self.assertIn("Possibly affected", overview)
+        self.click_cap(page, "studio/pads")
+        panel = page.evaluate("document.getElementById('panel').textContent")
+        self.assertIn("imports moved", panel)
+        self.assertIn("/blueprint-sync studio/pads", panel)
+        self.assertIn("0.5", panel)
+
+
 if __name__ == "__main__":
     unittest.main()

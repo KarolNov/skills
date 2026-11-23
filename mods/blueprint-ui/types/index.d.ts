@@ -47,8 +47,17 @@ export type BlueprintUiView = {
 /** One capability in `drift.py check --json`. */
 export type BlueprintUiDriftRow = {
   capability: string
-  status: 'in-sync' | 'code-moved' | 'no-spec' | 'no-anchors'
+  /**
+   * `code-moved`: an anchored file changed; `deps-moved`: code it imports (or a failing tagged test)
+   * took its drift chance to the threshold; `possibly-affected`: above 0, below the threshold.
+   */
+  status: 'in-sync' | 'code-moved' | 'deps-moved' | 'possibly-affected' | 'no-spec' | 'no-anchors'
   changed?: string[]
+  /** Drift chance, 0 to 1; absent from a drift.py that predates scoring. */
+  chance?: number
+  confidence?: 'high' | 'medium' | 'low'
+  /** What makes up the chance, and why the confidence is not higher. */
+  reasons?: string[]
 }
 
 /** The code side as last checked by `drift.py`, on every board open and ↻. */

@@ -38,6 +38,20 @@ class Repo:
         subprocess.run(["git", "-C", str(self.root), *args], check=True, capture_output=True,
                        env=ENV)
 
+    def scored(self, rows, *args):
+        """graph.py with drift.assess answering `rows` ({capability: row}) for the named capabilities,
+        so statuses no fixture produces yet (deps-moved, possibly-affected) can be drawn."""
+        script = (f"import sys, json; sys.path.insert(0, {str(GRAPH.parent)!r}); sys.argv[1:] = {list(args)!r}\n"
+                  "import drift, graph\n"
+                  f"rows = json.loads({json.dumps(rows)!r}); real = drift.assess\n"
+                  "def fake(spec, paths, settings, hashes=drift.file_hashes):\n"
+                  "    name = next(n for n, s in drift.load()['specs'].items() if s.get('anchors') == spec.get('anchors'))\n"
+                  "    return rows[name] if name in rows else real(spec, paths, settings, hashes)\n"
+                  "drift.assess = fake\n"
+                  "sys.exit(graph.main(sys.argv[1:]))\n")
+        return subprocess.run([sys.executable, "-c", script], cwd=self.root, capture_output=True,
+                              text=True, env=ENV)
+
     def graph(self, *args, cwd=None):
         return subprocess.run([sys.executable, str(GRAPH), *args], cwd=cwd or self.root,
                               capture_output=True, text=True, env=ENV)
@@ -184,6 +198,76 @@ class Drift(GraphTest):
         state = {"specs": {"lazy": spec("sync/**"), "bare": {"ref": "p", "anchors": []}}}
         by = {n["id"]: n["status"] for n in self.repo(self.FILES, state).data()["nodes"]}
         self.assertEqual(by, {"lazy": "no-spec", "bare": "no-anchors"})
+
+
+class Scoring(GraphTest):
+    """Drift chance, confidence and reasons on the map, as `drift.py check` reports them."""
+    FILES = {"sync/a.py": "one", "ui/b.ts": "two", "map/c.ts": "three"}
+    STATE = {"specs": {"sync": stamped({"sync/a.py": "one"}, "sync/**"),
+                       "ui": stamped({"ui/b.ts": "two"}, "ui/**"),
+                       "map": stamped({"map/c.ts": "three"}, "map/**")}}
+    DEPS = {"status": "deps-moved", "changed": [], "chance": 0.5, "confidence": "medium",
+            "reasons": ["packages/core/src/token.ts signToken changed, 1 import away, "
+                        "via @company/core (weight 1) → 0.5", "confidence medium: no test results given"]}
+    MAYBE = {"status": "possibly-affected", "changed": [], "chance": 0.13, "confidence": "medium",
+             "reasons": ["packages/core/src/token.ts signToken changed, 2 imports away, "
+                         "via @company/core (weight 0.5) → 0.13", "confidence medium: no test results given"]}
+
+    def test_agrees_with_check(self):
+        """Each node carries the status, chance, confidence and reasons `drift.py check --json` gives."""
+        r = self.repo(self.FILES, self.STATE)
+        r.write("sync/a.py", "edited")
+        r.write("ui/b.ts", "edited")
+        check = subprocess.run([sys.executable, str(GRAPH.parent / "drift.py"), "check", "--json"],
+                               cwd=r.root, capture_output=True, text=True, env=ENV)
+        want = {x["capability"]: (x["status"], x["chance"], x["confidence"], x["reasons"])
+                for x in json.loads(check.stdout)}
+        got = {n["id"]: (n["status"], n["chance"], n["confidence"], n["reasons"]) for n in r.data()["nodes"]}
+        self.assertEqual(got, want)
+        self.assertEqual(got["sync"][:3], ("code-moved", 1.0, "high"))
+        self.assertEqual(got["ui"][:3], ("code-moved", 1.0, "low"))
+        self.assertEqual(got["map"][:2], ("in-sync", 0.0))
+
+    def test_deps_moved_and_possibly_affected(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = r.scored({"ui": self.DEPS, "map": self.MAYBE}, "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        by = {n["id"]: n for n in json.loads(out.stdout)["nodes"]}
+        self.assertEqual((by["ui"]["status"], by["ui"]["chance"], by["ui"]["confidence"]),
+                         ("deps-moved", 0.5, "medium"))
+        self.assertEqual(by["map"]["reasons"], self.MAYBE["reasons"])
+        self.assertEqual(by["sync"]["status"], "in-sync")
+
+    def test_summary_counts_imports_moved_as_drift(self):
+        r = self.repo(self.FILES, self.STATE)
+        out = r.scored({"ui": self.DEPS, "map": self.MAYBE}, "--out", "m.html")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.splitlines()[1],
+                         "3 capabilities, 0 domains; code-drifted: ui; 1 possibly affected; "
+                         "no shared files, so files start as nodes")
+
+    def test_bad_setting_draws_at_the_defaults(self):
+        state = dict(self.STATE, drift={"scoring": {"decay": 2}})
+        r = self.repo(self.FILES, state)
+        r.write("sync/a.py", "edited")
+        d = r.data()
+        self.assertIn("drift.scoring.decay", d["scoringError"])
+        self.assertEqual({n["id"]: n["status"] for n in d["nodes"]},
+                         {"sync": "code-moved", "ui": "in-sync", "map": "in-sync"})
+        out = r.graph()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("scored at the defaults: drift.scoring.decay", out.stdout)
+
+    def test_page_draws_the_lighter_tint_and_the_panel(self):
+        """The page's own rules for the new statuses: a lighter tint, its legend row, the panel parts."""
+        template = (GRAPH.parent / "map_template.html").read_text()
+        self.assertIn("--maybe:", template)
+        self.assertRegex(template, r"\.cap\.maybe rect \{[^}]*var\(--maybe-bg\)")
+        self.assertIn('"possibly-affected": ["possibly affected", "maybe"]', template)
+        self.assertIn('"deps-moved": ["imports moved", "drift"]', template)
+        legend = re.search(r'<details class="legend".*?</details>', template, re.S).group(0)
+        self.assertIn('class="sw maybe"', legend)
+        self.assertIn("<h3>Drift chance</h3>", template)
 
 
 class Artifacts(GraphTest):
