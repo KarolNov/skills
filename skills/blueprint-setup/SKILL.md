@@ -15,7 +15,7 @@ Connect this repo to the places its team already works. Setup decides three thin
 - **Tickets**: where a blueprint's tasks become tickets: the tracker the repo already uses, or none.
 - **Project**: the existing page, row or project the specs belong to, if the team tracks projects somewhere.
 
-Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and `drift_ts.mjs` and, for Notion, `notion_normalize.py`) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`. On a rerun, first read `version` from `blueprint.json` (absent means 1); when it is below the current format version in [upgrades.md](../blueprint/references/upgrades.md), say in one line that this repo's `.blueprint/` is on format <n> and `/blueprint-tidy` upgrades it, then carry on without rewriting the format yourself.
+Done once per repo. Rerunning it updates the setup (a new location, new capabilities, a fresh `drift.py` and `drift_ts.mjs` and, for Notion, `notion_normalize.py`, and the `.gitattributes` lines that collapse them in pull requests) without losing what `.blueprint/blueprint.json` records. The shared references live in the `blueprint` skill next to this one: `../blueprint/references/`. On a rerun, first read `version` from `blueprint.json` (absent means 1); when it is below the current format version in [upgrades.md](../blueprint/references/upgrades.md), say in one line that this repo's `.blueprint/` is on format <n> and `/blueprint-tidy` upgrades it, then carry on without rewriting the format yourself.
 
 ## Target repo doesn't exist yet
 
@@ -78,6 +78,14 @@ Ask whether to write the capability specs now or lazily:
 - `drift.py` and `drift_ts.mjs`: copy both from `../blueprint/scripts/` (overwrite older copies). `drift_ts.mjs` is the helper `drift.py` runs with Node to follow TS/JS imports by symbol, through the repo's own `typescript`; it installs nothing, and without Node or `typescript` `drift.py` follows imports by file instead, at low confidence. Copy it whatever the repo's language: it does nothing where there are no TS/JS anchors.
 - `notion_normalize.py`, when the backend is Notion: copy `../blueprint/scripts/notion_normalize.py` (overwrite an older copy). The `blueprint-ui` review pane runs this copy to clean the pages it shows, so they read as the baselines do.
 - `baseline/`: create it, with a baseline for every spec that exists.
+- `.gitattributes` at the repo root: add these lines (create the file if missing; skip lines already there, keep everything else), so GitHub collapses the files `/blueprint` writes and the copied scripts in pull requests instead of showing thousands of added lines:
+
+  ```gitattributes
+  .blueprint/closure/** linguist-generated=true
+  .blueprint/drift.py linguist-generated=true
+  .blueprint/drift_ts.mjs linguist-generated=true
+  .blueprint/notion_normalize.py linguist-generated=true
+  ```
 - `README.md`: three lines saying where the specs live and where tickets go (with links), that `blueprint.json` and `baseline/` are maintained by `/blueprint`, and that `python3 .blueprint/drift.py check` lists capabilities whose code moved since their spec was synced.
 
 Then offer one line for `CLAUDE.md` / `AGENTS.md` (only add it on a yes):

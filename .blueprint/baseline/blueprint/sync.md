@@ -27,7 +27,7 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
 
 ### Requirement: Stamping
 
-`drift.py stamp` SHALL record a content hash per anchored file and the commit holding the synced code. For a capability with TS/JS anchored files, it SHALL also record its import closure in `.blueprint/closure/<capability>.json`: each reachable file or symbol with its distance, the packages crossed, and a content hash, plus the locked version of each external dependency it imports. Files git ignores SHALL be left out, since another checkout won't have them. It SHALL warn when anchored files are uncommitted.
+`drift.py stamp` SHALL record a content hash per anchored file and the commit holding the synced code. For a capability with TS/JS anchored files, it SHALL also record its import closure in `.blueprint/closure/<capability>.json`: each reachable file or symbol with its distance, the packages crossed, and a content hash, plus the locked version of each external dependency it imports. Files git ignores SHALL be left out, since another checkout won't have them. The closure SHALL be plain JSON written one entry per line (each file, symbol, external package and locked version on a line of its own, sorted), so a restamp diffs by the entries that moved. It SHALL warn when anchored files are uncommitted.
 
 - **Scenario: Uncommitted code**
   - **WHEN** stamp runs while anchored files have uncommitted changes
@@ -40,6 +40,10 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
   - **GIVEN** an anchored file imports a type from a git-ignored generated file
   - **WHEN** stamp runs, and check runs in a checkout without that file
   - **THEN** the closure doesn't list the file, and the capability stays `in-sync`
+- **Scenario: Closure one entry per line**
+  - **GIVEN** a TS capability
+  - **WHEN** stamp runs
+  - **THEN** each file, symbol, external package and locked version in its closure sits on a line of its own, and stamping again with nothing changed rewrites the file byte for byte
 
 ### Requirement: Anchor helpers
 

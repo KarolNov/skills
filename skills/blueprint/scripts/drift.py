@@ -565,6 +565,25 @@ def build_closure(mode, found, locked, why=None):
     return out
 
 
+def dump_closure(closure):
+    """A closure as JSON with one entry per line: each top-level key on its own line, and each
+    file, symbol, external package and locked version on one line of its own, so a restamp
+    diffs by the entries that moved and a big closure stays short. Still plain JSON."""
+    def one(value):
+        return json.dumps(value, ensure_ascii=False)
+
+    def block(value):
+        if isinstance(value, dict) and value:
+            items = [f"    {one(k)}: {one(v)}" for k, v in value.items()]
+            return "{\n" + ",\n".join(items) + "\n  }"
+        if isinstance(value, list) and value:
+            return "[\n" + ",\n".join(f"    {one(v)}" for v in value) + "\n  ]"
+        return one(value)
+
+    lines = [f"  {one(k)}: {block(v)}" for k, v in closure.items()]
+    return "{\n" + ",\n".join(lines) + "\n}\n"
+
+
 def stamp_closures(names, specs, files, settings):
     """Write the closure of each TS/JS capability among names; drop stale ones. Returns
     {name: closure}."""
@@ -585,7 +604,7 @@ def stamp_closures(names, specs, files, settings):
                    else build_closure("file", file_closure(e, files, settings), locked, why))
         path = closure_path(n)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(closure, indent=2, ensure_ascii=False) + "\n")
+        path.write_text(dump_closure(closure))
         out[n] = closure
     return out
 
@@ -1181,7 +1200,7 @@ def prune_closure(name, spec, state):
         fresh["locked"] = {pkg: stamped["locked"].get(pkg, v) for pkg, v in fresh["locked"].items()}
     else:
         del fresh["locked"]  # stamped before versions were recorded: still no lockfile signal
-    closure_path(name).write_text(json.dumps(fresh, indent=2, ensure_ascii=False) + "\n")
+    closure_path(name).write_text(dump_closure(fresh))
     dropped = (len(stamped["files"]) - len(set(stamped["files"]) & set(fresh["files"])),
                len(old_symbols) - len(old_symbols.keys() & {(s["file"], s["symbol"])
                                                             for s in fresh["symbols"]}))
