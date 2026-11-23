@@ -1032,6 +1032,24 @@ class Transitive(unittest.TestCase):
         self.assertEqual(login["external"], ["zod"])
         self.assertTrue(login["files"]["packages/polyfills/src/fill.ts"]["whole"])
 
+    @NEEDS_TS
+    def test_ignored_file_left_out(self):
+        # Generated, git-ignored types (another checkout won't have them) are not repo code.
+        r = self.workspace(files={
+            "apps/web/src/gen/.gitignore": "*\n",
+            "apps/web/src/gen/types.d.ts": "export interface Api { run(): void }\n",
+            "apps/web/src/admin.ts": (
+                "import { old } from '@company/legacy';\n"
+                "import type { Api } from './gen/types';\n\n"
+                "export function admin(api: Api) {\n  api.run();\n  return old();\n}\n")})
+        closure = self.closure(r, "web/admin")
+        self.assertEqual(closure["mode"], "symbol")
+        self.assertFalse([f for f in closure["files"] if "/gen/" in f])
+        self.assertFalse([s for s in closure["symbols"] if "/gen/" in s["file"]])
+        (r.root / "apps/web/src/gen/types.d.ts").unlink()  # a fresh CI checkout
+        out, rows = self.check(r)
+        self.assertEqual((out.returncode, rows["web/admin"]["status"]), (0, "in-sync"))
+
     # @scenario blueprint/sync: Imported symbol changed
     @NEEDS_TS
     def test_imported_symbol_changed(self):
