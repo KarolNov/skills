@@ -111,7 +111,7 @@ Apply SHALL merge the delta in the order RENAMED, REMOVED, MODIFIED (replacing w
   - **THEN** tags claiming `Expired token` in that capability are rewritten to the new name
 ### Requirement: Pending target repo
 
-When `blueprint.json` has `targetRepo`, apply SHALL build the task that creates the repo first. It SHALL then move the pending setup into the new repo as `.blueprint/`, with `drift.py`, and remove `targetRepo`.
+When `blueprint.json` has `targetRepo`, apply SHALL build the task that creates the repo first. It SHALL then move the pending setup into the new repo as `.blueprint/`, with `drift.py` and `drift_ts.mjs`, and remove `targetRepo`.
 
 - **Scenario: Extraction into a new repo**
   - **GIVEN** a pending setup for a repo that doesn't exist yet

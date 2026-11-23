@@ -36,13 +36,13 @@
       "specVersion": "d54ff7e063b584d7",
       "anchorsFiles": {
         "skills/blueprint/SKILL.md": "83f63e06ec33",
-        "skills/blueprint/references/formats.md": "2f49cad1fd59",
+        "skills/blueprint/references/formats.md": "410f7be67343",
         "skills/blueprint/references/propose.md": "cf21b736ad29",
         "skills/blueprint/references/visuals.md": "7450ec7d84b7",
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "0b995a3142416110c3c243fdbe32f8204bb4d53b"
     },
     "blueprint/apply": {
       "ref": "https://app.notion.com/p/41c43cce21f281bbb3fef91cff515a26",
@@ -50,12 +50,12 @@
         "skills/blueprint/references/apply.md",
         "skills/blueprint/references/tickets.md"
       ],
-      "specVersion": "a9a807089c232b06",
+      "specVersion": "89b1f7176ba45866",
       "anchorsFiles": {
-        "skills/blueprint/references/apply.md": "494e0fe8c66f",
+        "skills/blueprint/references/apply.md": "696a38b69400",
         "skills/blueprint/references/tickets.md": "3ad33ee401b6"
       },
-      "syncedCommit": "e569f32811bd2e3502b428e64cd9631c61cccb79"
+      "syncedCommit": "0b995a3142416110c3c243fdbe32f8204bb4d53b"
     },
     "blueprint/backends": {
       "ref": "https://app.notion.com/p/41c43cce21f28136b9ded9fc8d7d6011",
@@ -178,12 +178,12 @@
         "skills/blueprint-tidy/**",
         "skills/blueprint/references/upgrades.md"
       ],
-      "specVersion": "8bf981e5a456b254",
+      "specVersion": "291314cc103ca39e",
       "anchorsFiles": {
-        "skills/blueprint-tidy/SKILL.md": "0ec4c7c0275f",
-        "skills/blueprint/references/upgrades.md": "4914621f1e65"
+        "skills/blueprint-tidy/SKILL.md": "2d598beea99f",
+        "skills/blueprint/references/upgrades.md": "4b4ebd5c8115"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "0b995a3142416110c3c243fdbe32f8204bb4d53b"
     },
     "blueprint/map": {
       "ref": "https://app.notion.com/p/41e43cce21f281799c04c08c812c0e01",
