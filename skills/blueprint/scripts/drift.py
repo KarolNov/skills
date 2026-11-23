@@ -366,6 +366,13 @@ def notice(why):
 # (relative paths, workspace packages by name), every reachable file counted whole.
 
 IMPORT = re.compile(r"""(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*(['"])([^'"\n]+)\1""")
+# Node's built-in modules. The file-level fallback can't tell `import "events"` from the npm
+# package of that name, so it reads them as built-ins: no external package, no lockfile signal.
+NODE_BUILTINS = frozenset("""
+    assert async_hooks buffer child_process cluster console constants crypto dgram
+    diagnostics_channel dns domain events fs http http2 https inspector module net os path
+    perf_hooks process punycode querystring readline repl stream string_decoder sys timers tls
+    trace_events tty url util v8 vm wasi worker_threads zlib""".split())
 PACKAGE_NAME = re.compile(r"^(?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*$", re.I)
 BUILD_DIR = re.compile(r"^(?:\./)?(?:dist|lib|build|out)/")
 
@@ -454,6 +461,8 @@ def resolve_import(spec, importer, fileset, names, packages):
     if name in names:
         hit = package_entry(names[name], packages[names[name]], sub, fileset)
         return ("file", hit) if hit else None
+    if name in NODE_BUILTINS:  # `events`, not the npm polyfill of that name in the lockfile
+        return None
     # An alias the fallback can't resolve (`@/x`, `~/x`, `#x`) is no package.
     return ("external", name) if PACKAGE_NAME.match(name) else None
 
@@ -732,6 +741,8 @@ def lock_signals(closure, locked, settings):
         return []
     out = []
     for pkg, was in sorted(stamped.items()):
+        if closure.get("mode") == "file" and pkg in NODE_BUILTINS:
+            continue  # stamped by file before built-ins were told apart: not a package
         now = locked.get(pkg)
         if now != was:
             out.append((weight, f"{pkg} {was or 'not locked'} → {now or 'not locked'} in the "
@@ -769,7 +780,11 @@ def run_tests(state):
     print(f"running tests: {command}", file=sys.stderr, flush=True)
     subprocess.run(command, shell=True, cwd=ROOT, stdout=sys.stderr, stdin=subprocess.DEVNULL)
     if not report.is_file() or report.stat().st_mtime_ns == before:
-        raise TestsError(f"tests.run didn't write its report: {report.relative_to(ROOT)}")
+        try:
+            shown = report.relative_to(ROOT)
+        except ValueError:  # an absolute report path outside the repo
+            shown = report
+        raise TestsError(f"tests.run didn't write its report: {shown}")
     return report
 
 
@@ -804,17 +819,54 @@ def read_junit(path):
     return cases
 
 
-def locates(where, path):
+class Layout:
+    """What locating a report's cases needs from the repo: its files by base name (so a path
+    suffix shared by several files reads as ambiguous), Go modules and Rust crates by name,
+    each with its folder ("" at the root)."""
+
+    def __init__(self, files=()):
+        self.by_name, self.go, self.rust = {}, {}, {}
+        for f in files:
+            base, folder = posixpath.basename(f), posixpath.dirname(f)
+            self.by_name.setdefault(base, []).append(f)
+            if base not in ("go.mod", "Cargo.toml"):
+                continue
+            try:
+                text = (ROOT / f).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if base == "go.mod" and (m := re.search(r"^module\s+(\S+)", text, re.M)):
+                self.go[m.group(1).strip('"')] = folder
+            elif base == "Cargo.toml" and (m := re.search(
+                    r"^\[package\][^\[]*?^name\s*=\s*[\"']([^\"']+)", text, re.M | re.S)):
+                self.rust[m.group(1).replace("-", "_")] = folder
+
+    def unique(self, suffix):
+        """Whether exactly one repo file is `suffix` or ends with `/suffix`."""
+        hits = [f for f in self.by_name.get(posixpath.basename(suffix), [])
+                if f == suffix or f.endswith("/" + suffix)]
+        return len(hits) == 1
+
+
+def locates(where, path, layout=None):
     """Whether a report's file or class name points at the repo file path: the same path
-    (relative or absolute), a dotted module (`tests.test_auth.TestLogin`), or a Go package."""
+    (absolute, or relative when no other repo file ends the same way), a dotted module
+    (`tests.test_auth.TestLogin`), or a Go package (by its go.mod when layout knows it)."""
     where = where.replace("\\", "/").strip()
     if where.startswith("./"):
         where = where[2:]
     if not where:
         return False
-    if where == path or where.endswith("/" + path) or path.endswith("/" + where):
+    if where == path or where.endswith("/" + path):
         return True
+    if path.endswith("/" + where):  # relative to a sub-project: only if no other file fits
+        return layout is None or layout.unique(where)
     folder = posixpath.dirname(path)
+    mods = [m for m in (layout.go if layout else ()) if where == m or where.startswith(m + "/")]
+    if mods:
+        mod = max(mods, key=len)
+        guess = posixpath.normpath(posixpath.join(layout.go[mod], where[len(mod):].lstrip("/")))
+        return folder == ("" if guess == "." else guess)
     if folder and (where == folder or where.endswith("/" + folder)):
         return True
     module = posixpath.splitext(path)[0].replace("/", ".")
@@ -823,27 +875,70 @@ def locates(where, path):
                for p in (".".join(parts[:k]) for k in range(len(parts), 0, -1)) if "/" not in p)
 
 
-NEST = (" > ", " › ", " ")  # how runners join describe blocks and test names
+def rust_locates(where, case, path, layout):
+    """Whether a cargo report case (nextest, cargo2junit: class `crate` or `crate::binary`,
+    name `module::…::test`) is in the .rs file path: in the crate's folder, an integration
+    test file named like the binary, and a src/ file whose module path starts the name."""
+    crate, _, binary = where.partition("::")
+    folder = layout.rust.get(crate.replace("-", "_")) if layout else None
+    if folder is None:
+        return False
+    if folder and not path.startswith(folder + "/"):
+        return False
+    rel = path[len(folder) + 1:] if folder else path
+    if rel.startswith("tests/"):
+        target = posixpath.splitext(rel.split("/")[1])[0]
+        return binary.rpartition("/")[2] == target
+    if not rel.startswith("src/"):
+        return False
+    mods = posixpath.splitext(rel[4:])[0].split("/")
+    if mods[-1] in ("lib", "main", "mod"):
+        mods.pop()
+    if mods[:1] == ["bin"]:
+        mods = mods[2:]
+    return case.split("::")[:-1][:len(mods)] == mods
+
+
+LEAF = (" > ", " › ", " ", "::")  # how runners join describe blocks or modules to a test name
+HOLDS = (" > ", " › ", "[", "/")  # what follows a describe, parametrized test or Go subtest
+
+
+def leaf_match(case, test):
+    """Whether the report's test name is the test itself, maybe inside describes or modules."""
+    return case == test or any(case.endswith(sep + test) for sep in LEAF)
 
 
 def names_match(case, test):
-    """Whether a report's test name is the tagged test: the same, nested in describe blocks,
-    a describe holding it (`test > …`), parametrized (`test[…]`) or a Go subtest (`Test/…`)."""
-    if case == test or any(case.endswith(sep + test) for sep in NEST):
+    """Whether a report's test name is the tagged test: the same, nested in describe blocks
+    or Rust modules, a describe holding it (`test > …`), parametrized (`test[…]`) or a Go
+    subtest (`Test/…`)."""
+    return leaf_match(case, test) or any(case.startswith(test + sep) for sep in HOLDS)
+
+
+def claims(case, test, declared):
+    """names_match, except that a case whose name ends with the test's belongs to a longer
+    test declared in the same file when one fits: `never rejects` is not `rejects`."""
+    if any(case.startswith(test + sep) for sep in HOLDS):
         return True
-    return any(case.startswith(test + sep) for sep in (" > ", " › ", "[", "/"))
+    if not leaf_match(case, test):
+        return False
+    return not any(len(t) > len(test) and leaf_match(case, t) for t in declared)
 
 
 def tested(specs, files, cases):
     """{capability: (signals, whether any of its tagged tests has a result)} for capabilities
     with tagged, named tests. A tagged test skipped or missing from the report has no result."""
-    out = {}
+    out, layout = {}, Layout(files)
     for path, data in tag_files(files):
-        for line, cap, scenario, test in scan_tags(data.decode("utf-8-sig", "replace")):
+        text = data.decode("utf-8-sig", "replace")
+        declared = declared_tests(text)
+        rust = path.endswith(".rs")
+        for line, cap, scenario, test in scan_tags(text):
             if cap not in specs or not test:
                 continue
-            outcomes = {c["outcome"] for c in cases if names_match(c["name"], test)
-                        and any(locates(w, path) for w in c["where"])}
+            outcomes = {c["outcome"] for c in cases if claims(c["name"], test, declared)
+                        and any(rust_locates(w, c["name"], path, layout) if rust
+                                else locates(w, path, layout) for w in c["where"])}
             signals, seen = out.setdefault(cap, ([], False))
             if "failed" in outcomes:
                 signals.append((1.0, f'test "{test}" ({path}:{line}) failed, claiming '
@@ -865,7 +960,7 @@ def check_args(args):
             as_json = True
         elif a == "--tests" or a.startswith("--tests="):
             tests = a.split("=", 1)[1] if "=" in a else next(it, None)
-            if not tests:
+            if not tests or tests.startswith("--"):
                 raise TestsError("--tests needs `run` or a JUnit XML report")
         elif not a.startswith("--"):
             names.append(a)
@@ -1108,6 +1203,8 @@ _JS_TEST = re.compile(r"""^\s*(?:test|it|describe)(?:\.\w+)*\s*\(\s*(['"`])((?:\
 _PY_TEST = re.compile(r"^\s*(?:async\s+)?def\s+(test\w*)\s*\(")
 _GO_TEST = re.compile(r"^\s*func\s+(Test\w*)\s*\(")
 _RUST_FN = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)")
+# `#[test]`, `#[tokio::test]`, `#[rstest]`, `#[test_case(…)]`; not `#[cfg(test)]`.
+_RUST_TEST = re.compile(r"^\s*#\[\s*(?:\w+::)*(?:test|rstest|test_case)\b")
 
 
 def test_below(lines, i):
@@ -1122,7 +1219,7 @@ def test_below(lines, i):
         if not line.strip():
             continue
         if _ATTRIBUTE.match(line):
-            rust_test = rust_test or (line.lstrip().startswith("#") and "test" in line)
+            rust_test = rust_test or bool(_RUST_TEST.match(line))
             depth = line.count("(") - line.count(")")
             continue
         if _COMMENT.match(line):
@@ -1135,6 +1232,24 @@ def test_below(lines, i):
             return m.group(1)
         return None
     return None
+
+
+def declared_tests(text):
+    """The names of every test declared in text, as test_below reads them."""
+    names, rust_test = set(), False
+    for line in text.split("\n"):
+        if _RUST_TEST.match(line):
+            rust_test = True
+        elif m := _JS_TEST.match(line):
+            names.add(re.sub(r"\\(.)", r"\1", m.group(2)))
+        elif m := _PY_TEST.match(line) or _GO_TEST.match(line):
+            names.add(m.group(1))
+        elif rust_test and (m := _RUST_FN.match(line)):
+            names.add(m.group(1))
+            rust_test = False
+        elif line.strip() and not (_ATTRIBUTE.match(line) or _COMMENT.match(line)):
+            rust_test = False
+    return names
 
 
 def scan_tags(text):

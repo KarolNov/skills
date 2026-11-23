@@ -840,6 +840,7 @@ class Tests(DriftTest):
                           "tests": {"run": "pytest"}})
         r.write("bad.xml", "<testsuites><testcase")
         for args, message in [(["--tests"], "--tests needs"),
+                              (["--tests", "--json"], "--tests needs"),
                               (["--tests", "missing.xml"], "can't read the JUnit report"),
                               (["--tests", "bad.xml"], "can't read the JUnit report"),
                               (["--tests", "run"], "tests.run must be")]:
@@ -847,6 +848,74 @@ class Tests(DriftTest):
                 out = r.drift("check", *args)
                 self.assertEqual(out.returncode, 2)
                 self.assertIn(message, out.stderr)
+
+
+    def test_absolute_report_not_written(self):
+        missing = str(Path(r"/nonexistent-blueprint-dir") / "report.xml")
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": {"command": "true", "report": missing}}})
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn(f"tests.run didn't write its report: {missing}", out.stderr)
+
+    def test_longer_test_owns_its_failure(self):
+        ts = ("// @scenario auth/session: Expired session redirects to login\n"
+              "it('rejects', () => {})\nit('never rejects', () => {})\n")
+        r = self.stamped(files={"src/session.test.ts": ts})
+        r.write("report.xml", '<testsuite><testcase classname="src/session.test.ts" '
+                              'name="session &gt; never rejects"><failure/></testcase>'
+                              '<testcase classname="src/session.test.ts" '
+                              'name="session &gt; rejects"/></testsuite>')
+        _, rows = self.check(r, "--tests", "report.xml")
+        self.assertEqual((rows["auth/session"]["status"], rows["auth/session"]["chance"]),
+                         ("in-sync", 0.0))
+
+    def test_same_relative_path_in_two_packages(self):
+        ts = ("// @scenario auth/session: Expired session redirects to login\n"
+              "it('signs in', () => {})\n")
+        r = self.stamped(files={"apps/web/src/login.test.ts": ts,
+                                "apps/admin/src/login.test.ts": "it('signs in', () => {})\n"})
+        failing = ('<testsuite><testcase classname="{}" name="signs in"><failure/>'
+                   '</testcase></testsuite>')
+        for where, status in [("src/login.test.ts", "in-sync"),  # whose? can't tell
+                              ("apps/admin/src/login.test.ts", "in-sync"),
+                              ("/ci/repo/apps/web/src/login.test.ts", "deps-moved")]:
+            with self.subTest(where=where):
+                r.write("report.xml", failing.format(where))
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], status)
+
+    def test_go_module_in_a_subfolder(self):
+        go = ("// @scenario auth/session: Expired session redirects to login\n"
+              "func TestExpired(t *testing.T) {}\n")
+        r = self.stamped(files={"backend/go.mod": "module example.com/shop\n\ngo 1.22\n",
+                                "backend/pkg/auth/session_test.go": go,
+                                "backend/root_test.go": go.replace("Expired", "Root")})
+        failing = ('<testsuites><testsuite name="{0}"><testcase classname="{0}" name="{1}">'
+                   '<failure/></testcase></testsuite></testsuites>')
+        for where, name, status in [("example.com/shop/pkg/auth", "TestExpired/past", "deps-moved"),
+                                    ("example.com/shop", "TestRoot", "deps-moved"),
+                                    ("example.com/shop/pkg/other", "TestExpired", "in-sync")]:
+            with self.subTest(where=where):
+                r.write("report.xml", failing.format(where, name))
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], status)
+
+    def test_rust_cargo_report(self):
+        rs = ("pub fn f() {}\n\n#[cfg(test)]\nmod tests {\n"
+              "    // @scenario auth/session: Expired session redirects to login\n"
+              "    #[test]\n    fn expired() {}\n}\n")
+        r = self.stamped(files={"crates/shop/Cargo.toml": '[package]\nname = "shop-core"\n',
+                                "crates/shop/src/session.rs": rs})
+        failing = '<testsuite><testcase classname="{}" name="{}"><failure/></testcase></testsuite>'
+        for where, name, status in [("shop_core", "session::tests::expired", "deps-moved"),
+                                    ("shop-core", "session::tests::expired", "deps-moved"),
+                                    ("shop_core", "other::tests::expired", "in-sync"),
+                                    ("elsewhere", "session::tests::expired", "in-sync")]:
+            with self.subTest(where=where, name=name):
+                r.write("report.xml", failing.format(where, name))
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], status)
 
 
 class Lockfile(DriftTest):
@@ -1258,6 +1327,31 @@ class Combine(unittest.TestCase):
         self.assertTrue(match("TestX/sub", "TestX"))
         self.assertFalse(match("test_xy", "test_x"))
         self.assertFalse(match("rejects later", "rejects"))
+
+    def test_longer_declared_test_owns_the_case(self):
+        claims = self.drift.claims
+        self.assertFalse(claims("never rejects", "rejects", {"rejects", "never rejects"}))
+        self.assertTrue(claims("never rejects", "rejects", {"rejects"}))  # jest: "describe test"
+        self.assertTrue(claims("session > rejects", "session", {"session", "rejects"}))
+        self.assertTrue(claims("tests::expired", "expired", {"expired"}))
+
+    def test_cfg_test_is_not_a_test_attribute(self):
+        text = ("// @scenario a/b: X\n#[cfg_attr(test, derive(Debug))]\nfn helper() {}\n"
+                "// @scenario a/b: Y\n#[rstest]\nfn cases() {}\n")
+        self.assertEqual([t[3] for t in self.drift.scan_tags(text)], [None, "cases"])
+        self.assertEqual(self.drift.declared_tests(text), {"cases"})
+
+    def test_node_builtins_are_no_package(self):
+        resolve = self.drift.resolve_import
+        self.assertIsNone(resolve("events", "src/a.ts", set(), {}, {}))
+        self.assertEqual(resolve("zod", "src/a.ts", set(), {}, {}), ("external", "zod"))
+        settings = self.drift.scoring({})
+        old = {"mode": "file", "locked": {"events": "3.3.0", "zod": "3.22.0"}}
+        self.assertEqual([r for _, r in self.drift.lock_signals(
+            old, {"events": "3.3.1", "zod": "3.22.0"}, settings)], [])
+        symbol = dict(old, mode="symbol")  # resolved by typescript into node_modules/events
+        self.assertEqual(len(self.drift.lock_signals(symbol, {"events": "3.3.1", "zod": "3.22.0"},
+                                                     settings)), 1)
 
     def test_defaults(self):
         self.assertEqual(self.drift.scoring({}), {
