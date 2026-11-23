@@ -88,6 +88,8 @@ function sideEffects(file) {
   });
 }
 
+const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
+
 function externalName(file) {
   const parts = file.split(path.sep);
   const i = parts.lastIndexOf("node_modules");
@@ -95,14 +97,16 @@ function externalName(file) {
   return parts[i + 1].startsWith("@") ? `${parts[i + 1]}/${parts[i + 2]}` : parts[i + 1];
 }
 
-// The program: the repo's tsconfig when it has one, made to read JS and resolve like a bundler.
+// The program: made to read JS and resolve like a bundler. Each file's imports resolve with
+// the nearest tsconfig.json at or above it inside the repo, so a package's own `paths`
+// aliases work; the program itself uses the root one.
 
-function compilerOptions() {
-  const config = ts.findConfigFile(root, ts.sys.fileExists, "tsconfig.json");
+function compilerOptions(dir) {
+  const config = path.join(dir, "tsconfig.json");
   let options = {};
-  if (config && path.dirname(fs.realpathSync(config)) === root) {
+  if (fs.existsSync(config)) {
     const read = ts.readConfigFile(config, ts.sys.readFile);
-    if (!read.error) options = ts.parseJsonConfigFileContent(read.config, ts.sys, root).options;
+    if (!read.error) options = ts.parseJsonConfigFileContent(read.config, ts.sys, dir).options;
   }
   options = { ...options, allowJs: true, noEmit: true, skipLibCheck: true };
   if (options.moduleResolution === undefined) {
@@ -116,8 +120,30 @@ function compilerOptions() {
 const capabilities = input.capabilities ?? {};
 const entryFiles = [...new Set(Object.values(capabilities).flat())].sort()
   .map((f) => path.join(root, f)).filter((f) => fs.existsSync(f));
-const options = compilerOptions();
-const program = ts.createProgram(entryFiles, options);
+const configCache = new Map();
+function optionsFor(file) {
+  let dir = path.dirname(file);
+  if (dir !== root && !dir.startsWith(root + path.sep)) dir = root;
+  const seen = [];
+  let options;
+  for (;; dir = path.dirname(dir)) {
+    if (configCache.has(dir)) { options = configCache.get(dir); break; }
+    seen.push(dir);
+    if (fs.existsSync(path.join(dir, "tsconfig.json")) || dir === root) {
+      options = compilerOptions(dir);
+      break;
+    }
+  }
+  for (const d of seen) configCache.set(d, options);
+  return options;
+}
+const options = optionsFor(path.join(root, "package.json"));
+const host = ts.createCompilerHost(options);
+const resolve = (name, containingFile) =>
+  ts.resolveModuleName(name, containingFile, optionsFor(containingFile), host).resolvedModule;
+host.resolveModuleNameLiterals = (literals, containingFile) =>
+  literals.map((lit) => ({ resolvedModule: resolve(lit.text, containingFile) }));
+const program = ts.createProgram(entryFiles, options, host);
 const checker = program.getTypeChecker();
 
 // Where a declaration lives: a repo file, an external package, or nowhere we follow.
@@ -149,9 +175,21 @@ function statementName(stmt) {
   if (stmt.name) return stmt.name.getText();
   const mods = ts.canHaveModifiers?.(stmt) ? ts.getModifiers(stmt) ?? [] : stmt.modifiers ?? [];
   if (mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) return "default";
-  const { line } = stmt.getSourceFile().getLineAndCharacterOfPosition(stmt.getStart());
-  return `line ${line + 1}`;
+  // `exports.foo = ...`, `module.exports = ...`: named by what they assign.
+  const expr = ts.isExpressionStatement(stmt) ? stmt.expression : null;
+  if (expr && ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      && (ts.isPropertyAccessExpression(expr.left) || ts.isElementAccessExpression(expr.left))) {
+    return expr.left.getText();
+  }
+  // Anything else by its place among the file's unnamed statements, so moving lines keeps it.
+  const sf = stmt.getSourceFile();
+  if (!unnamedCache.has(sf)) {
+    unnamedCache.set(sf, sf.statements.filter((s) => !s.name && !ts.isVariableStatement(s)
+                                              && !ts.isExportAssignment(s)));
+  }
+  return `statement ${unnamedCache.get(sf).indexOf(stmt) + 1}`;
 }
+const unnamedCache = new Map();
 
 function resolveAlias(sym) {
   if (sym && sym.flags & ts.SymbolFlags.Alias) {
@@ -167,8 +205,7 @@ function moduleFile(specifier) {
   if (decl && ts.isSourceFile(decl)) return decl;
   // A script (no imports or exports) has no module symbol: resolve the specifier instead.
   if (!ts.isStringLiteralLike(specifier)) return null;
-  const found = ts.resolveModuleName(specifier.text, specifier.getSourceFile().fileName,
-                                     options, ts.sys).resolvedModule;
+  const found = resolve(specifier.text, specifier.getSourceFile().fileName);
   return (found && program.getSourceFile(found.resolvedFileName)) ?? null;
 }
 
@@ -213,7 +250,8 @@ function importEdges(stmt, sf) {
       ? stmt.moduleSpecifier.text : null;
     if (spec && !spec.startsWith(".") && !spec.startsWith("/")) {
       const name = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
-      return [{ kind: "external", name }];
+      // An unresolved alias (`@/x`, `~/x`, `#x`) is no package: only a package name counts.
+      if (PACKAGE_NAME.test(name)) return [{ kind: "external", name }];
     }
     return [];
   }
@@ -222,17 +260,22 @@ function importEdges(stmt, sf) {
   const clause = ts.isImportDeclaration(stmt) ? stmt.importClause : stmt.exportClause;
   const bare = ts.isImportDeclaration(stmt) && !clause;
   if (bare || sideEffects(place.file)) return wholeFile(target);
+  const namespace = (ts.isImportDeclaration(stmt) && clause.namedBindings
+                     && ts.isNamespaceImport(clause.namedBindings))
+    || (ts.isExportDeclaration(stmt) && (!clause || ts.isNamespaceExport(clause)));
+  const mod = namespace && checker.getSymbolAtLocation(stmt.moduleSpecifier);
+  if (namespace && !mod) return wholeFile(target); // a script: no exports to go by
   const syms = [];
   if (ts.isImportDeclaration(stmt)) {
     if (clause.name) syms.push(checker.getSymbolAtLocation(clause.name));
     const bindings = clause.namedBindings;
     if (bindings && ts.isNamespaceImport(bindings)) {
-      syms.push(...checker.getExportsOfModule(checker.getSymbolAtLocation(stmt.moduleSpecifier)));
+      syms.push(...checker.getExportsOfModule(mod));
     } else if (bindings) {
       for (const el of bindings.elements) syms.push(checker.getSymbolAtLocation(el.name));
     }
   } else if (!clause || ts.isNamespaceExport(clause)) {
-    syms.push(...checker.getExportsOfModule(checker.getSymbolAtLocation(stmt.moduleSpecifier)));
+    syms.push(...checker.getExportsOfModule(mod));
   } else {
     for (const el of clause.elements) {
       syms.push(checker.getExportSpecifierLocalTargetSymbol(el) ?? checker.getSymbolAtLocation(el.name));

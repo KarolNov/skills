@@ -32,9 +32,10 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent  # the scripts under test
 # Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
-ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
-           GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
-           GIT_COMMITTER_EMAIL="t@t")
+# NODE_PATH goes too, so the only typescript a fixture's node sees is the one linked into it.
+ENV = dict({k: v for k, v in os.environ.items() if k != "NODE_PATH"}, GIT_CONFIG_GLOBAL=os.devnull,
+           GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+           GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
 AT = "@" + "scenario"  # split, so this file's own lines never read as tags
 MARK = ".demo-map"  # sits in a demo repo, so a rerun knows it may replace the folder
 

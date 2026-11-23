@@ -176,7 +176,7 @@ def code_status(spec, paths, hashes=file_hashes):
 
 SCORING_DEFAULTS = {"decay": 0.5, "packageWeight": 0.5, "lockfileWeight": 0.3,
                     "threshold": 0.5, "maxDepth": 6}
-TS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mts", ".cts")
+TS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs")
 
 
 class SettingError(Exception):
@@ -352,6 +352,7 @@ def notice(why):
 # (relative paths, workspace packages by name), every reachable file counted whole.
 
 IMPORT = re.compile(r"""(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*(['"])([^'"\n]+)\1""")
+PACKAGE_NAME = re.compile(r"^(?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*$", re.I)
 BUILD_DIR = re.compile(r"^(?:\./)?(?:dist|lib|build|out)/")
 
 
@@ -439,7 +440,8 @@ def resolve_import(spec, importer, fileset, names, packages):
     if name in names:
         hit = package_entry(names[name], packages[names[name]], sub, fileset)
         return ("file", hit) if hit else None
-    return ("external", name)
+    # An alias the fallback can't resolve (`@/x`, `~/x`, `#x`) is no package.
+    return ("external", name) if PACKAGE_NAME.match(name) else None
 
 
 def file_closure(entries, files, settings):
@@ -556,6 +558,8 @@ def compare_closure(stamped, now, settings):
     current = file_hashes([f for f in stamped["files"] if (ROOT / f).is_file()])
 
     def signal(what, rec):
+        if rec["distance"] > settings["maxDepth"]:
+            return  # stamped with a larger maxDepth: past the current one, not followed now
         score = path_score(rec["distance"], rec["via"], settings)
         if score > 0:
             signals.append((score, import_reason(what, rec, settings, score)))
@@ -570,6 +574,8 @@ def compare_closure(stamped, now, settings):
         hashes = {(n["file"], n["symbol"]): n.get("hash") for n in now["nodes"]
                   if n["symbol"] is not None}
         for s in stamped.get("symbols", []):
+            if stamped["files"].get(s["file"], {}).get("whole"):
+                continue  # its file is compared whole above
             hash_now = hashes.get((s["file"], s["symbol"]))
             if hash_now != s["hash"]:
                 signal(f"{s['file']} {s['symbol']} {'changed' if hash_now else 'removed'}", s)

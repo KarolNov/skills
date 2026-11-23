@@ -6,6 +6,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,11 @@ DRIFT = Path(__file__).resolve().parent / "drift.py"
 sys.path.insert(0, str(DRIFT.parent / "e2e"))
 import fakerepo  # noqa: E402  (the TS workspace fixture)
 # Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
-ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+# NODE_PATH goes too, so no typescript is found but one linked into a fixture.
+ENV = dict({k: v for k, v in os.environ.items() if k != "NODE_PATH"},
+           GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+# Tests that expect "typescript not installed" need node to get as far as looking for it.
+NEEDS_NODE = unittest.skipUnless(shutil.which("node"), "node not found")
 
 
 class Repo:
@@ -609,6 +614,7 @@ class Scoring(DriftTest):
         self.assertIn("chance 1 · confidence high", text)
         self.assertIn("lib/core.py edited (anchored) → 1", text)
 
+    @NEEDS_NODE
     def test_ts_capability_without_typescript_is_low_confidence(self):
         r = self.stamped({"src/a.ts": "", "lib/b.py": ""},
                          {"specs": {"web": spec("src/**"), "py": spec("lib/**")}})
@@ -904,14 +910,17 @@ class Transitive(unittest.TestCase):
     def test_node_not_found(self):
         r = self.workspace(typescript=None)
         self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
-        env = dict(fakerepo.ENV, PATH=os.pathsep.join(
-            p for p in os.environ["PATH"].split(os.pathsep)
-            if not (Path(p) / "node").exists()))
+        # A PATH holding git alone: node often shares a folder with git, so none is dropped.
+        bin_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, bin_dir)
+        (bin_dir / "git").symlink_to(shutil.which("git"))
+        env = dict(fakerepo.ENV, PATH=str(bin_dir))
         out = subprocess.run([sys.executable, str(DRIFT), "stamp", "--all"], cwd=r.root,
                              capture_output=True, text=True, env=env)
         self.assertIn("node not found", out.stderr)
         self.assertEqual(self.closure(r, "web/login")["why"], "node not found")
 
+    @NEEDS_NODE
     def test_stamp_without_typescript_follows_files(self):
         r = self.workspace(typescript=None)
         closure = self.closure(r, "web/login")
