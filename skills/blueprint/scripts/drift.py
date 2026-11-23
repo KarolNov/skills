@@ -327,6 +327,16 @@ def read_closure(name):
     return closure if isinstance(closure, dict) and "files" in closure else None
 
 
+def remove_closure(name):
+    """Delete a capability's closure file, dropping folders that leaves empty."""
+    path = closure_path(name)
+    path.unlink()
+    parent = path.parent
+    while parent != CLOSURES and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
+
 def ts_entries(paths):
     return sorted(p for p in paths if p.endswith(TS_EXTENSIONS))
 
@@ -537,7 +547,7 @@ def stamp_closures(names, specs, files, settings):
     entries = {n: ts_entries(matched(specs[n], files)) for n in names}
     for n, e in entries.items():
         if not e and closure_path(n).exists():
-            closure_path(n).unlink()
+            remove_closure(n)
     wanted = {n: e for n, e in entries.items() if e}
     if not wanted:
         return {}
@@ -1119,7 +1129,7 @@ def prune_closure(name, spec, state):
     files = repo_files()
     entries = ts_entries(matched(spec, files))
     if not entries:
-        closure_path(name).unlink()
+        remove_closure(name)
         return "closure removed (no TS/JS files left)"
     found, why = run_helper({name: entries}, settings)
     mode = "symbol" if found else "file"
@@ -1130,9 +1140,11 @@ def prune_closure(name, spec, state):
               f"would be by {mode}" + (f" ({why})" if why else "")
               + "; stamp the capability after a sync to re-record it", file=sys.stderr)
         return None
+    if why:
+        notice(why)
     fresh = (build_closure("symbol", found["closures"][name], locked_versions()) if found
              else build_closure("file", file_closure(entries, files, settings), locked_versions(),
-                                stamped.get("why")))
+                                why or stamped.get("why")))
     for f, rec in fresh["files"].items():
         if f in stamped["files"]:
             rec["hash"] = stamped["files"][f].get("hash")

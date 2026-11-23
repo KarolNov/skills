@@ -1289,6 +1289,28 @@ class Transitive(unittest.TestCase):
         r.checked_run("drift.py", "prune", "web/admin")
         self.assertFalse((r.root / ".blueprint/closure/web/admin.json").exists())
 
+    @NEEDS_TS
+    def test_prune_keeps_a_closure_whose_mode_would_change(self):
+        r = self.workspace()
+        before = r.read(".blueprint/closure/web/login.json")
+        self.assertEqual(json.loads(before)["mode"], "symbol")
+        fakerepo.unlink_typescript(r)
+        out = r.checked_run("drift.py", "prune", "web/login")
+        self.assertNotIn("closure re-recorded", out.stdout)
+        self.assertIn("closure kept as stamped: it was followed by symbol, and now would be by "
+                      "file (typescript not installed)", out.stderr)
+        self.assertEqual(r.read(".blueprint/closure/web/login.json"), before)
+
+    def test_prune_removes_the_closure_when_no_ts_is_left(self):
+        r = self.workspace(typescript=None, files={"apps/web/src/admin.css": "a {}\n",
+                                                    "apps/web/src/login.css": "a {}\n"})
+        for name in ("web/admin", "web/login"):
+            css = f"apps/web/src/{name.split('/')[1]}.css"
+            r.update(lambda s: s["specs"][name].__setitem__("anchors", [css]))
+            out = r.checked_run("drift.py", "prune", name)
+            self.assertIn("closure removed (no TS/JS files left)", out.stdout)
+        self.assertFalse((r.root / ".blueprint/closure/web").exists())
+
     def test_restamp_clears_it(self):
         r = self.workspace(typescript=None)
         self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")

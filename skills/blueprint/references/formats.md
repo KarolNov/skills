@@ -302,7 +302,7 @@ Without Node or the repo's `typescript` (a CI checkout with no install, say), im
 
 ## `.blueprint/closure/<capability>.json`
 
-The import closure of a TS/JS capability (one whose anchored files include `.ts`, `.tsx`, `.js`, `.jsx`, `.mts` or `.cts`), written by `drift.py stamp` beside `baseline/` and committed with it, so `check` compares hashes and needs no PR base. `drift.py rename` moves it, and refuses when one already sits at the new name; `drift.py prune` drops what the narrowed anchors no longer reach and keeps the stamped hashes of the rest. Another capability's stamp never touches it. Never edit it by hand: a stamp rewrites it.
+The import closure of a TS/JS capability (one whose anchored files include `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` or `.cjs`), written by `drift.py stamp` beside `baseline/` and committed with it, so `check` compares hashes and needs no PR base. `drift.py rename` moves it, and refuses when one already sits at the new name; `drift.py prune` drops what the narrowed anchors no longer reach and keeps the stamped hashes of the rest. Another capability's stamp never touches it. Never edit it by hand: a stamp rewrites it.
 
 ```json
 {
