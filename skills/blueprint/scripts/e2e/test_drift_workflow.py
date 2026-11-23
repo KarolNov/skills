@@ -90,16 +90,28 @@ save()
 '''
 
 
+NAME = re.compile(r"[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)*")
+
+
+def lookup(tok, ctx):
+    """A dotted context name. Anything else (||, !, always(), ...) raises: this simulator can't
+    evaluate it, and guessing would test something other than what GitHub runs."""
+    if not NAME.fullmatch(tok):
+        raise ValueError(f"workflow expression the test can't evaluate: {tok!r}")
+    cur = ctx
+    for part in tok.split("."):
+        cur = cur.get(part, "") if isinstance(cur, dict) else ""
+    return cur
+
+
 def expression(text, ctx):
-    """A GitHub expression of the kind the template uses: dotted names, 'strings', == != &&."""
+    """A GitHub expression of the kind the template uses: dotted names, 'strings', == != &&.
+    Status functions (always(), failure()) raise, so steps after a failure are always skipped."""
     def value(tok):
         tok = tok.strip()
-        if tok.startswith("'") and tok.endswith("'"):
+        if re.fullmatch(r"'[^']*'", tok):
             return tok[1:-1]
-        cur = ctx
-        for part in tok.split("."):
-            cur = cur.get(part, "") if isinstance(cur, dict) else ""
-        return cur
+        return lookup(tok, ctx)
 
     result = True
     for clause in text.split("&&"):
@@ -118,10 +130,7 @@ def fill(text, ctx):
 
 
 def expression_value(text, ctx):
-    cur = ctx
-    for part in text.strip().split("."):
-        cur = cur.get(part, "") if isinstance(cur, dict) else ""
-    return cur
+    return lookup(text.strip(), ctx)
 
 
 class Run:
@@ -216,7 +225,13 @@ class WorkflowTest(unittest.TestCase):
             done = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
                                   cwd=self.r.root, env=step_env, capture_output=True, text=True)
             output.append(done.stdout + done.stderr)
-            outputs = dict(ln.split("=", 1) for ln in out_file.read_text().splitlines() if "=" in ln)
+            outputs = {}
+            for ln in out_file.read_text().splitlines():
+                # Only name=value lines; a name<<EOF block would be misread, so it raises.
+                if not re.fullmatch(r"[\w-]+=.*", ln):
+                    raise ValueError(f"$GITHUB_OUTPUT line the test can't read: {ln!r}")
+                k, v = ln.split("=", 1)
+                outputs[k] = v
             if "id" in step:
                 ctx["steps"][step["id"]] = {"outputs": outputs}
             steps[name] = "success" if done.returncode == 0 else "failure"

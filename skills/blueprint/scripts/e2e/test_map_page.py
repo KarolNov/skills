@@ -74,16 +74,14 @@ def drag(page, start, end):
 class MapPage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Class cleanups run even when a subclass's setUpClass fails after this, unlike
+        # tearDownClass, so one class's setup error doesn't leave Playwright running.
         cls.playwright = sync_playwright().start()
+        cls.addClassCleanup(cls.playwright.stop)
         cls.browser = launch(cls.playwright)
         if not cls.browser:
-            cls.playwright.stop()
             raise unittest.SkipTest("needs a browser: python3 -m playwright install chromium")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.browser.close()
-        cls.playwright.stop()
+        cls.addClassCleanup(cls.browser.close)
 
     def open(self, path):
         """The page, offline: every request that isn't the page's own file fails, and is recorded."""

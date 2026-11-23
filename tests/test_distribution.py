@@ -35,11 +35,20 @@ def is_mod(plugin):
 
 
 def sections(text):
-    """{### heading: its text up to the next ### or ##}."""
-    out, parts = {}, re.split(r"^(#{2,3} .*)$", text, flags=re.M)
-    for head, body in zip(parts[1::2], parts[2::2]):
-        if head.startswith("### "):
-            out[head[4:].strip()] = body
+    """{### heading: its text up to the next ### or ##}. Headings inside ``` fences don't count;
+    the fenced text stays in its section's body."""
+    out, head, body, fenced = {}, None, [], False
+    for line in text.splitlines(keepends=True):
+        if line.startswith("```"):
+            fenced = not fenced
+        if not fenced and re.match(r"#{2,3} ", line):
+            if head and head.startswith("### "):
+                out[head[4:].strip()] = "".join(body)
+            head, body = line.rstrip("\n"), []
+        else:
+            body.append(line)
+    if head and head.startswith("### "):
+        out[head[4:].strip()] = "".join(body)
     return out
 
 
@@ -149,10 +158,13 @@ class Mods(unittest.TestCase):
         self.assertEqual(names.index("blueprint-ui"), names.index("blueprint") + 1)
         self.assertIn("`blueprint-ui`", sections(README)["blueprint"])
         if shutil.which("claude"):
-            out = subprocess.run(["claude", "plugin", "validate", str(mod)], capture_output=True,
-                                 text=True, timeout=120)
+            try:
+                out = subprocess.run(["claude", "plugin", "validate", str(mod)],
+                                     capture_output=True, text=True, timeout=120)
+            except subprocess.TimeoutExpired:
+                self.fail("claude plugin validate took over 120s")
+            # Only the exit code: the CLI's wording changes between versions.
             self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-            self.assertIn("answers its own command: command.run{command=blueprint-ui}", out.stdout)
 
 
 if __name__ == "__main__":
