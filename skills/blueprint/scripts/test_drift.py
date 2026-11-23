@@ -569,5 +569,134 @@ class Artifacts(DriftTest):
         self.assertEqual(json.loads(r.drift("artifacts", "--json").stdout), [])
 
 
+class Scoring(DriftTest):
+    """Drift chance, confidence and reasons on direct changes, and drift.scoring."""
+
+    def stamped(self, files, state):
+        r = self.repo(files, state)
+        self.assertEqual(r.drift("stamp", "--all").returncode, 0)
+        return r
+
+    def check(self, r, *args):
+        out = r.drift("check", "--json", *args)
+        return out, {row["capability"]: row for row in json.loads(out.stdout or "[]")}
+
+    def test_in_sync_has_no_chance(self):
+        r = self.stamped({"lib/core.py": "x = 1\n"}, {"specs": {"core": spec("lib/**")}})
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 0)
+        self.assertEqual(rows["core"], {"capability": "core", "status": "in-sync", "chance": 0.0,
+                                        "confidence": "high", "reasons": []})
+
+    def test_anchored_change_scores_one(self):
+        r = self.stamped({"lib/core.py": "x = 1\n", "lib/old.py": ""},
+                         {"specs": {"core": spec("lib/**")}})
+        r.write("lib/core.py", "x = 2\n")
+        r.write("lib/new.py", "")
+        (r.root / "lib/old.py").unlink()
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 1)
+        row = rows["core"]
+        self.assertEqual((row["status"], row["chance"], row["confidence"]),
+                         ("code-moved", 1.0, "high"))
+        self.assertEqual(row["changed"], ["lib/core.py", "lib/new.py", "lib/old.py"])
+        self.assertEqual(row["reasons"], ["lib/core.py edited (anchored) → 1",
+                                          "lib/new.py added (anchored) → 1",
+                                          "lib/old.py removed (anchored) → 1"])
+        text = r.drift("check").stdout
+        self.assertIn("chance 1 · confidence high", text)
+        self.assertIn("lib/core.py edited (anchored) → 1", text)
+
+    def test_ts_capability_is_low_confidence(self):
+        r = self.stamped({"src/a.ts": "", "lib/b.py": ""},
+                         {"specs": {"web": spec("src/**"), "py": spec("lib/**")}})
+        _, rows = self.check(r)
+        self.assertEqual(rows["web"]["confidence"], "low")
+        self.assertIn("not followed", rows["web"]["reasons"][-1])
+        self.assertEqual(rows["py"]["confidence"], "high")
+
+    def test_unstamped_rows_carry_the_fields(self):
+        r = self.repo({"a.py": ""}, {"specs": {"lazy": {"ref": None, "anchors": ["a.py"]},
+                                               "bare": {"ref": "page"}}})
+        _, rows = self.check(r)
+        self.assertEqual(rows["lazy"]["status"], "no-spec")
+        self.assertEqual(rows["bare"]["status"], "no-anchors")
+        for row in rows.values():
+            self.assertEqual((row["chance"], row["confidence"]), (0.0, "low"))
+
+    # @scenario blueprint/sync: Same diff, same number
+    def test_same_diff_same_number(self):
+        r = self.stamped({"src/a.ts": "a", "lib/b.py": "b"},
+                         {"specs": {"web": spec("src/**"), "py": spec("lib/**")}})
+        r.write("src/a.ts", "changed")
+        first, second = r.drift("check", "--json"), r.drift("check", "--json")
+        self.assertEqual(first.stdout, second.stdout)
+        self.assertEqual(r.drift("check").stdout, r.drift("check").stdout)
+
+    # @scenario blueprint/sync: Bad setting
+    def test_bad_setting_names_the_key(self):
+        bad = [({"decay": 2}, "drift.scoring.decay"),
+               ({"threshold": -0.1}, "drift.scoring.threshold"),
+               ({"lockfileWeight": "0.3"}, "drift.scoring.lockfileWeight"),
+               ({"packageWeight": True}, "drift.scoring.packageWeight"),
+               ({"maxDepth": 0}, "drift.scoring.maxDepth"),
+               ({"maxDepth": 2.5}, "drift.scoring.maxDepth"),
+               ({"packages": {"@co/core": {"weight": 1.5}}}, 'drift.scoring.packages["@co/core"].weight'),
+               ({"packages": {"@co/core": {"sideEffects": "yes"}}},
+                'drift.scoring.packages["@co/core"].sideEffects')]
+        for scoring, key in bad:
+            with self.subTest(key=key, scoring=scoring):
+                r = self.repo({"a.py": ""}, {"specs": {"a": spec("a.py")},
+                                            "drift": {"scoring": scoring}})
+                out = r.drift("check")
+                self.assertEqual(out.returncode, 2)
+                self.assertIn(key, out.stderr)
+                self.assertEqual(out.stdout, "")
+
+    def test_drift_not_an_object(self):
+        r = self.repo({"a.py": ""}, {"specs": {"a": spec("a.py")}, "drift": None})
+        out = r.drift("check", "--json")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("drift must be an object", out.stderr)
+
+    def test_zero_threshold_keeps_untouched_in_sync(self):
+        r = self.stamped({"a.py": ""}, {"specs": {"a": spec("a.py")},
+                                        "drift": {"scoring": {"threshold": 0}}})
+        out, rows = self.check(r)
+        self.assertEqual((out.returncode, rows["a"]["status"]), (0, "in-sync"))
+
+    def test_unknown_capability_exits_2(self):
+        r = self.stamped({"a.py": ""}, {"specs": {"a": spec("a.py")}})
+        out = r.drift("check", "nope")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unknown capability: nope", out.stderr)
+
+    def test_good_settings_accepted(self):
+        r = self.stamped({"a.py": ""}, {"specs": {"a": spec("a.py")}, "drift": {"scoring": {
+            "decay": 1, "packageWeight": 0, "lockfileWeight": 0.3, "threshold": 0.9,
+            "maxDepth": 3, "packages": {"@co/core": {"weight": 1.0, "sideEffects": ["*.css"]}}}}})
+        self.assertEqual(r.drift("check").returncode, 0)
+
+
+class Combine(unittest.TestCase):
+    """The formula itself, imported (drift.py only needs to run inside a git repo)."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(DRIFT.parent))
+        import drift
+        cls.drift = drift
+
+    def test_any_of_these(self):
+        self.assertEqual(self.drift.combine([0.25, 0.25]), 0.4375)
+        self.assertEqual(self.drift.combine([1.0, 0.3]), 1.0)
+        self.assertEqual(self.drift.combine([]), 0.0)
+
+    def test_defaults(self):
+        self.assertEqual(self.drift.scoring({}), {
+            "decay": 0.5, "packageWeight": 0.5, "lockfileWeight": 0.3, "threshold": 0.5,
+            "maxDepth": 6, "packages": {}})
+
+
 if __name__ == "__main__":
     unittest.main()

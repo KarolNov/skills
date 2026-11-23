@@ -6,7 +6,10 @@ implements it. `stamp` records a hash of each file those anchors match; `check` 
 every capability whose files were added, removed or edited since, i.e. code that moved
 since its spec was last synced. It never talks to the spec backend.
 
-    drift.py check [--json] [CAPABILITY ...]   exit 1 if anything drifted
+    drift.py check [--json] [CAPABILITY ...]   each capability's status, drift chance (0-1),
+                                               confidence and reasons; exit 1 if any is
+                                               code-moved or deps-moved, 2 on a bad
+                                               drift.scoring setting or unknown capability
     drift.py stamp CAPABILITY ... | --all      record the current state as synced
     drift.py files CAPABILITY [ANCHOR ...]     list the files a capability's anchors match, or
                                                the given anchors instead (writes nothing)
@@ -157,36 +160,158 @@ def code_status(spec, paths, hashes=file_hashes):
     return ("code-moved" if changed else "in-sync"), changed
 
 
+# Scoring: each capability gets a drift chance from 0 to 1, computed by a fixed formula from
+# the stamped state and the working tree, never by judgement, so the same inputs always give
+# the same number. A changed anchored file scores 1.0. Signals combine as 1 - prod(1 - s).
+
+SCORING_DEFAULTS = {"decay": 0.5, "packageWeight": 0.5, "lockfileWeight": 0.3,
+                    "threshold": 0.5, "maxDepth": 6}
+TS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mts", ".cts")
+
+
+class SettingError(Exception):
+    """A drift.scoring value check refuses; the message names the key."""
+
+
+def unit(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1
+
+
+def scoring(state):
+    """drift.scoring with every absent key at its default, or SettingError naming the key."""
+    drift = state.get("drift", {})
+    if not isinstance(drift, dict):
+        raise SettingError("drift must be an object")
+    raw = drift.get("scoring", {})
+    if not isinstance(raw, dict):
+        raise SettingError("drift.scoring must be an object")
+    out = dict(SCORING_DEFAULTS, packages={})
+    for key in ("decay", "packageWeight", "lockfileWeight", "threshold"):
+        if key in raw:
+            if not unit(raw[key]):
+                raise SettingError(f"drift.scoring.{key} must be a number from 0 to 1, "
+                                   f"not {json.dumps(raw[key])}")
+            out[key] = raw[key]
+    if "maxDepth" in raw:
+        depth = raw["maxDepth"]
+        if not isinstance(depth, int) or isinstance(depth, bool) or depth < 1:
+            raise SettingError("drift.scoring.maxDepth must be a whole number of at least 1, "
+                               f"not {json.dumps(depth)}")
+        out["maxDepth"] = depth
+    packages = raw.get("packages", {})
+    if not isinstance(packages, dict):
+        raise SettingError("drift.scoring.packages must be an object of package names")
+    for name, pkg in packages.items():
+        where = f"drift.scoring.packages[{json.dumps(name)}]"
+        if not isinstance(pkg, dict):
+            raise SettingError(f"{where} must be an object")
+        if "weight" in pkg and not unit(pkg["weight"]):
+            raise SettingError(f"{where}.weight must be a number from 0 to 1, "
+                               f"not {json.dumps(pkg['weight'])}")
+        effects = pkg.get("sideEffects", False)
+        if not (isinstance(effects, bool) or (isinstance(effects, list)
+                                              and all(isinstance(g, str) for g in effects))):
+            raise SettingError(f"{where}.sideEffects must be true, false or a list of globs")
+        out["packages"][name] = pkg
+    return out
+
+
+def combine(scores):
+    """Signals combined as a probabilistic "any of these": 1 - prod(1 - s), rounded so the
+    same inputs print the same number on every platform."""
+    rest = 1.0
+    for s in scores:
+        rest *= 1 - s
+    return round(1 - rest, 4)
+
+
+def fmt_chance(chance):
+    return f"{chance:g}"
+
+
+def is_ts(paths):
+    return any(p.endswith(TS_EXTENSIONS) for p in paths)
+
+
+def assess(spec, paths, settings, hashes=file_hashes):
+    """One capability's row for check: status, drift chance, confidence and reasons.
+
+    Signals are (score, reason) pairs. Only direct changes to anchored files are scored
+    here; a TS/JS capability is marked low confidence, since what it imports isn't followed.
+    """
+    status, changed = code_status(spec, paths, hashes)
+    if status in ("no-anchors", "no-spec"):
+        why = "no anchors" if status == "no-anchors" else "no stamped spec to drift from"
+        return {"status": status, "changed": [], "chance": 0.0, "confidence": "low",
+                "reasons": [f"confidence low: {why}"]}
+    signals = [(1.0, f"{f} {verb(f, spec)} (anchored) → 1") for f in changed]
+    chance = combine(s for s, _ in signals)
+    if changed:
+        status = "code-moved"
+    elif chance > 0 and chance >= settings["threshold"]:
+        status = "deps-moved"
+    elif chance > 0:
+        status = "possibly-affected"
+    else:
+        status = "in-sync"
+    reasons = [r for _, r in sorted(signals, key=lambda x: (-x[0], x[1]))]
+    if is_ts(paths) or is_ts(spec.get("anchorsFiles", {})):
+        confidence = "low"
+        reasons.append("confidence low: imports of its TS/JS files are not followed, "
+                       "so only direct changes count")
+    else:
+        confidence = "high"
+    return {"status": status, "changed": changed, "chance": chance, "confidence": confidence,
+            "reasons": reasons}
+
+
+def verb(path, spec):
+    stamped = spec.get("anchorsFiles", {})
+    if path not in stamped:
+        return "added"
+    return "edited" if (ROOT / path).is_file() else "removed"
+
+
+DRIFTED = ("code-moved", "deps-moved")
+
+
 def cmd_check(args):
     as_json = "--json" in args
     names = [a for a in args if not a.startswith("--")]
     state, files = load(), repo_files()
     specs = state.get("specs", {})
+    try:
+        settings = scoring(state)
+    except SettingError as e:
+        print(f"bad setting: {e}", file=sys.stderr)
+        return 2
+    if unknown := [n for n in names if n not in specs]:
+        print(f"unknown capability: {', '.join(unknown)}", file=sys.stderr)
+        return 2
+    hashes = cached_hashes()
     report = []
     for name in names or specs:
-        spec = specs.get(name)
-        if spec is None:
-            sys.exit(f"unknown capability: {name}")
-        status, changed = code_status(spec, matched(spec, files))
-        if status == "code-moved":
-            report.append({
-                "capability": name,
-                "status": status,
-                "syncedCommit": spec.get("syncedCommit"),
-                "changed": changed,
-            })
-        else:
-            report.append({"capability": name, "status": status})
+        spec = specs[name]
+        row = assess(spec, matched(spec, files), settings, hashes)
+        out = {"capability": name, "status": row["status"]}
+        if row["status"] == "code-moved":
+            out["syncedCommit"] = spec.get("syncedCommit")
+            out["changed"] = row["changed"]
+        out.update(chance=row["chance"], confidence=row["confidence"], reasons=row["reasons"])
+        report.append(out)
     if as_json:
-        print(json.dumps(report, indent=2))
+        print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
         for r in report:
-            line = f"{r['status']:<11} {r['capability']}"
+            line = f"{r['status']:<17} {r['capability']}"
+            if r["status"] in ("in-sync", "no-spec", "no-anchors"):
+                print(line)
+                continue
             if r["status"] == "code-moved":
                 line += f"  (since {(r['syncedCommit'] or '?')[:9]})"
-                line += "".join(f"\n              {f}" for f in r["changed"])
-            print(line)
-    return 1 if any(r["status"] == "code-moved" for r in report) else 0
+            line += f"  chance {fmt_chance(r['chance'])} · confidence {r['confidence']}"
+            print(line + "".join(f"\n                  {reason}" for reason in r["reasons"]))
+    return 1 if any(r["status"] in DRIFTED for r in report) else 0
 
 
 def cmd_stamp(args):
