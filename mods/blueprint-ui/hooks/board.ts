@@ -185,9 +185,10 @@ export function commandNamed(all: { name: string }[], name: string): string | un
 }
 
 /** How many columns the In sync grid takes: as many cells of the longest name as fit across, 1 to 4. */
-export function columnsFor(quiet: QuietRow[], bodyColumns: number): number {
-  // A cell: the mark, a space, the name, " · n pending" when there is one, and a gap.
-  const widest = Math.max(1, ...quiet.map(q => 2 + q.name.length + (q.pending ? ` · ${q.pending} pending`.length : 0) + 3))
+export function columnsFor(quiet: QuietRow[], bodyColumns: number, inlineMaybe = false): number {
+  // A cell: the mark, a space, the name, " · n pending" when there is one, the score when shown inline, and a gap.
+  const maybe = (q: QuietRow) => (inlineMaybe && q.maybe ? ` · possibly affected · ${q.maybe}`.length : 0)
+  const widest = Math.max(1, ...quiet.map(q => 2 + q.name.length + (q.pending ? ` · ${q.pending} pending`.length : 0) + maybe(q) + 3))
   return Math.min(4, Math.max(1, Math.floor(bodyColumns / widest)))
 }
 

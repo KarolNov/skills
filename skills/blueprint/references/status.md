@@ -6,7 +6,7 @@ Shared by `blueprint-drift` and `blueprint-sync`, and by `blueprint` when it wri
 
 For each capability in scope:
 
-- **Code side**: `python3 .blueprint/drift.py check --json <capabilities>` gives `in-sync`, `code-moved` (with the files added, removed or edited since the last stamp), `deps-moved`, `possibly-affected`, `no-spec` or `no-anchors`, plus each capability's drift `chance` (0-1), `confidence` (`high` or `low`) and the `reasons` behind both. It exits 1 when any capability is `code-moved` or `deps-moved`, and 2 on a bad `drift.scoring` setting or an unknown capability: report that error instead of a status.
+- **Code side**: `python3 .blueprint/drift.py check --json <capabilities>` gives `in-sync`, `code-moved` (with the files added, removed or edited since the last stamp), `deps-moved` (code it imports, or a failing tagged test, took its drift chance to the threshold), `possibly-affected` (a chance above 0 but below the threshold), `no-spec` or `no-anchors`, plus each capability's drift `chance` (0-1), `confidence` (`high` or `low`) and the `reasons` behind both, naming the imported files that changed. It exits 1 when any capability is `code-moved` or `deps-moved`, and 2 on a bad `drift.scoring` setting or an unknown capability: report that error instead of a status. `deps-moved` counts as code moved: it suggests sync, or drift first when the spec moved too. `possibly-affected` is not drift: show it with its chance, suggest nothing, and leave it out of a bare sync.
 - **Spec side**: fetch the page's current version marker (see the backend file) and compare it with `specVersion`. Different means the spec moved: someone edited intent outside the code. Diff `baseline/<capability>.md` against the current page, matching requirements by name, to see which requirements changed.
 
 Show one table:
@@ -16,6 +16,7 @@ Show one table:
 | `auth/session` | moved (3 files) | moved | drift first, then sync |
 | `billing/invoices` | — | moved | drift |
 | `search` | moved (1 file) | — | drift or sync, by which side is right |
+| `billing/refunds` | imports moved (0.5 · medium) | — | sync |
 
 Which skill fits is a question of **which side is right**:
 

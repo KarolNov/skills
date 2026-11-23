@@ -450,10 +450,13 @@ class Scored(MapPage):
                                      "reasons": [cls.MAYBE, "confidence medium: no test results given"]}}
         for n in data["nodes"]:
             n.update(rows.get(n["id"], {}))
-        sys.path.insert(0, str(FAKEREPO.parent.parent))
-        import graph
+        # Rendered in a child run inside the fake repo: graph imports drift, which finds the repo on import.
         cls.map = repo.root / "scored.html"
-        cls.map.write_text(graph.render(data), encoding="utf-8")
+        render = ("import json, sys; sys.path.insert(0, sys.argv[1]); import graph; "
+                  "sys.stdout.write(graph.render(json.load(sys.stdin)))")
+        page = subprocess.run([sys.executable, "-c", render, str(FAKEREPO.parent.parent)], cwd=repo.root,
+                              input=json.dumps(data), capture_output=True, text=True, env=ENV, check=True)
+        cls.map.write_text(page.stdout, encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):

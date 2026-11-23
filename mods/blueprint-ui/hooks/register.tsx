@@ -835,7 +835,9 @@ export const register: Register = (on, options) => {
       </Box>
     )
     const quiet = [...board.quiet].sort((a, b) => a.name.localeCompare(b.name))
-    const cols = columnsFor(quiet, e.props.bodyColumns ?? 60)
+    // The terminal has no hover, so there a possibly affected cell shows its score inline.
+    const inlineMaybe = e.surface === 'terminal'
+    const cols = columnsFor(quiet, e.props.bodyColumns ?? 60, inlineMaybe)
 
     return (
       <Box flexDirection="column" gap={1}>
@@ -921,7 +923,7 @@ export const register: Register = (on, options) => {
                 <Box key={`quiet-row-${i}`} flexDirection="row">
                   {row.map(q => {
                     const go = openId(q.page)
-                    // Possibly affected: still in sync, marked, its chance shown while the pointer is on the cell.
+                    // Possibly affected: still in sync, marked, its chance shown while the pointer is on the cell (inline on the terminal).
                     const mark = q.unknown ? (
                       <Text color="warning">?</Text>
                     ) : q.maybe ? (
@@ -943,7 +945,9 @@ export const register: Register = (on, options) => {
                             {mark} {q.name}
                           </Text>
                         )}
-                        {q.maybe ? (
+                        {q.maybe && inlineMaybe ? (
+                          <Text dimColor> · possibly affected · {q.maybe}</Text>
+                        ) : q.maybe ? (
                           <Box display="none" hover={{ display: 'flex' }}>
                             <Text dimColor> · possibly affected · {q.maybe}</Text>
                           </Box>

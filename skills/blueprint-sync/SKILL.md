@@ -7,7 +7,7 @@ argument-hint: "[capability ...] [--deep]"
 
 # Spec sync
 
-Arguments: `$ARGUMENTS`: capability names (default: every capability whose code moved), and `--deep` to compare whole specs with the code even where nothing looks moved.
+Arguments: `$ARGUMENTS`: capability names (default: every capability whose code moved, `code-moved` or `deps-moved`), and `--deep` to compare whole specs with the code even where nothing looks moved.
 
 The **code is right**; the question is whether the spec still describes it. You change the spec here, never the code. If a code change looks like a mistake, that row belongs to `blueprint-drift`: say so and leave it.
 
@@ -28,6 +28,8 @@ For each `code-moved` capability:
 3. For each behavior change, find the requirement it touches:
    - **Intended**: a commit message, PR or blueprint says so, or it extends behavior without contradicting the spec. Draft the spec edit.
    - **Suspect**: it contradicts a requirement and nothing says that was meant. Ask the user whether the code is right. If not, hand the requirement to `blueprint-drift` and leave it.
+
+For each `deps-moved` capability, its own files didn't change, but code it imports did: the `reasons` from `drift.py check` name those files. Read `git diff <its syncedCommit in blueprint.json> -- <those files>` and how the capability's anchored code uses what changed, then sort and match the changes as above. When no behavior change reaches it, there is no spec edit: say so in its report line and do the spec bookkeeping, so it reads in sync again.
 
 With `--deep`, also compare the whole spec with the code: requirements that describe behavior the code no longer has, and observable behavior in the anchored code that no requirement mentions. Run `drift.py unanchored` and propose anchors for changed files that implement behavior but belong to no capability.
 

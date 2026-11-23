@@ -62,6 +62,8 @@ def build(state=None, files=None):
     # Scored as `drift.py check` scores it; a bad drift.scoring value still draws the map, at the
     # defaults, and says why (check itself refuses to report).
     try:
+        if not isinstance(state.get("drift", {}), dict):
+            raise drift.SettingError("drift must be an object")
         settings, scoring_error = drift.scoring(state), None
     except drift.SettingError as e:
         settings, scoring_error = drift.scoring({}), str(e)
