@@ -80,27 +80,29 @@
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "1d90bd8d80df65e7",
+      "specVersion": "bc798ec7eb3cd648",
       "anchorsFiles": {
-        "skills/blueprint-setup/SKILL.md": "75c78febc368",
-        "skills/blueprint-setup/templates/blueprint-drift.yml": "e5ae1ed33584"
+        "skills/blueprint-setup/SKILL.md": "5804a047a59f",
+        "skills/blueprint-setup/templates/blueprint-drift.yml": "c3d1aa204f9e"
       },
-      "syncedCommit": "e773a0d616841c5d046b45f978215ec3badb9813"
+      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
     },
     "blueprint/sync": {
       "ref": "https://app.notion.com/p/41c43cce21f281ef9bfcf823c8b351e2",
       "anchors": [
         "skills/blueprint-sync/**",
         "skills/blueprint/scripts/drift.py",
+        "skills/blueprint/scripts/drift_ts.mjs",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "c15a281d7ac604d9",
+      "specVersion": "a212a1e7834a816f",
       "anchorsFiles": {
-        "skills/blueprint-sync/SKILL.md": "12c01a689528",
-        "skills/blueprint/references/status.md": "a7f94fed610e",
-        "skills/blueprint/scripts/drift.py": "00c8741137ce"
+        "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
+        "skills/blueprint/references/status.md": "7d6ca146666d",
+        "skills/blueprint/scripts/drift.py": "db03a198a74d",
+        "skills/blueprint/scripts/drift_ts.mjs": "aab54a05a96e"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
@@ -131,13 +133,13 @@
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "f58e68819c76d3a0",
+      "specVersion": "5905ce6a2e3aa2b7",
       "anchorsFiles": {
         "mods/blueprint-ui/.claude-plugin/plugin.json": "6b7771ba4d56",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
         "mods/blueprint-ui/hooks/blocks.ts": "9efd548adfa7",
-        "mods/blueprint-ui/hooks/board.test.ts": "1c814ad14052",
-        "mods/blueprint-ui/hooks/board.ts": "458d09dba972",
+        "mods/blueprint-ui/hooks/board.test.ts": "ff27882fc891",
+        "mods/blueprint-ui/hooks/board.ts": "236ef12e26f7",
         "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
         "mods/blueprint-ui/hooks/comment.test.tsx": "580523934513",
         "mods/blueprint-ui/hooks/follow.test.tsx": "77487ef47eda",
@@ -146,18 +148,18 @@
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
         "mods/blueprint-ui/hooks/read.test.tsx": "15759035f3fe",
         "mods/blueprint-ui/hooks/register.test.tsx": "5ea41ead50c4",
-        "mods/blueprint-ui/hooks/register.tsx": "c1eaa561a874",
+        "mods/blueprint-ui/hooks/register.tsx": "bdd16764ae57",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
         "mods/blueprint-ui/hooks/split.test.tsx": "7a0d8f19a96e",
         "mods/blueprint-ui/hooks/split.ts": "6047e7e6dcfc",
-        "mods/blueprint-ui/hooks/status.test.tsx": "17c17f39489d",
+        "mods/blueprint-ui/hooks/status.test.tsx": "dc1406855041",
         "mods/blueprint-ui/hooks/tabs.test.ts": "9c6ed3c50204",
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "3a7226699b65"
+        "mods/blueprint-ui/types/index.d.ts": "5120823a1d59"
       },
-      "syncedCommit": "9d529ff170c7a34151bf1f4b47c1b686a61f98a7"
+      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
@@ -192,15 +194,15 @@
         "skills/blueprint/scripts/vendor/**",
         "skills/blueprint/references/map.md"
       ],
-      "specVersion": "a3597569ea9525a3",
+      "specVersion": "82f1cfc92ca5c6d5",
       "anchorsFiles": {
-        "skills/blueprint/references/map.md": "2f87fd47ed27",
-        "skills/blueprint/scripts/graph.py": "508edab65058",
-        "skills/blueprint/scripts/map_template.html": "b40f1a43aba6",
-        "skills/blueprint/scripts/test_graph.py": "8b54d0ab82b4",
+        "skills/blueprint/references/map.md": "a501178660d4",
+        "skills/blueprint/scripts/graph.py": "d75eb7c13941",
+        "skills/blueprint/scripts/map_template.html": "57a4eceb7f58",
+        "skills/blueprint/scripts/test_graph.py": "26363826714e",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       },
-      "syncedCommit": "122e74537b19cb5ed40afd2aac2aa175f7bf33f3"
+      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
     },
     "blueprint/coverage": {
       "ref": "https://app.notion.com/p/42043cce21f2815795a4de5f5139807a",
@@ -208,12 +210,12 @@
         "skills/blueprint/scripts/coverage.py",
         "skills/blueprint/references/coverage.md"
       ],
-      "specVersion": "0c1f1403d09d8583",
+      "specVersion": "2e05bc0aa0651a56",
       "anchorsFiles": {
         "skills/blueprint/references/coverage.md": "46407ac6a8c6",
-        "skills/blueprint/scripts/coverage.py": "2980d5843bdc"
+        "skills/blueprint/scripts/coverage.py": "2b06f6437a04"
       },
-      "syncedCommit": "d4bb4a89e27943c25727360dd2dcdaae72f0af58"
+      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
     }
   },
   "changes": {
@@ -270,8 +272,9 @@
       "brief": "https://app.notion.com/p/42143cce21f28197909bf81f1d454713",
       "review": "https://app.notion.com/p/41e43cce21f28136838cea65f042b09d",
       "playground": "embedded in the review (transitive-drift-playground.html)",
-      "status": "building",
-      "baseCommit": "a4645688e90c862c2bb236ee90c6749f87b6cf29"
+      "status": "applied",
+      "baseCommit": "a4645688e90c862c2bb236ee90c6749f87b6cf29",
+      "branch": "kn/transitive-drift-specs"
     }
   },
   "artifacts": {

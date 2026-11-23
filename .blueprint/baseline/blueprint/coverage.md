@@ -91,3 +91,12 @@ A tag whose capability is not in `specs`, or whose scenario is not in that capab
   - **GIVEN** a repo with `e2e/` Playwright tests and `*.test.ts` files beside the code, and no `tests.kinds`
   - **WHEN** the user runs `/blueprint coverage`
   - **THEN** it proposes `e2e: ["e2e/**"]` and `unit: ["**/*.test.ts"]`, writes them on a yes, and then reports
+
+### Requirement: Test names for tags
+
+Coverage SHALL record, for each tag, the name of the test declared on the first test declaration below it (`test`, `it` or `describe` calls in JS/TS, `def test_…` in Python, the `fn` after `#[test]` in Rust, `func Test…` in Go), and `--json` SHALL include it. A tag with no test declaration below it SHALL be recorded without a name.
+
+- **Scenario: Named Vitest test**
+  - **GIVEN** `// @scenario auth/session: Expired token` above `it('rejects an expired token', …)`
+  - **WHEN** `coverage.py --json` runs
+  - **THEN** the claim carries the test name `rejects an expired token`
