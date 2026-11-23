@@ -6,10 +6,14 @@ implements it. `stamp` records a hash of each file those anchors match; `check` 
 every capability whose files were added, removed or edited since, i.e. code that moved
 since its spec was last synced. It never talks to the spec backend.
 
-    drift.py check [--json] [CAPABILITY ...]   each capability's status, drift chance (0-1),
+    drift.py check [--json] [--tests run|REPORT.xml] [CAPABILITY ...]
+                                               each capability's status, drift chance (0-1),
                                                confidence and reasons; exit 1 if any is
                                                code-moved or deps-moved, 2 on a bad
-                                               drift.scoring setting or unknown capability
+                                               drift.scoring setting, unknown capability or
+                                               unusable --tests. --tests run runs tests.run
+                                               ({"command", "report"}); a failing test tagged
+                                               with a capability's scenario scores 1
     drift.py stamp CAPABILITY ... | --all      record the current state as synced, with the
                                                import closure of TS/JS capabilities in
                                                .blueprint/closure/<capability>.json
@@ -243,12 +247,14 @@ def is_ts(paths):
     return any(p.endswith(TS_EXTENSIONS) for p in paths)
 
 
-def assess(spec, paths, settings, hashes=file_hashes, imports=None):
+def assess(spec, paths, settings, hashes=file_hashes, imports=None, tests=None):
     """One capability's row for check: status, drift chance, confidence and reasons.
 
     Signals are (score, reason) pairs. A changed anchored file scores 1. `imports` is what
     compare_closure found for a TS/JS capability: (signals, confidence, confidence reason);
     None for one with no closure stamped, which is then low confidence, direct changes only.
+    `tests` is what a JUnit report says of its tagged tests: (signals, whether any has a
+    result); None when check was given no report. Results raise medium confidence to high.
     """
     status, changed = code_status(spec, paths, hashes)
     if status in ("no-anchors", "no-spec"):
@@ -258,6 +264,8 @@ def assess(spec, paths, settings, hashes=file_hashes, imports=None):
     signals = [(1.0, f"{f} {verb(f, spec)} (anchored) → 1") for f in changed]
     if imports is not None:
         signals += imports[0]
+    if tests is not None:
+        signals += tests[0]
     chance = combine(s for s, _ in signals)
     if changed:
         status = "code-moved"
@@ -268,7 +276,13 @@ def assess(spec, paths, settings, hashes=file_hashes, imports=None):
     else:
         status = "in-sync"
     reasons = [r for _, r in sorted(signals, key=lambda x: (-x[0], x[1]))]
-    if imports is not None:
+    if imports is not None and imports[1] == "medium" and tests is not None:
+        if tests[1]:
+            confidence = "high"
+        else:
+            confidence = "medium"
+            reasons.append("confidence medium: no results for its tagged tests in the report")
+    elif imports is not None:
         confidence = imports[1]
         reasons.append(imports[2])
     elif is_ts(paths) or is_ts(spec.get("anchorsFiles", {})):
@@ -482,9 +496,10 @@ def file_closure(entries, files, settings):
     return {"nodes": nodes, "external": sorted(external)}
 
 
-def build_closure(mode, found, why=None):
+def build_closure(mode, found, locked, why=None):
     """The closure file's contents from drift_ts.mjs's or file_closure's output for one
-    capability: symbols with their hashes, files (min distance, hash, whether reached whole)."""
+    capability: symbols with their hashes, files (min distance, hash, whether reached whole),
+    and the external packages it imports with their locked versions (None when unlocked)."""
     nodes = found["nodes"]
     hashes = file_hashes(sorted({n["file"] for n in nodes if (ROOT / n["file"]).is_file()}))
     files, symbols = {}, []
@@ -500,7 +515,8 @@ def build_closure(mode, found, why=None):
         out["why"] = why
     out.update(files=dict(sorted(files.items())),
                symbols=sorted(symbols, key=lambda s: (s["file"], s["symbol"])),
-               external=found["external"])
+               external=found["external"],
+               locked={pkg: locked.get(pkg) for pkg in found["external"]})
     return out
 
 
@@ -517,10 +533,11 @@ def stamp_closures(names, specs, files, settings):
     found, why = run_helper(wanted, settings)
     if why:
         notice(why)
+    locked = locked_versions()
     out = {}
     for n, e in wanted.items():
-        closure = (build_closure("symbol", found["closures"][n]) if found
-                   else build_closure("file", file_closure(e, files, settings), why))
+        closure = (build_closure("symbol", found["closures"][n], locked) if found
+                   else build_closure("file", file_closure(e, files, settings), locked, why))
         path = closure_path(n)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(closure, indent=2, ensure_ascii=False) + "\n")
@@ -591,26 +608,276 @@ def import_signals(rows, settings):
     found, why = run_helper(by_symbol, settings) if by_symbol else (None, None)
     if why:
         notice(why)
+    locked = locked_versions() if any("locked" in c for c in closures.values()) else {}
     out = {}
     for n, closure in closures.items():
+        bumps = lock_signals(closure, locked, settings)
         if n in by_symbol and found:
             now = found["closures"].get(n, {"nodes": [], "external": []})
-            out[n] = (compare_closure(closure, now, settings), "medium",
+            out[n] = (compare_closure(closure, now, settings) + bumps, "medium",
                       "confidence medium: no test results given")
         else:
             reason = (why if n in by_symbol else
                       f"{closure.get('why') or 'typescript was not used'} when stamped")
-            out[n] = (compare_closure(closure, None, settings), "low",
+            out[n] = (compare_closure(closure, None, settings) + bumps, "low",
                       f"confidence low: {reason}, so imports are followed by file")
+    return out
+
+
+# The lockfile signal: the closure records the locked version of each external package it
+# imports; a different version in the lockfile now scores lockfileWeight. npm (package-lock.json,
+# npm-shrinkwrap.json), pnpm (pnpm-lock.yaml) and yarn (yarn.lock, classic and berry) are read
+# at the repo root with the standard library. A package locked at several versions reads as
+# all of them, sorted, so a bump of any one of them counts.
+
+LOCKFILES = ("package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock")
+PNPM_KEY = re.compile(r"""^  (['"]?)(\S.*?)\1:(?:\s|$)""")
+YARN_VERSION = re.compile(r"""^  version:?\s+"?([^"\s]+)"?\s*$""")
+
+
+def npm_versions(text):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return
+    if not isinstance(data, dict):
+        return
+    packages = data.get("packages")
+    if isinstance(packages, dict) and packages:  # lockfileVersion 2 and 3
+        for key, rec in packages.items():
+            if ("node_modules/" in key and isinstance(rec, dict) and not rec.get("link")
+                    and isinstance(rec.get("version"), str)):
+                yield key.rsplit("node_modules/", 1)[1], rec["version"]
+        return
+    stack = [data.get("dependencies")]  # lockfileVersion 1: nested dependencies
+    while stack:
+        deps = stack.pop()
+        for name, rec in (deps.items() if isinstance(deps, dict) else ()):
+            if isinstance(rec, dict):
+                if isinstance(rec.get("version"), str):
+                    yield name, rec["version"]
+                stack.append(rec.get("dependencies"))
+
+
+def pnpm_versions(text):
+    """From the `packages:` keys: `/zod@3.22.0` (v6), `zod@3.22.0` (v9), `/zod/3.22.0` (v5),
+    with peer suffixes (`(react@18.2.0)`, `_react@18.2.0`) dropped."""
+    major, section = 6, None
+    for line in text.split("\n"):
+        if line and not line[0].isspace():
+            section = line.split(":", 1)[0].strip()
+            if section == "lockfileVersion":
+                try:
+                    major = int(float(line.split(":", 1)[1].strip().strip("'\"")))
+                except ValueError:
+                    pass
+            continue
+        m = section == "packages" and PNPM_KEY.match(line)
+        if not m:
+            continue
+        key = m.group(2).lstrip("/")
+        if major < 6:
+            name, _, version = key.rpartition("/")
+            version = version.split("_", 1)[0]
+        else:
+            key = key.split("(", 1)[0]
+            at = key.rfind("@")
+            name, version = (key[:at], key[at + 1:]) if at > 0 else ("", "")
+        if name and version:
+            yield name, version
+
+
+def yarn_versions(text):
+    """From each entry: its header (`zod@^3.22.0, "zod@npm:^3":`) names the package, its
+    `version` line (indented two spaces) the locked version."""
+    names = []
+    for line in text.split("\n"):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            names = []
+            for spec in line.rstrip().rstrip(":").split(","):
+                spec = spec.strip().strip('"')
+                at = spec.find("@", 1)
+                if at > 0 and spec[:at] not in names:
+                    names.append(spec[:at])
+            continue
+        m = YARN_VERSION.match(line)
+        if m and names:
+            for name in names:
+                yield name, m.group(1)
+            names = []
+
+
+def locked_versions():
+    """{package: version} from the repo's lockfiles; several versions joined, sorted."""
+    readers = {"pnpm-lock.yaml": pnpm_versions, "yarn.lock": yarn_versions}
+    found = {}
+    for name in LOCKFILES:
+        try:
+            text = (ROOT / name).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for pkg, version in readers.get(name, npm_versions)(text):
+            found.setdefault(pkg, set()).add(version)
+    return {pkg: ", ".join(sorted(vs)) for pkg, vs in found.items()}
+
+
+def lock_signals(closure, locked, settings):
+    """(lockfileWeight, reason) for each external package whose locked version moved since
+    the closure was stamped. A closure stamped before versions were recorded gives none."""
+    stamped = closure.get("locked")
+    weight = settings["lockfileWeight"]
+    if not isinstance(stamped, dict) or weight <= 0:
+        return []
+    out = []
+    for pkg, was in sorted(stamped.items()):
+        now = locked.get(pkg)
+        if now != was:
+            out.append((weight, f"{pkg} {was or 'not locked'} → {now or 'not locked'} in the "
+                                f"lockfile → {fmt_score(weight)}"))
+    return out
+
+
+# The test signal: JUnit results matched to tagged tests by file and test name. A failing
+# test tagged with one of a capability's scenarios scores 1; passing ones raise confidence only.
+# Tests run only on `check --tests run`; otherwise a report is read, or there are no results.
+
+class TestsError(Exception):
+    """--tests can't give results (no tests.run, no report, unreadable XML): exit 2."""
+
+
+def tests_run(state):
+    """(command, report path) from tests.run in blueprint.json, or TestsError naming it."""
+    tests = state.get("tests")
+    run = tests.get("run") if isinstance(tests, dict) else None
+    if run is None:
+        raise TestsError('tests.run is required in .blueprint/blueprint.json for --tests run: '
+                         '{"command": "<runs the tests>", "report": "<the JUnit XML it writes>"}')
+    if not (isinstance(run, dict) and isinstance(run.get("command"), str) and run["command"]
+            and isinstance(run.get("report"), str) and run["report"]):
+        raise TestsError('tests.run must be {"command": "<runs the tests>", '
+                         '"report": "<the JUnit XML it writes>"}')
+    return run["command"], ROOT / run["report"]
+
+
+def run_tests(state):
+    """Run tests.run's command at the repo root (its output to stderr) and return the report
+    it wrote. A failing run is fine: failures are what the report is for."""
+    command, report = tests_run(state)
+    before = report.stat().st_mtime_ns if report.is_file() else None
+    print(f"running tests: {command}", file=sys.stderr, flush=True)
+    subprocess.run(command, shell=True, cwd=ROOT, stdout=sys.stderr, stdin=subprocess.DEVNULL)
+    if not report.is_file() or report.stat().st_mtime_ns == before:
+        raise TestsError(f"tests.run didn't write its report: {report.relative_to(ROOT)}")
+    return report
+
+
+def read_junit(path):
+    """[{"where": [file or class locators], "name", "outcome"}] for each <testcase>, outcome
+    "failed" (a failure or error), "skipped" or "passed"."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError) as e:
+        raise TestsError(f"can't read the JUnit report {path}: {e}") from None
+    cases = []
+
+    def walk(node, suite):
+        for child in node:
+            if child.tag == "testsuite":
+                walk(child, [child.get("file"), child.get("name")])
+            elif child.tag == "testcase":
+                if child.find("failure") is not None or child.find("error") is not None:
+                    outcome = "failed"
+                elif child.find("skipped") is not None:
+                    outcome = "skipped"
+                else:
+                    outcome = "passed"
+                where = [w for w in [child.get("file"), child.get("classname"), *suite] if w]
+                cases.append({"where": where, "name": child.get("name") or "", "outcome": outcome})
+            else:
+                walk(child, suite)
+    top = ET.Element("report")  # the root may be <testsuites>, one <testsuite> or a <testcase>
+    top.append(root)
+    walk(top, [])
+    return cases
+
+
+def locates(where, path):
+    """Whether a report's file or class name points at the repo file path: the same path
+    (relative or absolute), a dotted module (`tests.test_auth.TestLogin`), or a Go package."""
+    where = where.replace("\\", "/").strip()
+    if where.startswith("./"):
+        where = where[2:]
+    if not where:
+        return False
+    if where == path or where.endswith("/" + path) or path.endswith("/" + where):
+        return True
+    folder = posixpath.dirname(path)
+    if folder and (where == folder or where.endswith("/" + folder)):
+        return True
+    module = posixpath.splitext(path)[0].replace("/", ".")
+    parts = where.split(".")
+    return any(module == p or module.endswith("." + p)
+               for p in (".".join(parts[:k]) for k in range(len(parts), 0, -1)) if "/" not in p)
+
+
+NEST = (" > ", " › ", " ")  # how runners join describe blocks and test names
+
+
+def names_match(case, test):
+    """Whether a report's test name is the tagged test: the same, nested in describe blocks,
+    a describe holding it (`test > …`), parametrized (`test[…]`) or a Go subtest (`Test/…`)."""
+    if case == test or any(case.endswith(sep + test) for sep in NEST):
+        return True
+    return any(case.startswith(test + sep) for sep in (" > ", " › ", "[", "/"))
+
+
+def tested(specs, files, cases):
+    """{capability: (signals, whether any of its tagged tests has a result)} for capabilities
+    with tagged, named tests. A tagged test skipped or missing from the report has no result."""
+    out = {}
+    for path, data in tag_files(files):
+        for line, cap, scenario, test in scan_tags(data.decode("utf-8-sig", "replace")):
+            if cap not in specs or not test:
+                continue
+            outcomes = {c["outcome"] for c in cases if names_match(c["name"], test)
+                        and any(locates(w, path) for w in c["where"])}
+            signals, seen = out.setdefault(cap, ([], False))
+            if "failed" in outcomes:
+                signals.append((1.0, f'test "{test}" ({path}:{line}) failed, claiming '
+                                     f'"{scenario}" → 1'))
+            if outcomes & {"failed", "passed"}:
+                out[cap] = (signals, True)
     return out
 
 
 DRIFTED = ("code-moved", "deps-moved")
 
 
+def check_args(args):
+    """(--json, --tests value or None, capability names)."""
+    as_json, tests, names = False, None, []
+    it = iter(args)
+    for a in it:
+        if a == "--json":
+            as_json = True
+        elif a == "--tests" or a.startswith("--tests="):
+            tests = a.split("=", 1)[1] if "=" in a else next(it, None)
+            if not tests:
+                raise TestsError("--tests needs `run` or a JUnit XML report")
+        elif not a.startswith("--"):
+            names.append(a)
+    return as_json, tests, names
+
+
 def cmd_check(args):
-    as_json = "--json" in args
-    names = [a for a in args if not a.startswith("--")]
+    try:
+        as_json, tests_from, names = check_args(args)
+    except TestsError as e:
+        print(e, file=sys.stderr)
+        return 2
     state, files = load(), repo_files()
     specs = state.get("specs", {})
     try:
@@ -621,6 +888,14 @@ def cmd_check(args):
     if unknown := [n for n in names if n not in specs]:
         print(f"unknown capability: {', '.join(unknown)}", file=sys.stderr)
         return 2
+    results = None
+    if tests_from is not None:
+        try:
+            report = run_tests(state) if tests_from == "run" else Path(tests_from)
+            results = tested(specs, files, read_junit(report))
+        except TestsError as e:
+            print(e, file=sys.stderr)
+            return 2
     hashes = cached_hashes()
     paths = {name: matched(specs[name], files) for name in names or specs}
     # Only stamped capabilities have a closure to compare; the rest report as before.
@@ -630,7 +905,8 @@ def cmd_check(args):
     report = []
     for name in names or specs:
         spec = specs[name]
-        row = assess(spec, paths[name], settings, hashes, imports.get(name))
+        row = assess(spec, paths[name], settings, hashes, imports.get(name),
+                     None if results is None else results.get(name, ([], False)))
         out = {"capability": name, "status": row["status"]}
         if row["status"] == "code-moved":
             out["syncedCommit"] = spec.get("syncedCommit")
@@ -821,6 +1097,63 @@ def tag_line(line):
     """The text after `@scenario` when this line (bytes, any encoding) is a tag, else None."""
     m = TAG.match(line.decode("utf-8", "replace").lstrip("\ufeff"))
     return m and m.group(1)
+
+
+# Each tag learns the name of the test declared right below it, past blank lines, comments
+# (other tags among them) and decorators or attributes, so a JUnit report can be matched to it.
+TAG_END = re.compile(r"\s*(?:\*+/|-->)\s*$")
+_COMMENT = re.compile(r"^\s*(?://|#(?!!?\[)|--|/\*|\*|<!--)")
+_ATTRIBUTE = re.compile(r"^\s*(?:@[A-Za-z_]|#!?\[)")
+_JS_TEST = re.compile(r"""^\s*(?:test|it|describe)(?:\.\w+)*\s*\(\s*(['"`])((?:\\.|(?!\1).)*)\1""")
+_PY_TEST = re.compile(r"^\s*(?:async\s+)?def\s+(test\w*)\s*\(")
+_GO_TEST = re.compile(r"^\s*func\s+(Test\w*)\s*\(")
+_RUST_FN = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)")
+
+
+def test_below(lines, i):
+    """The name of the test declared first below lines[i], or None when the first code line
+    there declares none: `test`/`it`/`describe` calls in JS/TS, `def test_…` in Python,
+    `func Test…` in Go, the `fn` after a `#[…test…]` attribute in Rust."""
+    rust_test, depth = False, 0
+    for line in lines[i + 1:]:
+        if depth > 0:  # inside a decorator's arguments
+            depth += line.count("(") - line.count(")")
+            continue
+        if not line.strip():
+            continue
+        if _ATTRIBUTE.match(line):
+            rust_test = rust_test or (line.lstrip().startswith("#") and "test" in line)
+            depth = line.count("(") - line.count(")")
+            continue
+        if _COMMENT.match(line):
+            continue
+        if m := _JS_TEST.match(line):
+            return re.sub(r"\\(.)", r"\1", m.group(2))
+        if m := _PY_TEST.match(line) or _GO_TEST.match(line):
+            return m.group(1)
+        if rust_test and (m := _RUST_FN.match(line)):
+            return m.group(1)
+        return None
+    return None
+
+
+def scan_tags(text):
+    """[(line, capability, scenario, test name)] for each tag in text; capability None when
+    the tag is malformed (scenario then holds its text), test name None when no test follows."""
+    lines, tags = text.split("\n"), []
+    for n, line in enumerate(lines, 1):
+        m = TAG.match(line)
+        if not m:
+            continue
+        rest = TAG_END.sub("", m.group(1))
+        cap, sep, name = rest.partition(":")
+        cap, name = cap.strip().strip("`"), " ".join(name.split())
+        test = test_below(lines, n - 1)
+        if not sep or not cap or not name or " " in cap:
+            tags.append((n, None, rest, test))
+        else:
+            tags.append((n, cap, name, test))
+    return tags
 
 
 def tag_rewrites(old, new):

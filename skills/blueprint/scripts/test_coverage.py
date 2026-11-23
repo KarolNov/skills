@@ -118,7 +118,8 @@ class ScenarioTags(TestCase):
                        + tag("    //", "auth/session: Expired session redirects to login")
                        + "    #[test]\n    fn expired() {}\n}\n"})
         claims = scenarios(r.data())["Expired session redirects to login"]["claims"]
-        self.assertEqual(claims, [{"file": "src/session.rs", "line": 2, "kind": "unit"}])
+        self.assertEqual(claims, [{"file": "src/session.rs", "line": 2, "kind": "unit",
+                                   "test": "expired"}])
 
     def test_tag_in_a_python_test(self):
         # @scenario blueprint/coverage: Tag in a Python test
@@ -126,7 +127,8 @@ class ScenarioTags(TestCase):
                        tag("#", "auth/session: Expired session redirects to login")
                        + "def test_expired():\n    pass\n"})
         claims = scenarios(r.data())["Expired session redirects to login"]["claims"]
-        self.assertEqual(claims, [{"file": "tests/test_session.py", "line": 1, "kind": "unit"}])
+        self.assertEqual(claims, [{"file": "tests/test_session.py", "line": 1, "kind": "unit",
+                                   "test": "test_expired"}])
 
     def test_every_comment_style_and_loose_matching(self):
         r = self.repo({"tests/a.sql": tag("--", "auth/session:   expired SESSION  redirects to login"),
@@ -147,6 +149,34 @@ class ScenarioTags(TestCase):
         sc = scenarios(r.data())
         self.assertEqual([c["kind"] for c in sc["Logout clears cookie"]["claims"]], ["e2e", "unit"])
         self.assertEqual(len(sc["Logout redirects home"]["claims"]), 2)
+
+    def test_named_vitest_test(self):
+        # @scenario blueprint/coverage: Named Vitest test
+        r = self.repo({"src/session.test.ts": tag("//", "auth/session: Expired session redirects to login")
+                       + "it('rejects an expired token', () => {\n  expect(1).toBe(1)\n})\n"})
+        claims = scenarios(r.data())["Expired session redirects to login"]["claims"]
+        self.assertEqual(claims[0]["test"], "rejects an expired token")
+
+    def test_test_names_in_every_language(self):
+        expired = "auth/session: Expired session redirects to login"
+        cases = {
+            "src/a.test.ts": (tag("//", expired) + tag("//", "auth/session: Fresh session stays")
+                              + "test.skip(\"it's \\\"quoted\\\"\", () => {})\n",
+                              'it\'s "quoted"'),
+            "src/b.test.ts": (tag("//", expired) + "describe(`session`, () => {})\n", "session"),
+            "tests/test_c.py": (tag("    #", expired) + "    @pytest.mark.parametrize(\n"
+                                "        'x', [1, 2])\n    async def test_c(self, x):\n", "test_c"),
+            "src/d_test.go": (tag("//", expired) + "func TestD(t *testing.T) {}\n", "TestD"),
+            "src/e.rs": (tag("//", expired) + "#[tokio::test]\nasync fn e() {}\n", "e"),
+            "src/f.rs": (tag("//", expired) + "fn not_a_test() {}\n", None),
+            "src/g.test.ts": (tag("//", expired) + "const helper = 1\nit('too far', () => {})\n",
+                              None),
+            "src/h.test.ts": (tag("//", expired), None),
+        }
+        r = self.repo({path: text for path, (text, _) in cases.items()})
+        claims = scenarios(r.data())["Expired session redirects to login"]["claims"]
+        self.assertEqual({c["file"]: c["test"] for c in claims},
+                         {path: name for path, (_, name) in cases.items()})
 
     def test_tag_mid_line_or_in_a_string_is_not_a_tag(self):
         r = self.repo({"tests/x.py": f'x = "{AT} auth/session: Logout clears cookie"\n'
@@ -190,7 +220,7 @@ class TestKinds(TestCase):
                       state(kinds={"e2e": ["e2e/**"]}))
         data = r.data()
         self.assertEqual(scenarios(data)["Fresh session stays"]["claims"],
-                         [{"file": "src/session.go", "line": 1, "kind": None}])
+                         [{"file": "src/session.go", "line": 1, "kind": None, "test": None}])
         self.assertEqual(data["summary"]["claimed"], 1)
         self.assertEqual([u["file"] for u in data["unclassified"]], ["src/session.go"])
         self.assertIn("Unclassified tags", r.run().stdout)

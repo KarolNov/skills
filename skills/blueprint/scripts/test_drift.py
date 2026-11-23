@@ -695,6 +695,215 @@ class Scoring(DriftTest):
         self.assertEqual(r.drift("check").returncode, 0)
 
 
+SESSION_TEST = ("# @scenario auth/session: Expired session redirects to login\n"
+                "def test_expired():\n    assert False\n\n"
+                "# @scenario auth/session: Fresh session stays\n"
+                "def test_fresh():\n    pass\n")
+
+
+def junit(*cases):
+    """A JUnit report: cases are (classname, name, outcome) with outcome passed, failed,
+    error or skipped."""
+    body = {"passed": "", "failed": '<failure message="no"/>', "error": '<error message="x"/>',
+            "skipped": "<skipped/>"}
+    rows = "".join(f'<testcase classname="{c}" name="{n}">{body[o]}</testcase>'
+                   for c, n, o in cases)
+    return f'<?xml version="1.0"?><testsuites><testsuite name="t">{rows}</testsuite></testsuites>'
+
+
+class Tests(DriftTest):
+    """check --tests: JUnit results matched to tagged tests by file and name."""
+
+    def stamped(self, state=None, files=None):
+        r = self.repo({"lib/session.py": "x = 1\n", "tests/test_session.py": SESSION_TEST,
+                       **(files or {})},
+                      state or {"specs": {"auth/session": spec("lib/**")}})
+        self.assertEqual(r.drift("stamp", "--all").returncode, 0)
+        return r
+
+    def check(self, r, *args):
+        out = r.drift("check", "--json", *args)
+        self.assertIn(out.returncode, (0, 1), out.stderr)
+        return out, {row["capability"]: row for row in json.loads(out.stdout)}
+
+    # @scenario blueprint/sync: Failing tagged test
+    def test_failing_tagged_test(self):
+        r = self.stamped()
+        r.write("report.xml", junit(("tests.test_session", "test_expired", "failed"),
+                                    ("tests.test_session", "test_fresh", "passed")))
+        out, rows = self.check(r, "--tests", "report.xml")
+        self.assertEqual(out.returncode, 1)
+        row = rows["auth/session"]
+        self.assertEqual((row["status"], row["chance"], row["confidence"]),
+                         ("deps-moved", 1.0, "high"))
+        self.assertEqual(row["reasons"], [
+            'test "test_expired" (tests/test_session.py:1) failed, claiming '
+            '"Expired session redirects to login" → 1'])
+        self.assertNotIn("changed", row)
+
+    def test_without_tests_nothing_runs_or_counts(self):
+        r = self.stamped()
+        r.write("report.xml", junit(("tests.test_session", "test_expired", "failed")))
+        out, rows = self.check(r)
+        self.assertEqual((out.returncode, rows["auth/session"]["status"]), (0, "in-sync"))
+
+    def test_passing_skipped_and_missing_tests_dont_move_it(self):
+        r = self.stamped()
+        for report in [junit(("tests.test_session", "test_expired", "passed")),
+                       junit(("tests.test_session", "test_expired", "skipped")),
+                       junit(("tests.test_other", "test_expired", "failed"),
+                             ("tests.test_session", "test_expired_again", "failed")),
+                       junit()]:
+            with self.subTest(report=report):
+                r.write("report.xml", report)
+                out, rows = self.check(r, "--tests=report.xml")
+                self.assertEqual((out.returncode, rows["auth/session"]["status"],
+                                  rows["auth/session"]["chance"]), (0, "in-sync", 0.0))
+
+    def test_error_counts_as_failing(self):
+        r = self.stamped()
+        r.write("report.xml", junit(("tests.test_session", "test_fresh", "error")))
+        _, rows = self.check(r, "--tests", "report.xml")
+        self.assertEqual(rows["auth/session"]["status"], "deps-moved")
+        self.assertIn('"Fresh session stays"', rows["auth/session"]["reasons"][0])
+
+    def test_code_moved_and_failing(self):
+        r = self.stamped()
+        r.write("lib/session.py", "x = 2\n")
+        r.write("report.xml", junit(("tests.test_session", "test_expired", "failed")))
+        _, rows = self.check(r, "--tests", "report.xml")
+        row = rows["auth/session"]
+        self.assertEqual((row["status"], row["chance"]), ("code-moved", 1.0))
+        self.assertEqual(len(row["reasons"]), 2)
+
+    def test_runners_report_shapes(self):
+        """Vitest names the file and nests describe titles; jest-junit may add a file
+        attribute; a single <testsuite> root; pytest parametrized; Go subtests."""
+        ts = ("// @scenario auth/session: Expired session redirects to login\n"
+              "it('rejects an expired token', () => {})\n")
+        go = ("// @scenario auth/session: Expired session redirects to login\n"
+              "func TestExpired(t *testing.T) {}\n")
+        files = {"src/session.test.ts": ts, "pkg/auth/session_test.go": go}
+        reports = {
+            "vitest": '<testsuites><testsuite name="src/session.test.ts"><testcase '
+                      'classname="src/session.test.ts" name="session &gt; rejects an expired '
+                      'token"><failure/></testcase></testsuite></testsuites>',
+            "jest": '<testsuite name="session"><testcase classname="session rejects an expired '
+                    'token" name="session rejects an expired token" file="/ci/repo/src/session'
+                    '.test.ts"><failure/></testcase></testsuite>',
+            "pytest": '<testsuites><testsuite><testcase classname="tests.test_session" '
+                      'name="test_expired[case-1]"><failure/></testcase></testsuite></testsuites>',
+            "go": '<testsuites><testsuite name="example.com/shop/pkg/auth"><testcase '
+                  'classname="example.com/shop/pkg/auth" name="TestExpired/past"><failure/>'
+                  '</testcase></testsuite></testsuites>',
+        }
+        r = self.stamped(files=files)
+        for runner, report in reports.items():
+            with self.subTest(runner=runner):
+                r.write("report.xml", report)
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], "deps-moved")
+
+    def test_run(self):
+        script = ("import pathlib, sys\nprint('ran the tests')\n"
+                  "pathlib.Path('out').mkdir(exist_ok=True)\n"
+                  "pathlib.Path('out/report.xml').write_text(sys.argv[1])\nsys.exit(1)\n")
+        report = junit(("tests.test_session", "test_expired", "failed"))
+        command = f"{sys.executable} run_tests.py '{report}'"
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": {"command": command, "report": "out/report.xml"}}},
+                         {"run_tests.py": script})
+        out, rows = self.check(r, "--tests", "run")
+        self.assertEqual(rows["auth/session"]["status"], "deps-moved")
+        self.assertIn("ran the tests", out.stderr)  # its output stays off stdout
+
+    def test_run_that_writes_no_report(self):
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": {"command": "true", "report": "out/report.xml"}}})
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("tests.run didn't write its report: out/report.xml", out.stderr)
+        r.write("out/report.xml", junit())  # a stale report from an earlier run
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2)
+
+    # @scenario blueprint/sync: Run mode without a command
+    def test_run_mode_without_a_command(self):
+        r = self.stamped()
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("tests.run", out.stderr)
+        self.assertEqual(out.stdout, "")
+
+    def test_unusable_tests_argument(self):
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": "pytest"}})
+        r.write("bad.xml", "<testsuites><testcase")
+        for args, message in [(["--tests"], "--tests needs"),
+                              (["--tests", "missing.xml"], "can't read the JUnit report"),
+                              (["--tests", "bad.xml"], "can't read the JUnit report"),
+                              (["--tests", "run"], "tests.run must be")]:
+            with self.subTest(args=args):
+                out = r.drift("check", *args)
+                self.assertEqual(out.returncode, 2)
+                self.assertIn(message, out.stderr)
+
+
+class Lockfile(DriftTest):
+    """The lockfile signal on the TS workspace fixture, followed by file (no typescript)."""
+
+    def workspace(self, scoring=None):
+        r = fakerepo.FakeRepo()
+        self.addCleanup(r.close)
+        fakerepo.ts_workspace(r)
+        if scoring:
+            r.update(lambda s: s.setdefault("drift", {}).__setitem__("scoring", scoring))
+        r.sync()
+        return r
+
+    def bump(self, r, version):
+        lock = json.loads(r.read("package-lock.json"))
+        lock["packages"]["node_modules/zod"]["version"] = version
+        r.write("package-lock.json", json.dumps(lock))
+
+    def rows(self, r):
+        out = r.drift("check", "--json")
+        self.assertIn(out.returncode, (0, 1), out.stderr)
+        return {row["capability"]: row for row in json.loads(out.stdout)}
+
+    # @scenario blueprint/sync: Dependency bumped
+    def test_dependency_bumped(self):
+        r = self.workspace()
+        closure = json.loads(r.read(".blueprint/closure/web/login.json"))
+        self.assertEqual(closure["locked"], {"zod": "3.22.0"})
+        self.bump(r, "3.23.0")
+        rows = self.rows(r)
+        login = rows["web/login"]
+        self.assertEqual((login["status"], login["chance"]), ("possibly-affected", 0.3))
+        self.assertEqual(login["reasons"][0], "zod 3.22.0 → 3.23.0 in the lockfile → 0.3")
+        self.assertEqual(rows["web/admin"]["status"], "in-sync")
+        r.sync()
+        self.assertEqual(self.rows(r)["web/login"]["status"], "in-sync")
+
+    def test_weight_and_older_closures(self):
+        r = self.workspace(scoring={"lockfileWeight": 0.6})
+        self.bump(r, "4.0.0")
+        login = self.rows(r)["web/login"]
+        self.assertEqual((login["status"], login["chance"]), ("deps-moved", 0.6))
+        # A closure stamped before versions were recorded: no lockfile signal.
+        path = r.root / ".blueprint/closure/web/login.json"
+        closure = json.loads(path.read_text())
+        del closure["locked"]
+        path.write_text(json.dumps(closure))
+        self.assertEqual(self.rows(r)["web/login"]["status"], "in-sync")
+
+    def test_dropped_from_the_lockfile(self):
+        r = self.workspace()
+        r.write("package-lock.json", json.dumps({"lockfileVersion": 3, "packages": {}}))
+        self.assertEqual(self.rows(r)["web/login"]["reasons"][0],
+                         "zod 3.22.0 → not locked in the lockfile → 0.3")
+
+
 TYPESCRIPT = fakerepo.find_typescript()
 NEEDS_TS = unittest.skipUnless(TYPESCRIPT, "no typescript to link: npm install -g typescript, "
                                "or set BLUEPRINT_TEST_TYPESCRIPT to a typescript package folder")
@@ -884,6 +1093,23 @@ class Transitive(unittest.TestCase):
         self.assertEqual(rows["web/login"]["reasons"], ["confidence medium: no test results given"])
 
     @NEEDS_TS
+    def test_test_results_raise_confidence(self):
+        r = self.workspace(files={"apps/web/src/login.test.ts": (
+            "// @scenario web/login: Signs in\nit('signs in', () => {})\n")})
+        for outcome, (confidence, reasons) in {
+                "passed": ("high", []),
+                "skipped": ("medium", ["confidence medium: no results for its tagged tests in "
+                                       "the report"])}.items():
+            with self.subTest(outcome=outcome):
+                r.write("report.xml", junit(("apps/web/src/login.test.ts", "signs in", outcome)))
+                out = subprocess.run([sys.executable, str(DRIFT), "check", "--json", "--tests",
+                                      "report.xml"], cwd=r.root, capture_output=True, text=True,
+                                     env=fakerepo.ENV)
+                row = {x["capability"]: x for x in json.loads(out.stdout)}["web/login"]
+                self.assertEqual((row["status"], row["confidence"], row["reasons"]),
+                                 ("in-sync", confidence, reasons))
+
+    @NEEDS_TS
     def test_max_depth_cuts_the_closure(self):
         r = self.workspace(scoring={"maxDepth": 2})
         symbols = {s["symbol"] for s in self.closure(r, "web/login")["symbols"]}
@@ -975,6 +1201,63 @@ class Combine(unittest.TestCase):
         self.assertEqual(self.drift.combine([0.25, 0.25]), 0.4375)
         self.assertEqual(self.drift.combine([1.0, 0.3]), 1.0)
         self.assertEqual(self.drift.combine([]), 0.0)
+
+    def test_npm_lockfiles(self):
+        v3 = {"lockfileVersion": 3, "packages": {
+            "": {"name": "app"}, "node_modules/zod": {"version": "3.22.0"},
+            "node_modules/@scope/x": {"version": "1.0.0"},
+            "node_modules/a/node_modules/zod": {"version": "3.21.0"},
+            "node_modules/@company/core": {"resolved": "packages/core", "link": True}}}
+        self.assertEqual(sorted(self.drift.npm_versions(json.dumps(v3))), [
+            ("@scope/x", "1.0.0"), ("zod", "3.21.0"), ("zod", "3.22.0")])
+        v1 = {"lockfileVersion": 1, "dependencies": {"zod": {"version": "3.0.0", "dependencies": {
+            "tslib": {"version": "2.0.0"}}}}}
+        self.assertEqual(sorted(self.drift.npm_versions(json.dumps(v1))), [
+            ("tslib", "2.0.0"), ("zod", "3.0.0")])
+        self.assertEqual(list(self.drift.npm_versions("{not json")), [])
+
+    def test_pnpm_lockfiles(self):
+        v9 = ("lockfileVersion: '9.0'\n\nimporters:\n  .:\n    dependencies:\n      zod:\n"
+              "        specifier: ^3.22.0\n        version: 3.22.0\n\npackages:\n\n"
+              "  zod@3.22.0:\n    resolution: {integrity: sha512-x}\n\n"
+              "  '@scope/x@1.0.0(react@18.2.0)':\n    resolution: {integrity: sha512-y}\n\n"
+              "snapshots:\n\n  zod@3.22.0: {}\n")
+        self.assertEqual(sorted(self.drift.pnpm_versions(v9)), [
+            ("@scope/x", "1.0.0"), ("zod", "3.22.0")])
+        v6 = "lockfileVersion: '6.0'\n\npackages:\n\n  /zod@3.22.0:\n    dev: false\n"
+        self.assertEqual(list(self.drift.pnpm_versions(v6)), [("zod", "3.22.0")])
+        v5 = ("lockfileVersion: 5.4\n\npackages:\n\n  /zod/3.22.0:\n    dev: false\n"
+              "  /@scope/x/1.0.0_react@18.2.0:\n    dev: false\n")
+        self.assertEqual(list(self.drift.pnpm_versions(v5)), [
+            ("zod", "3.22.0"), ("@scope/x", "1.0.0")])
+
+    def test_yarn_lockfiles(self):
+        classic = ('# yarn lockfile v1\n\n\n"@scope/x@^1.0.0", "@scope/x@^1.0.1":\n'
+                   '  version "1.0.2"\n  resolved "https://r/x.tgz"\n  dependencies:\n'
+                   '    version "9"\n\nzod@^3.22.0:\n  version "3.22.4"\n')
+        self.assertEqual(list(self.drift.yarn_versions(classic)), [
+            ("@scope/x", "1.0.2"), ("zod", "3.22.4")])
+        berry = ('__metadata:\n  version: 6\n\n"zod@npm:^3.22.0":\n  version: 3.22.4\n'
+                 '  resolution: "zod@npm:3.22.4"\n')
+        self.assertEqual(list(self.drift.yarn_versions(berry)), [("zod", "3.22.4")])
+
+    def test_report_locators(self):
+        locates = self.drift.locates
+        self.assertTrue(locates("tests.test_session", "tests/test_session.py"))
+        self.assertTrue(locates("test_session.TestLogin", "tests/test_session.py"))
+        self.assertTrue(locates("/ci/repo/src/a.test.ts", "src/a.test.ts"))
+        self.assertTrue(locates("example.com/shop/pkg/auth", "pkg/auth/x_test.go"))
+        self.assertFalse(locates("tests.test_other", "tests/test_session.py"))
+        self.assertFalse(locates("", "a.py"))
+
+    def test_report_names(self):
+        match = self.drift.names_match
+        self.assertTrue(match("session > rejects", "rejects"))
+        self.assertTrue(match("session > rejects", "session"))
+        self.assertTrue(match("test_x[1-2]", "test_x"))
+        self.assertTrue(match("TestX/sub", "TestX"))
+        self.assertFalse(match("test_xy", "test_x"))
+        self.assertFalse(match("rejects later", "rejects"))
 
     def test_defaults(self):
         self.assertEqual(self.drift.scoring({}), {

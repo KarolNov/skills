@@ -10,7 +10,8 @@ come from .blueprint/baseline/; each claiming test gets the first kind in bluepr
 exits 2: it never guesses kinds.
 
 The report lists, per capability with a baseline, every requirement and scenario with the
-tests that claim it (file:line, kind), then a summary of scenarios claimed per kind, then
+tests that claim it (file:line, kind, and in --json the name of the test declared below the
+tag), then a summary of scenarios claimed per kind, then
 the problems: orphan tags (unknown capability or scenario, with the nearest name), tags in
 files no kind matches (unclassified), duplicate scenario names within a capability, and
 tags for capabilities that have no spec yet. A claim says a test points at the scenario;
@@ -38,8 +39,6 @@ import drift  # noqa: E402  (finds the repo root on import)
 from graph import parse_baseline  # noqa: E402
 from notion_normalize import normalize  # noqa: E402
 
-_TAG = drift.TAG  # one tag grammar, shared with drift.py rename
-_TAG_END = re.compile(r"\s*(?:\*+/|-->)\s*$")
 _SCENARIO = re.compile(r"^\s*[-*]\s*(?:\*\*|<b>)\s*Scenario:\s*(.+?)\s*(?:\*\*|</b>)", re.M)
 _DELTA = re.compile(r"^## Spec delta[ \t]*\n(.*?)(?=^## |\Z)", re.S | re.M)
 _DELTA_CAP = re.compile(r"^###[ \t]+(\S+)[ \t]*·[ \t]*(ADDED|MODIFIED|REMOVED|RENAMED)[ \t]*$", re.M)
@@ -156,29 +155,19 @@ def kind_of(path, kinds):
     return next((k for k, res in kinds if any(r.match(path) for r in res)), None)
 
 
-def scan_text(text):
-    """[(line, capability, scenario)] for each tag; capability None when malformed."""
-    tags = []
-    for n, line in enumerate(text.split("\n"), 1):
-        m = _TAG.match(line)
-        if not m:
-            continue
-        rest = _TAG_END.sub("", m.group(1))
-        cap, sep, name = rest.partition(":")
-        cap, name = cap.strip().strip("`"), " ".join(name.split())
-        if not sep or not cap or not name or " " in cap:
-            tags.append((n, None, rest))
-        else:
-            tags.append((n, cap, name))
-    return tags
+# One tag grammar, shared with drift.py (rename rewrites tags, check --tests matches the test
+# named below each to a JUnit report).
+scan_text = drift.scan_tags
 
 
 def scan(files):
-    """[{file, line, capability, scenario}] across the repo's text files."""
+    """[{file, line, capability, scenario, test}] across the repo's text files; test is the
+    name of the test declared below the tag, or None."""
     tags = []
     for path, data in drift.tag_files(files):
-        for line, cap, name in scan_text(data.decode("utf-8-sig", "replace")):
-            tags.append({"file": path, "line": line, "capability": cap, "scenario": name})
+        for line, cap, name, test in scan_text(data.decode("utf-8-sig", "replace")):
+            tags.append({"file": path, "line": line, "capability": cap, "scenario": name,
+                         "test": test})
     return tags
 
 
@@ -250,7 +239,7 @@ def build(state=None, files=None, delta=None, only=None):
             orphans.append(dict(t, reason="unknown scenario", suggestion=nearest(t["scenario"], names)))
         else:
             claims.setdefault((cap, norm(t["scenario"])), []).append(
-                {"file": t["file"], "line": t["line"], "kind": t["kind"]})
+                {"file": t["file"], "line": t["line"], "kind": t["kind"], "test": t["test"]})
 
     kind_names = [k for k, _ in kinds]
     out_caps, total, claimed, by_kind = [], 0, 0, dict.fromkeys(kind_names, 0)
