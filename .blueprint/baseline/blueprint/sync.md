@@ -27,7 +27,7 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
 
 ### Requirement: Stamping
 
-`drift.py stamp` SHALL record a content hash per anchored file and the commit holding the synced code. For a capability with TS/JS anchored files, it SHALL also record its import closure in `.blueprint/closure/<capability>.json`: each reachable file or symbol with its distance, the packages crossed, and a content hash, plus the locked version of each external dependency it imports. It SHALL warn when anchored files are uncommitted.
+`drift.py stamp` SHALL record a content hash per anchored file and the commit holding the synced code. For a capability with TS/JS anchored files, it SHALL also record its import closure in `.blueprint/closure/<capability>.json`: each reachable file or symbol with its distance, the packages crossed, and a content hash, plus the locked version of each external dependency it imports. Files git ignores SHALL be left out, since another checkout won't have them. It SHALL warn when anchored files are uncommitted.
 
 - **Scenario: Uncommitted code**
   - **WHEN** stamp runs while anchored files have uncommitted changes
@@ -36,6 +36,10 @@ Code-side drift detection and spec sync: finds capabilities whose anchored code 
   - **GIVEN** a TS capability whose anchored file imports two symbols from a workspace package
   - **WHEN** stamp runs
   - **THEN** `.blueprint/closure/<capability>.json` lists both symbols, their distance and hashes
+- **Scenario: Ignored file left out**
+  - **GIVEN** an anchored file imports a type from a git-ignored generated file
+  - **WHEN** stamp runs, and check runs in a checkout without that file
+  - **THEN** the closure doesn't list the file, and the capability stays `in-sync`
 
 ### Requirement: Anchor helpers
 
@@ -212,11 +216,15 @@ A named import from a package without side effects SHALL depend only on the impo
 
 ### Requirement: Confidence and reasons
 
-Each capability SHALL get a confidence of `high` (test results were given and imports were resolved by symbol), `medium` (imports were resolved by symbol, no test results), or `low` (imports could only be followed by file, or not at all, for a TS/JS capability). A capability with no TS/JS files SHALL get `high` when only direct changes apply. Every contribution to the chance SHALL appear as one reason line naming what changed, its distance, the packages crossed with their weights and its score, and the confidence SHALL carry one line saying why it is not higher.
+Each capability SHALL get a confidence of `high` (test results were given and imports were resolved by symbol), `medium` (imports were resolved by symbol, no test results), or `low` (imports could only be followed by file, or not at all, for a TS/JS capability). A capability with no TS/JS files SHALL get `high` when only direct changes apply. Every contribution to the chance SHALL appear as one reason line naming what changed, its distance, the packages crossed with their weights and its score, and the confidence SHALL carry one line saying why it is not higher. In its text output, check SHALL show each drifted or possibly affected capability's chance as a meter of ten squares, filled by the chance (rounded half up, at least one above 0) and, on a terminal, colored by the confidence: green high, yellow medium, red low.
 
 - **Scenario: No test results**
   - **WHEN** check runs without `--tests` on a TS capability with TypeScript available
   - **THEN** its confidence is medium with the reason "no test results given"
+- **Scenario: Meter in the terminal**
+  - **GIVEN** a capability `deps-moved` with chance 0.5 and confidence medium
+  - **WHEN** check runs in a terminal
+  - **THEN** its line shows five yellow filled squares, five empty ones, and `0.5 · medium`
 
 ### Requirement: Fallback without TypeScript tooling
 

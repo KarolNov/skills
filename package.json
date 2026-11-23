@@ -1,0 +1,8 @@
+{
+  "name": "skills",
+  "private": true,
+  "description": "Dev dependencies only: typescript lets blueprint's drift_ts.mjs follow TS/JS imports by symbol.",
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

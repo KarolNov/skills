@@ -611,7 +611,7 @@ class Scoring(DriftTest):
                                           "lib/new.py added (anchored) → 1",
                                           "lib/old.py removed (anchored) → 1"])
         text = r.drift("check").stdout
-        self.assertIn("chance 1 · confidence high", text)
+        self.assertIn("■■■■■■■■■■ 1 · high", text)
         self.assertIn("lib/core.py edited (anchored) → 1", text)
 
     @NEEDS_NODE
@@ -1032,6 +1032,25 @@ class Transitive(unittest.TestCase):
         self.assertEqual(login["external"], ["zod"])
         self.assertTrue(login["files"]["packages/polyfills/src/fill.ts"]["whole"])
 
+    # @scenario blueprint/sync: Ignored file left out
+    @NEEDS_TS
+    def test_ignored_file_left_out(self):
+        # Generated, git-ignored types (another checkout won't have them) are not repo code.
+        r = self.workspace(files={
+            "apps/web/src/gen/.gitignore": "*\n",
+            "apps/web/src/gen/types.d.ts": "export interface Api { run(): void }\n",
+            "apps/web/src/admin.ts": (
+                "import { old } from '@company/legacy';\n"
+                "import type { Api } from './gen/types';\n\n"
+                "export function admin(api: Api) {\n  api.run();\n  return old();\n}\n")})
+        closure = self.closure(r, "web/admin")
+        self.assertEqual(closure["mode"], "symbol")
+        self.assertFalse([f for f in closure["files"] if "/gen/" in f])
+        self.assertFalse([s for s in closure["symbols"] if "/gen/" in s["file"]])
+        (r.root / "apps/web/src/gen/types.d.ts").unlink()  # a fresh CI checkout
+        out, rows = self.check(r)
+        self.assertEqual((out.returncode, rows["web/admin"]["status"]), (0, "in-sync"))
+
     # @scenario blueprint/sync: Imported symbol changed
     @NEEDS_TS
     def test_imported_symbol_changed(self):
@@ -1071,7 +1090,7 @@ class Transitive(unittest.TestCase):
         self.assertEqual((row["status"], row["chance"]), ("possibly-affected", 0.0625))
         self.assertEqual(row["reasons"][0], "packages/core/src/salt.ts salt changed, 3 imports "
                          "away, via @company/core (weight 0.5) → 0.06")
-        self.assertIn("possibly-affected web/login  chance 0.0625 · confidence medium",
+        self.assertIn("possibly-affected web/login  ■□□□□□□□□□ 0.0625 · medium",
                       r.drift("check").stdout)
 
     # @scenario blueprint/sync: Core package weighted up
@@ -1332,6 +1351,16 @@ class Combine(unittest.TestCase):
         self.assertEqual(self.drift.combine([0.25, 0.25]), 0.4375)
         self.assertEqual(self.drift.combine([1.0, 0.3]), 1.0)
         self.assertEqual(self.drift.combine([]), 0.0)
+
+    # @scenario blueprint/sync: Meter in the terminal
+    def test_meter(self):
+        meter = self.drift.meter
+        self.assertEqual(meter(0.5, "medium"), "■■■■■□□□□□ 0.5 · medium")
+        self.assertEqual(meter(1.0, "high"), "■■■■■■■■■■ 1 · high")
+        self.assertEqual(meter(0.0625, "low"), "■□□□□□□□□□ 0.0625 · low")  # never empty above 0
+        self.assertEqual(meter(0.25, "medium"), "■■■□□□□□□□ 0.25 · medium")  # half up
+        self.assertEqual(meter(0.5, "low", color=True), "\033[31m■■■■■\033[0m□□□□□ 0.5 · low")
+        self.assertEqual(meter(0.5, "high", color=True), "\033[32m■■■■■\033[0m□□□□□ 0.5 · high")
 
     def test_npm_lockfiles(self):
         v3 = {"lockfileVersion": 3, "packages": {

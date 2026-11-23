@@ -46,6 +46,7 @@ Run from anywhere inside the repository.
 
 import hashlib
 import json
+import os
 import posixpath
 import re
 import shutil
@@ -245,6 +246,23 @@ def fmt_chance(chance):
     return f"{chance:g}"
 
 
+CONFIDENCE_COLORS = {"high": "32", "medium": "33", "low": "31"}  # ANSI green, yellow, red
+
+
+def squares(chance):
+    """How many of 10 squares a drift chance fills: rounded half up, at least 1 above 0."""
+    return 0 if chance <= 0 else max(1, min(10, int(chance * 10 + 0.5)))
+
+
+def meter(chance, confidence, color=False):
+    """`■■■■■□□□□□ 0.5 · medium`: filled by the chance, colored by the confidence."""
+    n = squares(chance)
+    filled = "■" * n
+    if color and n and confidence in CONFIDENCE_COLORS:
+        filled = f"\033[{CONFIDENCE_COLORS[confidence]}m{filled}\033[0m"
+    return f"{filled}{'□' * (10 - n)} {fmt_chance(chance)} · {confidence}"
+
+
 def is_ts(paths):
     return any(p.endswith(TS_EXTENSIONS) for p in paths)
 
@@ -364,9 +382,15 @@ def run_helper(entries, settings):
         last = (out.stderr.strip().splitlines() or ["no output"])[-1]
         return None, f"the TypeScript helper failed ({last})"
     try:
-        return json.loads(out.stdout), None
+        found = json.loads(out.stdout)
     except ValueError:
         return None, "the TypeScript helper printed no closure"
+    # Files git ignores (generated types, local stubs) aren't in another checkout, so they'd
+    # read as removed there: leave them out, as the file-level fallback does.
+    known = set(repo_files())
+    for closure in found["closures"].values():
+        closure["nodes"] = [n for n in closure["nodes"] if n["file"] in known]
+    return found, None
 
 
 def notice(why):
@@ -1023,6 +1047,7 @@ def cmd_check(args):
     if as_json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
+        color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
         for r in report:
             line = f"{r['status']:<17} {r['capability']}"
             if r["status"] in ("in-sync", "no-spec", "no-anchors"):
@@ -1030,7 +1055,7 @@ def cmd_check(args):
                 continue
             if r["status"] == "code-moved":
                 line += f"  (since {(r['syncedCommit'] or '?')[:9]})"
-            line += f"  chance {fmt_chance(r['chance'])} · confidence {r['confidence']}"
+            line += f"  {meter(r['chance'], r['confidence'], color)}"
             print(line + "".join(f"\n                  {reason}" for reason in r["reasons"]))
     return 1 if any(r["status"] in DRIFTED for r in report) else 0
 
