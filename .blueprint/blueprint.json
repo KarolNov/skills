@@ -80,12 +80,12 @@
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "bc798ec7eb3cd648",
+      "specVersion": "7e76f26c62cd74dd",
       "anchorsFiles": {
         "skills/blueprint-setup/SKILL.md": "5804a047a59f",
-        "skills/blueprint-setup/templates/blueprint-drift.yml": "c3d1aa204f9e"
+        "skills/blueprint-setup/templates/blueprint-drift.yml": "296b8e93dcdd"
       },
-      "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
+      "syncedCommit": "48796f74e6df48a5a776c078f7a148101770461a"
     },
     "blueprint/sync": {
       "ref": "https://app.notion.com/p/41c43cce21f281ef9bfcf823c8b351e2",
@@ -95,14 +95,14 @@
         "skills/blueprint/scripts/drift_ts.mjs",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "5edf192615ade967",
+      "specVersion": "08fd2f7155d12d5e",
       "anchorsFiles": {
         "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
         "skills/blueprint/references/status.md": "7d6ca146666d",
-        "skills/blueprint/scripts/drift.py": "c79f9af4957a",
+        "skills/blueprint/scripts/drift.py": "4f810f23907b",
         "skills/blueprint/scripts/drift_ts.mjs": "aab54a05a96e"
       },
-      "syncedCommit": "e049cf8d77b2532b72a43c77b919ecd196123389"
+      "syncedCommit": "48796f74e6df48a5a776c078f7a148101770461a"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
