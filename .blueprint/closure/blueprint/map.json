@@ -1,6 +1,5 @@
 {
-  "mode": "file",
-  "why": "typescript not installed",
+  "mode": "symbol",
   "files": {},
   "symbols": [],
   "external": [],

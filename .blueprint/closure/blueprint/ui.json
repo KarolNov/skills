@@ -1,7 +1,13 @@
 {
-  "mode": "file",
-  "why": "typescript not installed",
-  "files": {},
+  "mode": "symbol",
+  "files": {
+    "mods/blueprint-ui/.claude-plugin/types/claude-code/index.d.ts": {
+      "distance": 1,
+      "via": [],
+      "hash": "0e4cf50752bc",
+      "whole": true
+    }
+  },
   "symbols": [],
   "external": [
     "claude-code"
