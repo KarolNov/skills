@@ -259,8 +259,8 @@ class OnAPullRequest(WorkflowTest):
                                r"  - confidence low: imports of its TS/JS files are not followed")
         self.assertNotIn("orders/cart", body)
         self.assertNotIn("#### Possibly affected", body)
-        # TS capabilities at low confidence point at the optional Node step.
-        self.assertIn("the workflow's commented-out Node step raises it", body)
+        # This drift.py doesn't follow imports, so the Node step wouldn't help: no hint.
+        self.assertNotIn("Node step", body)
         [warning] = [w for w in run.annotations("warning") if "Blueprint drift" in w]
         self.assertRegex(warning, r"^::warning title=Blueprint drift::orders/checkout: 1 anchored "
                                   r"file\(s\) changed since [0-9a-f]{9} \(chance 1 · confidence "
@@ -480,7 +480,7 @@ class Scored(WorkflowTest):
                       "threshold: worth a look, not counted as drift:\n\n"
                       "- **`orders/cart`**: chance 0.0625 · confidence medium\n"
                       "  - packages/core/src/money.ts round\\_cents changed, 3 imports away, "
-                      "via @company/core (weight 0.5) → 0.0625\n"
+                      "via `@company/core` (weight 0.5) → 0.0625\n"
                       "  - confidence medium: no test results given\n", body)
         self.assertNotIn("drifted since", body)
         self.assertNotIn("orders/checkout", body)
@@ -498,7 +498,7 @@ class Scored(WorkflowTest):
                       "- **`orders/checkout`** (imported code moved): chance 0.5 · confidence "
                       "medium\n"
                       "  - packages/core/src/token.ts signToken changed, 1 import away, "
-                      "via @company/core (weight 1) → 0.5\n"
+                      "via `@company/core` (weight 1) → 0.5\n"
                       "  - confidence medium: no test results given\n", comment["body"])
         self.assertNotIn("#### Possibly affected", comment["body"])
         self.assertEqual(run.annotations("warning"), [
@@ -527,6 +527,19 @@ class Scored(WorkflowTest):
         self.assertEqual(c2["id"], c1["id"])
         self.assertIn("Back in sync:", c2["body"])
         self.assertNotIn("#### Possibly affected", c2["body"])
+
+    def test_imports_followed_by_file_point_at_the_node_step(self):
+        self.stub([dict(DEPS_MOVED, confidence="low", reasons=[
+            "packages/core/src/token.ts changed, 1 import away → 0.5",
+            "confidence low: no node_modules, so imports are followed by file"])])
+        [comment] = self.run_workflow().drift_comments()
+        self.assertIn("the workflow's commented-out Node step raises it", comment["body"])
+
+    def test_deps_moved_with_only_a_confidence_reason_has_no_dangling_colon(self):
+        self.stub([dict(DEPS_MOVED, reasons=["confidence medium: no test results given"])])
+        [warning] = self.run_workflow().annotations("warning")
+        self.assertTrue(warning.endswith("imported code moved (chance 0.5 · confidence medium)"),
+                        warning)
 
     def test_annotations_escape_percent_signs(self):
         self.stub([dict(DEPS_MOVED, reasons=["src/fee.ts rate changed to 5%, 1 import away → 0.5"])])

@@ -21,9 +21,10 @@
 # Only code-side drift is checked; spec-side drift (someone edited a spec page)
 # needs the backend, so `/blueprint-sync` and `/blueprint-drift` report it.
 # Needs only actions/checkout, python3 and gh, all on GitHub-hosted runners.
-# Without the repo's node_modules, imports of TS/JS capabilities are followed by
-# file at low confidence; uncomment the "Set up Node" step below to follow them by
-# symbol through the repo's own typescript.
+# A drift.py that follows imports follows TS/JS ones by file, at low confidence,
+# without the repo's node_modules; uncomment the "Set up Node" step below to follow
+# them by symbol through the repo's own typescript. An older drift.py doesn't follow
+# imports at all, so the step changes nothing for it.
 #
 # This is the recommended shape, not a fixed one: this copy belongs to the repo.
 # Edit it to fit the team (add a "drifted" label, request a reviewer, change
@@ -51,11 +52,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Optional: install the repo's dependencies so drift.py can resolve TS/JS imports
-      # by symbol with the repo's own typescript, which raises confidence for those
-      # capabilities from low to medium. drift.py never installs anything itself.
-      # Uncomment, and use the install command the repo uses (npm ci, pnpm install
-      # --frozen-lockfile, yarn install --immutable).
+      # Optional: install the repo's dependencies so a drift.py that follows imports can
+      # resolve TS/JS ones by symbol with the repo's own typescript, which raises
+      # confidence for those capabilities from low to medium. drift.py never installs
+      # anything itself. Uncomment, and use the repo's package manager: set `cache` to
+      # npm, pnpm or yarn and the install command to match (npm ci, pnpm install
+      # --frozen-lockfile, yarn install --immutable); pnpm also needs a
+      # pnpm/action-setup step before Set up Node.
       # - name: Set up Node
       #   uses: actions/setup-node@v4
       #   with:
@@ -112,8 +115,11 @@ jobs:
               return f"{fence}{pad}{text}{pad}{fence}"
 
           def plain(text):
-              """Text with markdown's inline syntax escaped."""
-              return re.sub(r"([\\`*_\[\]<>|])", r"\\\1", text)
+              """Text with markdown's inline syntax escaped, and @names (npm scopes like
+              @org/pkg) in code spans so GitHub doesn't read them as mentions."""
+              parts = re.split(r"(@[\w.-]+(?:/[\w.-]+)?)", text)
+              return "".join(code(p) if i % 2 else re.sub(r"([\\`*_\[\]<>|])", r"\\\1", p)
+                             for i, p in enumerate(parts))
 
           def annotation(text):
               """A workflow command's message, escaped so % and newlines survive."""
@@ -158,8 +164,8 @@ jobs:
                       what = (f"{len(r['changed'])} anchored file(s) changed since {since}"
                               f"{score}: " + ", ".join(r["changed"]))
                   else:
-                      what = f"imported code moved{score}: " + "; ".join(
-                          x for x in r.get("reasons", []) if not x.startswith("confidence "))
+                      causes = [x for x in r.get("reasons", []) if not x.startswith("confidence ")]
+                      what = f"imported code moved{score}" + (": " + "; ".join(causes) if causes else "")
                   print(f"::warning title=Blueprint drift::{annotation(r['capability'] + ': ' + what)}")
               lines += ["", "If the code is right, run `/blueprint-sync <capability>` and commit "
                         "the updated `.blueprint/`; if the spec is right, run "
@@ -204,7 +210,10 @@ jobs:
           if not moved and not possible and not stale:
               lines.append("Back in sync: no capability's code or imported code moved since its "
                            "spec was synced" + ("." if skipped else ", and no artifact needs a check."))
-          low = any(r.get("confidence") == "low" for r in moved + possible)
+          # Only rows whose imports were followed by file: the Node step can't help others.
+          low = any(r.get("confidence") == "low"
+                    and any("imports are followed by file" in x for x in r.get("reasons", []))
+                    for r in moved + possible)
           lines += ["", "<sub>Code-side drift only; spec pages edited outside the code are "
                     "reported by `/blueprint-sync`."
                     + (" Low confidence where imports weren't followed by symbol: the "
