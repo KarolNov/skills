@@ -99,6 +99,7 @@ class Drifting(ShopTest):
         for c in json.loads(check.stdout):
             if c["capability"] in SHARED["src/shared/money.ts"]:
                 self.assertIn("src/shared/money.ts", c["changed"], c["capability"])
+                self.assertEqual(c["chance"], 1.0, c["capability"])
         self.assertEqual(r.moved(), sorted({DRIFTED, *SHARED["src/shared/money.ts"]}))
         # billing-help covers the billing domain, which anchors money.ts.
         self.assertEqual(r.stale(), sorted(["billing-help", STALE]))

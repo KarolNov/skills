@@ -270,7 +270,7 @@
       "brief": "https://app.notion.com/p/42143cce21f28197909bf81f1d454713",
       "review": "https://app.notion.com/p/41e43cce21f28136838cea65f042b09d",
       "playground": "embedded in the review (transitive-drift-playground.html)",
-      "status": "approved",
+      "status": "building",
       "baseCommit": "a4645688e90c862c2bb236ee90c6749f87b6cf29"
     }
   },
