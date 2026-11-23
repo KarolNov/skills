@@ -152,6 +152,35 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+// @scenario blueprint/ui: Imported code moved
+test('imports moved: under Needs attention with its chance and ▶ sync; possibly affected stays in sync, marked, no ▶', async ($, on) => {
+  const r = repo()
+  r.drift = [
+    { capability: 'blueprint/ui', status: 'deps-moved', chance: 0.5, confidence: 'medium', reasons: ['x → 0.5'] },
+    { capability: 'blueprint/propose', status: 'possibly-affected', chance: 0.13, confidence: 'medium', reasons: ['y → 0.13'] },
+    { capability: 'blueprint/apply', status: 'in-sync', chance: 0, confidence: 'high', reasons: [] },
+    { capability: 'blueprint/new', status: 'no-spec' },
+  ]
+  world(on, r)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(typed())
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(await ui.find({ type: 'Text', text: '2 need attention · 2 in sync · 1 building' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'imports moved · 0.5 · medium' })).toBeDefined()
+  expect((await ui.find({ key: 'step-blueprint/ui' }))?.props?.label).toBe('▶ sync')
+  await ui.press({ key: 'step-blueprint/ui' })
+  expect(r.ran).toEqual(['/blueprint:blueprint-sync blueprint/ui'])
+
+  // Possibly affected sits in In sync with its own mark, its chance revealed on hover, and no ▶.
+  await ui.press({ key: 'fold-sync' })
+  expect(await ui.find({ key: 'spec:blueprint/propose' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '◔' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' · possibly affected · 0.13 · medium' })).toBeDefined()
+  expect(await ui.find({ key: 'step-blueprint/propose' })).toBeUndefined()
+  await ui.unmount()
+})
+
 // @scenario blueprint/ui: Teammate edited a spec
 // @scenario blueprint/ui: Blueprint wrote a spec
 test('Check specs finds a teammate edit; a write blueprint stamps puts it back in sync', async ($, on) => {
@@ -253,7 +282,10 @@ test('a run that rejects: stopped by the session, or never started, each says so
 // @scenario blueprint/ui: Sync all
 test('while Claude works a ▶ step shows as queued, once; sync all sends bare /blueprint-sync', async ($, on) => {
   const r = repo()
-  r.drift = r.drift!.map(d => ((d as { capability: string }).capability === 'blueprint/propose' ? { capability: 'blueprint/propose', status: 'code-moved', changed: ['p'] } : d))
+  // One capability's own code moved, another's imported code: sync all takes both.
+  r.drift = r.drift!.map(d =>
+    (d as { capability: string }).capability === 'blueprint/propose' ? { capability: 'blueprint/propose', status: 'deps-moved', chance: 0.5, confidence: 'medium', reasons: [] } : d,
+  )
   let release = () => {}
   world(on, r)
   on('turn.start', (_, e) => ({ turnId: e.turnId }))

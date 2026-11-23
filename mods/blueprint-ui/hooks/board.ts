@@ -1,4 +1,4 @@
-import type { BlueprintUiCode, BlueprintUiSpecs } from '../types'
+import type { BlueprintUiCode, BlueprintUiDriftRow, BlueprintUiSpecs } from '../types'
 import type { Map, SpecEntry } from './pages'
 
 /** What a row's ▶ button runs: the command without its slash, and its arguments. */
@@ -14,13 +14,18 @@ export type CapRow = {
   page?: string
   side: Side
   reason: string
+  /** Drift chance and confidence, `0.5 · medium`, when its code or imported code moved. */
+  score?: string
   step?: Step
   /** Comments and suggestions pending on its spec page. */
   pending: number
 }
 
-/** A capability with nothing to do; `unknown` says why its spec side couldn't be read. */
-export type QuietRow = { name: string; page?: string; unknown?: string; pending: number }
+/**
+ * A capability with nothing to do; `unknown` says why its spec side couldn't be read, and `maybe`
+ * marks one possibly affected by code it imports, with its score (`0.13 · medium`).
+ */
+export type QuietRow = { name: string; page?: string; unknown?: string; maybe?: string; pending: number }
 
 export type ChangeRow = {
   name: string
@@ -46,13 +51,20 @@ export type Board = {
 const OPEN = ['building', 'approved', 'draft'] as const
 const FINISHED = new Set(['applied', 'abandoned'])
 
-/** Bare `/blueprint-sync`: every capability whose code moved, as the skill defaults to. */
+/** Bare `/blueprint-sync`: every capability whose code or imported code moved, as the skill defaults to. */
 export const syncAll = (n: number): Step => ({ command: 'blueprint-sync', args: '', label: `▶ sync all (${n})` })
 const sync = (cap: string): Step => ({ command: 'blueprint-sync', args: cap, label: '▶ sync' })
 const drift = (cap: string, both: boolean): Step => ({ command: 'blueprint-drift', args: cap, label: both ? '▶ drift → sync' : '▶ drift' })
 const apply = (change: string): Step => ({ command: 'blueprint', args: `apply ${change}`, label: '▶ apply' })
 
 const files = (n: number) => `${n} file${n === 1 ? '' : 's'}`
+
+/** A drift chance as drift.py prints it (`0.5`, `0.1306`, `1`), then the confidence. */
+export function scoreOf(r: BlueprintUiDriftRow | undefined): string | undefined {
+  if (typeof r?.chance !== 'number') return undefined
+  const chance = String(Math.round(r.chance * 1e4) / 1e4)
+  return r.confidence ? `${chance} · ${r.confidence}` : chance
+}
 
 /** The spec side of one capability: moved or not, or unknown with why; not checked is `undefined`. */
 function specSide(s: SpecEntry, specs: BlueprintUiSpecs): { moved: boolean } | { unknown: string } | undefined {
@@ -65,8 +77,9 @@ function specSide(s: SpecEntry, specs: BlueprintUiSpecs): { moved: boolean } | {
 
 /**
  * The status board: capabilities that need a step first, then open changes, then
- * everything quiet. Follows status.md: spec moved → drift (first, if the code moved too),
- * code moved or no spec → sync, no anchors → a note and no button.
+ * everything quiet. Follows status.md: spec moved → drift (first, if the code or imported code
+ * moved too), code or imported code moved, or no spec → sync, no anchors → a note and no button.
+ * Possibly affected stays quiet, marked with its score, and gets no button.
  */
 export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs, pendingOn: (page: string) => number): Board {
   const report = code.status === 'ready' ? new globalThis.Map(code.report.map(r => [r.capability, r])) : undefined
@@ -80,9 +93,10 @@ export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs
     const specMoved = !!spec && 'moved' in spec && spec.moved
     const unknown = spec && 'unknown' in spec ? spec.unknown : undefined
     const pending = page ? pendingOn(page) : 0
-    const row = (side: Side, reason: string, step?: Step): CapRow => ({
+    const row = (side: Side, reason: string, step?: Step, score?: string): CapRow => ({
       name: s.name,
       side,
+      ...(score ? { score } : {}),
       // A spec that couldn't be read says so here too: its spec side may have moved as well.
       reason: unknown ? `${reason} · spec unknown: ${unknown}` : reason,
       pending,
@@ -95,13 +109,19 @@ export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs
     } else if (!s.ref || r?.status === 'no-spec') {
       attention.push(row('none', 'no spec yet', sync(s.name)))
     } else if (r?.status === 'code-moved' && specMoved) {
-      attention.push(row('both', 'code and spec moved', drift(s.name, true)))
+      attention.push(row('both', 'code and spec moved', drift(s.name, true), scoreOf(r)))
+    } else if (r?.status === 'deps-moved' && specMoved) {
+      attention.push(row('both', 'imports and spec moved', drift(s.name, true), scoreOf(r)))
     } else if (specMoved) {
       attention.push(row('spec', 'spec moved', drift(s.name, false)))
     } else if (r?.status === 'code-moved') {
-      attention.push(row('code', `code moved (${files(r.changed?.length ?? 0)})`, sync(s.name)))
+      attention.push(row('code', `code moved (${files(r.changed?.length ?? 0)})`, sync(s.name), scoreOf(r)))
+    } else if (r?.status === 'deps-moved') {
+      attention.push(row('code', 'imports moved', sync(s.name), scoreOf(r)))
     } else {
-      quiet.push({ name: s.name, pending, ...(page ? { page } : {}), ...(unknown ? { unknown } : {}) })
+      // Possibly affected stays here, marked, with no step: below the threshold it isn't drift.
+      const maybe = r?.status === 'possibly-affected' ? (scoreOf(r) ?? 'possibly affected') : undefined
+      quiet.push({ name: s.name, pending, ...(page ? { page } : {}), ...(unknown ? { unknown } : {}), ...(maybe ? { maybe } : {}) })
     }
   }
 

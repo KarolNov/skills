@@ -759,7 +759,7 @@ export const register: Register = (on, options) => {
       return go ? <Button key={page!} plain label={label} onPress={go} /> : <Text key={key}>{label}</Text>
     }
 
-    // Bare /blueprint-sync takes every capability whose code moved; offered once two or more did.
+    // Bare /blueprint-sync takes every capability whose code or imported code moved; offered once two or more did.
     const codeMoved = board.attention.filter(r => r.side === 'code' && r.step?.command === 'blueprint-sync').length
     const allSync = syncAll(codeMoved)
     /**
@@ -779,7 +779,7 @@ export const register: Register = (on, options) => {
       <Box key={`att-${r.name}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
         <Text color={glyphColor(r.side)} dimColor={r.side === 'none' ? true : undefined}>{r.side === 'none' ? '○' : '◐'}</Text>
         {name(r.name, r.page, `cap-${r.name}`)}
-        <Text dimColor>{r.reason}</Text>
+        <Text dimColor>{r.score ? `${r.reason} · ${r.score}` : r.reason}</Text>
         {r.pending ? <Text color="suggestion">· {r.pending} pending</Text> : null}
         {r.step ? stepButton(`step-${r.name}`, r.step, r.side === 'code' && waiting.has(stepKey(allSync))) : null}
       </Box>
@@ -921,9 +921,18 @@ export const register: Register = (on, options) => {
                 <Box key={`quiet-row-${i}`} flexDirection="row">
                   {row.map(q => {
                     const go = openId(q.page)
-                    const mark = q.unknown ? <Text color="warning">?</Text> : board.isCodeChecked ? <Text color="success">✓</Text> : <Text dimColor>·</Text>
+                    // Possibly affected: still in sync, marked, its chance shown while the pointer is on the cell.
+                    const mark = q.unknown ? (
+                      <Text color="warning">?</Text>
+                    ) : q.maybe ? (
+                      <Text color="warning">◔</Text>
+                    ) : board.isCodeChecked ? (
+                      <Text color="success">✓</Text>
+                    ) : (
+                      <Text dimColor>·</Text>
+                    )
                     return (
-                      <Box key={`cell-${q.name}`} width={`${Math.floor(100 / cols)}%`} flexShrink={0}>
+                      <Box key={`cell-${q.name}`} width={`${Math.floor(100 / cols)}%`} flexShrink={0} flexDirection="row">
                         {go ? (
                           <Button key={q.page!} plain onPress={go}>
                             {mark} {q.name}
@@ -934,6 +943,11 @@ export const register: Register = (on, options) => {
                             {mark} {q.name}
                           </Text>
                         )}
+                        {q.maybe ? (
+                          <Box display="none" hover={{ display: 'flex' }}>
+                            <Text dimColor> · possibly affected · {q.maybe}</Text>
+                          </Box>
+                        ) : null}
                       </Box>
                     )
                   })}
