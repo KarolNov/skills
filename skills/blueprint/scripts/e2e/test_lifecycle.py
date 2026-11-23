@@ -174,6 +174,57 @@ class Rewording(ShopTest):
         self.assertLess(after["summary"]["claimed"], before["summary"]["claimed"])
 
 
+class Stamping(unittest.TestCase):
+    # @scenario blueprint/sync: Uncommitted code
+    def test_stamp_warns_when_anchored_code_is_uncommitted(self):
+        with FakeRepo() as r:
+            r.capability("auth/session", ["src/auth/**"], {"Expiry": ["Expired session redirects"]})
+            r.write("src/auth/session.ts", "export const ttl = 1;\n")
+            r.write("src/other.ts", "export const o = 1;\n")
+            r.sync()
+            head = r.git("rev-parse", "HEAD").strip()
+            # Only unanchored files are dirty: no warning.
+            r.edit("src/other.ts")
+            quiet = r.checked_run("drift.py", "stamp", "auth/session")
+            self.assertNotIn("warning", quiet.stderr)
+            r.edit("src/auth/session.ts")
+            r.write("src/auth/new.ts", "export const n = 1;\n")  # untracked counts too
+            out = r.checked_run("drift.py", "stamp", "auth/session")
+            self.assertIn("warning: 2 of them uncommitted, so syncedCommit predates them", out.stderr)
+            self.assertIn("commit the code, then stamp again", out.stderr)
+            # The stamp is still written, at the commit that predates the edits.
+            self.assertEqual(r.load()["specs"]["auth/session"]["syncedCommit"], head)
+
+
+class Tidying(ShopTest):
+    # @scenario blueprint/tidy: Status after tidy
+    def test_renames_into_domains_keep_an_in_sync_repo_in_sync(self):
+        r = self.repo()
+        r.sync(DRIFTED)
+        r.checked_run("drift.py", "artifacts", "checked", STALE)
+        before = r.drift_status()
+        self.assertEqual(set(before.values()), {"in-sync"})
+        stamps = {c: (s["syncedCommit"], s.get("specVersion"), s["anchorsFiles"])
+                  for c, s in r.load()["specs"].items()}
+        # What an approved tidy table writes: a new domain, the bare capabilities moved under it.
+        r.domain("platform", "What every part of the shop leans on.")
+        renames = {c: f"platform/{c}" for c in ("notifications", "audit-log", "api-gateway")}
+        for old, new in renames.items():
+            r.checked_run("drift.py", "rename", old, new)
+        r.commit("tidy")
+        check = r.drift("check")
+        self.assertEqual(check.returncode, 0, check.stdout)
+        after = r.drift_status()
+        self.assertEqual(sorted(after), sorted(renames.get(c, c) for c in before))
+        self.assertEqual(set(after.values()), {"in-sync"})
+        self.assertEqual(r.stale(), [])
+        specs = r.load()["specs"]
+        for old, new in renames.items():
+            self.assertEqual((specs[new]["syncedCommit"], specs[new].get("specVersion"),
+                              specs[new]["anchorsFiles"]), stamps[old], new)
+        agree(self, r)
+
+
 class Demo(unittest.TestCase):
     def run_demo(self, folder):
         return subprocess.run([sys.executable, str(FAKEREPO), str(folder)], capture_output=True,

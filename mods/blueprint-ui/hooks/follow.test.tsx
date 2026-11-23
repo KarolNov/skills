@@ -126,3 +126,30 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.unmount()
   })
 }
+
+// @scenario blueprint/ui: Content only links a mapped page
+test('a write to an unmapped page whose content links a mapped one leaves the pane as it is', async ($, on) => {
+  const page = { text: '## Decisions\n\nShip it.\n' }
+  const opened = world(on, page)
+  // The pane is showing the review.
+  await call($, { tool: 'mcp__3c44__notion-update-page', page_id: '41c43cce21f2816c8bc6c76cfdbd313d', command: 'update_content' })
+  expect(opened).toEqual(['blueprint-ui'])
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^add-ui · review$/ })).toBeDefined()
+
+  await call($, {
+    tool: 'mcp__3c44__notion-update-page',
+    page_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    command: 'replace_content',
+    new_str: `See the [brief](${BRIEF}) and the review ${REVIEW}.`,
+  })
+  await call($, {
+    tool: 'mcp__3c44__notion-create-pages',
+    parent: { page_id: 'cccccccccccccccccccccccccccccccc' },
+    pages: [{ properties: { title: 'Notes' }, content: `Links ${BRIEF}` }],
+  })
+  expect(opened).toEqual(['blueprint-ui'])
+  expect(await ui.find({ type: 'Text', text: /^add-ui · review$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^add-ui · brief$/ })).toBeUndefined()
+  await ui.unmount()
+})

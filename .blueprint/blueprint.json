@@ -139,8 +139,8 @@
         "mods/blueprint-ui/hooks/board.test.ts": "1c814ad14052",
         "mods/blueprint-ui/hooks/board.ts": "458d09dba972",
         "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
-        "mods/blueprint-ui/hooks/comment.test.tsx": "d15029007825",
-        "mods/blueprint-ui/hooks/follow.test.tsx": "491ed00c4d94",
+        "mods/blueprint-ui/hooks/comment.test.tsx": "580523934513",
+        "mods/blueprint-ui/hooks/follow.test.tsx": "77487ef47eda",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
         "mods/blueprint-ui/hooks/notion.ts": "8e0bdd11af69",
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
@@ -157,7 +157,7 @@
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
         "mods/blueprint-ui/types/index.d.ts": "3a7226699b65"
       },
-      "syncedCommit": "e569f32811bd2e3502b428e64cd9631c61cccb79"
+      "syncedCommit": "9d529ff170c7a34151bf1f4b47c1b686a61f98a7"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
@@ -342,6 +342,9 @@
       "unit": [
         "mods/**/*.test.ts",
         "mods/**/*.test.tsx"
+      ],
+      "consistency": [
+        "tests/test_*.py"
       ]
     }
   }

@@ -1,0 +1,4 @@
+# For running the tests only. No skill needs these at runtime.
+#   pip install -r requirements-dev.txt && python3 -m playwright install chromium
+PyYAML>=6         # skills/blueprint/scripts/e2e/test_drift_workflow.py
+playwright>=1.40  # skills/blueprint/scripts/e2e/test_map_page.py
