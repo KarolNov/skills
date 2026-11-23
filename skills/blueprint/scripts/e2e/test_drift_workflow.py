@@ -256,11 +256,12 @@ class OnAPullRequest(WorkflowTest):
         self.assertRegex(body, r"- \*\*`orders/checkout`\*\* \(since `[0-9a-f]{9}`\): "
                                r"chance 1 · confidence low\n"
                                r"  - src/checkout/pay\.ts edited \(anchored\) → 1\n"
-                               r"  - confidence low: imports of its TS/JS files are not followed")
+                               r"  - confidence low: typescript not installed when stamped, "
+                               r"so imports are followed by file")
         self.assertNotIn("orders/cart", body)
         self.assertNotIn("#### Possibly affected", body)
-        # This drift.py doesn't follow imports, so the Node step wouldn't help: no hint.
-        self.assertNotIn("Node step", body)
+        # Imports were followed by file only (no node_modules here), so the Node step would help.
+        self.assertIn("commented-out Node step raises it", body)
         [warning] = [w for w in run.annotations("warning") if "Blueprint drift" in w]
         self.assertRegex(warning, r"^::warning title=Blueprint drift::orders/checkout: 1 anchored "
                                   r"file\(s\) changed since [0-9a-f]{9} \(chance 1 · confidence "

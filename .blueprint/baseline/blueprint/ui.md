@@ -25,9 +25,9 @@ A pane beside the chat that shows blueprint pages read-only and lets the user re
 
 The board SHALL show a summary line (how many capabilities need attention, how many are in sync, open changes by status, pending comments), then three sections in this order:
 
-- Needs attention: capabilities whose code or spec moved, or that have no spec, each with its reason.
+- Needs attention: capabilities whose code, imported code or spec moved, or that have no spec, each with its reason; one whose code or imported code moved also shows its drift chance and confidence.
 - Changes: draft, approved and building changes, each with its status, pending count, and a link to its review and to its brief. Applied and abandoned changes are folded under Done (n).
-- In sync: every other capability, as a grid of names in order with a fixed number of columns that fits the pane.
+- In sync: every other capability, as a grid of names in order with a fixed number of columns that fits the pane; a possibly affected one is marked, and shows its chance on hover or selection.
 
 Each section SHALL fold under its header, which shows its count. Needs attention and Changes SHALL start open, and In sync folded, except when the code side couldn't be checked: then that list starts open. A capability with comments pending on its spec page SHALL show that count too, in whichever section it sits. A section with nothing in it SHALL be left out. A footer SHALL count changed files that no capability covers since the last sync, only when there are any.
 
@@ -39,6 +39,10 @@ Each section SHALL fold under its header, which shows its count. Needs attention
   - **GIVEN** three files under `blueprint/ui`'s anchors changed since its last sync
   - **WHEN** the board is shown
   - **THEN** `blueprint/ui` is under Needs attention as "code moved (3 files)", and the summary counts it
+- **Scenario: Imported code moved**
+  - **GIVEN** `blueprint/ui` is `deps-moved` with chance 0.5 and confidence medium
+  - **WHEN** the board is shown
+  - **THEN** `blueprint/ui` is under Needs attention as "imports moved · 0.5 · medium"
 - **Scenario: Uncovered files**
   - **GIVEN** two files changed since the last sync that no capability's anchors cover
   - **WHEN** the board is shown
@@ -68,13 +72,13 @@ The code side SHALL be checked each time the board opens and on ↻. The spec si
 
 Each row that has a next step SHALL offer a ▶ button labeled with it. The button runs that step's command for the row's capability or change, as if typed. The steps SHALL be:
 
-- spec moved → drift, labeled "drift → sync" when the code also moved;
-- code moved, or no spec → sync;
+- spec moved → drift, labeled "drift → sync" when the code or imported code also moved;
+- code moved, imported code moved, or no spec → sync;
 - approved or building change → apply.
 
-A capability with no anchors SHALL get no button.
+A capability with no anchors SHALL get no button, and a possibly affected one SHALL get none either.
 
-When the code of two or more capabilities moved, the Needs attention header SHALL offer ▶ sync all (n), which runs `/blueprint-sync` with no capability, so it takes every capability whose code moved. A capability with no spec is not in that and keeps its own button.
+When the code or imported code of two or more capabilities moved, the Needs attention header SHALL offer ▶ sync all (n), which runs `/blueprint-sync` with no capability, so it takes every capability whose code or imported code moved. A capability with no spec is not in that and keeps its own button.
 
 A step runs once the session is idle. While Claude is working, the board SHALL say that a step waits until the turn ends, and draw the ▶ buttons dim. A pressed step SHALL show as queued until it runs and SHALL NOT queue a second time; while sync all is queued, so are the rows it covers.
 
@@ -94,7 +98,7 @@ A step runs once the session is idle. While Claude is working, the board SHALL s
   - **WHEN** the command a button needs isn't in the session
   - **THEN** a toast says which plugin to install, and nothing runs
 - **Scenario: Sync all**
-  - **GIVEN** `blueprint/ui` and `blueprint/propose` both show "code moved"
+  - **GIVEN** `blueprint/ui` shows "code moved" and `blueprint/propose` shows "imports moved"
   - **WHEN** the user presses ▶ sync all (2)
   - **THEN** `/blueprint-sync` runs once, with no capability named
 - **Scenario: Step while Claude works**

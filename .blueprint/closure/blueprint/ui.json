@@ -1,0 +1,12 @@
+{
+  "mode": "file",
+  "why": "typescript not installed",
+  "files": {},
+  "symbols": [],
+  "external": [
+    "claude-code"
+  ],
+  "locked": {
+    "claude-code": null
+  }
+}

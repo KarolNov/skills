@@ -48,12 +48,16 @@ The map SHALL offer a switch that shows each anchored file as a small node linke
 
 ### Requirement: Code drift shown
 
-A capability whose anchored code moved since its last stamp, as `drift.py check` reports it, SHALL be drawn in the drift color, and its panel SHALL mark the changed files. The legend SHALL say that spec-side drift is not shown and that `/blueprint-sync` reports it.
+A capability that `drift.py check` reports as `code-moved` or `deps-moved` SHALL be drawn in the drift color, and one reported as `possibly-affected` in a lighter tint of it. Its panel SHALL show the drift chance, the confidence and every reason, and mark the changed anchored files. The legend SHALL say that spec-side drift is not shown and that `/blueprint-sync` reports it.
 
 - **Scenario: Code moved**
   - **GIVEN** one of `blueprint/sync`'s anchored files changed since its stamp
   - **WHEN** the map is drawn
   - **THEN** `blueprint/sync` is drawn in the drift color and the changed file is marked in its panel
+- **Scenario: Possibly affected**
+  - **GIVEN** a capability with drift chance 0.13 through an imported symbol
+  - **WHEN** the user opens it on the map
+  - **THEN** it is drawn in the lighter tint, and the panel shows 0.13, its confidence and the reason naming the symbol
 
 ### Requirement: Details panel
 

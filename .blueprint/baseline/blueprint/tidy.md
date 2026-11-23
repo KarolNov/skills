@@ -36,16 +36,20 @@ Tidy SHALL propose domains by grouping capabilities that share a name prefix or 
 
 ### Requirement: Overlapping anchors reported
 
-Tidy SHALL list files matched by two or more capabilities (from `drift.py overlaps`), and for overlaps caused by a broad glob propose a narrower anchor. It SHALL check which files a narrower anchor drops and never leave one unanchored without saying so. It SHALL never change anchors without approval, and SHALL leave overlaps the user marks as intended.
+Tidy SHALL list files matched by two or more capabilities (from `drift.py overlaps`), and for overlaps caused by a broad glob propose a narrower anchor. It SHALL check which files a narrower anchor drops and never leave one unanchored without saying so. It SHALL never change anchors without approval, and SHALL leave overlaps the user marks as intended. Narrowing an anchor SHALL keep the capability's drift status, losing drift chance only from imports that the dropped files alone reached, and the report SHALL name those.
 
 - **Scenario: Broad glob**
   - **GIVEN** `jams` anchors `shared/**` and `board/ops` anchors `shared/board/**`
   - **WHEN** tidy reports overlaps
   - **THEN** it lists `shared/board/*` under both and proposes narrowing `jams`
+- **Scenario: Narrowed capability keeps its deps drift**
+  - **GIVEN** `jams` is `deps-moved` through a symbol that `jams/play.ts` imports
+  - **WHEN** tidy narrows `jams` to drop `shared/**` but keep `jams/play.ts`
+  - **THEN** `jams` is still `deps-moved` with the same chance
 
 ### Requirement: One approved move table
 
-Tidy SHALL show every proposed change (new domains, renames, moves, anchor edits) as one table and write nothing until the user approves it. On approval it SHALL apply the whole table: backend titles, parents and paths; `blueprint.json` keys; `baseline/` files; tests' `@scenario` tags; domain overview pages; and open blueprints that name a renamed capability, whose reviews it rebuilds. A blueprint SHALL count as open when either `changes` or the backend marks it so, and a status that differs between the two SHALL be reported, not changed.
+Tidy SHALL show every proposed change (new domains, renames, moves, anchor edits) as one table and write nothing until the user approves it. On approval it SHALL apply the whole table: backend titles, parents and paths; `blueprint.json` keys; `baseline/` and `closure/` files; tests' `@scenario` tags; domain overview pages; and open blueprints that name a renamed capability, whose reviews it rebuilds. A blueprint SHALL count as open when either `changes` or the backend marks it so, and a status that differs between the two SHALL be reported, not changed.
 
 - **Scenario: Rename with an open blueprint**
   - **GIVEN** an approved blueprint touches `board`
