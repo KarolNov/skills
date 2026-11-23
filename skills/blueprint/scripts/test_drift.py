@@ -1249,6 +1249,46 @@ class Transitive(unittest.TestCase):
         self.assertNotEqual(out.returncode, 0)
         self.assertIn("closure already exists", out.stderr)
 
+    def narrowed(self, typescript):
+        """web/app anchors login.ts and admin.ts; after its stamp, code both import moves, then
+        its anchors narrow to login.ts and prune runs."""
+        r = self.workspace(typescript=typescript)
+        r.capability("web/app", ["apps/web/src/login.ts", "apps/web/src/admin.ts"])
+        r.sync()
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        r.update(lambda s: s["specs"]["web/app"].__setitem__("anchors", ["apps/web/src/login.ts"]))
+        out = r.checked_run("drift.py", "prune", "web/app")
+        self.assertIn("closure re-recorded", out.stdout)
+        return r
+
+    def test_prune_re_records_the_closure_keeping_what_moved(self):
+        r = self.narrowed(None)
+        closure = self.closure(r, "web/app")
+        self.assertFalse(any(f.startswith("packages/legacy/") for f in closure["files"]))
+        self.assertIn("packages/core/src/token.ts", closure["files"])
+        row = self.check(r)[1]["web/app"]
+        self.assertTrue(any(x.startswith("packages/core/src/token.ts changed") for x in row["reasons"]))
+        self.assertFalse(any("legacy" in x for x in row["reasons"]))
+        self.assertEqual(row["status"], "possibly-affected")
+
+    @NEEDS_TS
+    def test_prune_re_records_the_closure_by_symbol(self):
+        r = self.narrowed(TYPESCRIPT)
+        closure = self.closure(r, "web/app")
+        self.assertEqual(closure["mode"], "symbol")
+        self.assertFalse(any(s["file"].startswith("packages/legacy/") for s in closure["symbols"]))
+        row = self.check(r)[1]["web/app"]
+        self.assertEqual(row["reasons"][0], "packages/core/src/token.ts signToken changed, 1 "
+                         "import away, via @company/core (weight 0.5) → 0.25")
+        self.assertFalse(any("legacy" in x for x in row["reasons"]))
+
+    def test_prune_leaves_an_unstamped_closure_alone(self):
+        r = self.workspace(typescript=None)
+        (r.root / ".blueprint/closure/web/admin.json").unlink()
+        r.checked_run("drift.py", "prune", "web/admin")
+        self.assertFalse((r.root / ".blueprint/closure/web/admin.json").exists())
+
     def test_restamp_clears_it(self):
         r = self.workspace(typescript=None)
         self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")

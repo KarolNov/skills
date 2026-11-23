@@ -21,9 +21,11 @@ since its spec was last synced. It never talks to the spec backend.
                                                the given anchors instead (writes nothing)
     drift.py unanchored [--since REF]          changed files no capability covers
     drift.py overlaps [--json]                 files two or more capabilities' anchors match
-    drift.py rename OLD NEW                    rename a capability, keeping its stamps; also
-                                               renames it in artifacts and @scenario tags
-    drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match
+    drift.py rename OLD NEW                    rename a capability, keeping its stamps; moves
+                                               its baseline and closure files and renames it in
+                                               artifacts and @scenario tags
+    drift.py prune CAPABILITY                  drop stamps for files its anchors no longer match,
+                                               and what its closure no longer reaches
     drift.py hint                              one line suggesting /blueprint-tidy, or nothing
     drift.py artifacts [--json] [--] [CAPABILITY|DOMAIN ...]
                                                stale artifacts (outside resources describing a
@@ -1093,10 +1095,60 @@ def cmd_prune(args):
         art["checkedFiles"] = {p: h for p, h in checked.items()
                                if any(matching_anchors(c, p) for c in compiled_all)}
         trimmed += len(checked) - len(art["checkedFiles"])
+    closure = prune_closure(args[0], spec, state)
     save(state)
     print(f"pruned {args[0]}: dropped {len(old) - len(kept)} of {len(old)} stamps"
-          + (f"; {trimmed} artifact stamps" if trimmed else ""))
+          + (f"; {trimmed} artifact stamps" if trimmed else "") + (f"; {closure}" if closure else ""))
     return 0
+
+
+def prune_closure(name, spec, state):
+    """Re-record a capability's closure for the anchors it has now, keeping the stamped hash
+    of every file, symbol and locked version still in it, so what moved since the stamp still
+    reads as moved and only what the narrower anchors no longer reach is dropped. A capability
+    with no closure stamped gets none (recording one now would hide what moved since its
+    stamp). Returns a phrase for prune's line, or None when there was nothing to re-record."""
+    stamped = read_closure(name)
+    if stamped is None:
+        return None
+    try:
+        settings = scoring(state)
+    except SettingError as e:
+        print(f"  closure kept as stamped: bad setting: {e}", file=sys.stderr)
+        return None
+    files = repo_files()
+    entries = ts_entries(matched(spec, files))
+    if not entries:
+        closure_path(name).unlink()
+        return "closure removed (no TS/JS files left)"
+    found, why = run_helper({name: entries}, settings)
+    mode = "symbol" if found else "file"
+    if mode != stamped.get("mode"):
+        # Hashes taken by symbol and by file don't compare; keep the wider, older closure,
+        # which can only over-report, until a sync restamps it.
+        print(f"  closure kept as stamped: it was followed by {stamped.get('mode')}, and now "
+              f"would be by {mode}" + (f" ({why})" if why else "")
+              + "; stamp the capability after a sync to re-record it", file=sys.stderr)
+        return None
+    fresh = (build_closure("symbol", found["closures"][name], locked_versions()) if found
+             else build_closure("file", file_closure(entries, files, settings), locked_versions(),
+                                stamped.get("why")))
+    for f, rec in fresh["files"].items():
+        if f in stamped["files"]:
+            rec["hash"] = stamped["files"][f].get("hash")
+    old_symbols = {(s["file"], s["symbol"]): s.get("hash") for s in stamped.get("symbols", [])}
+    for s in fresh["symbols"]:
+        if (s["file"], s["symbol"]) in old_symbols:
+            s["hash"] = old_symbols[(s["file"], s["symbol"])]
+    if isinstance(stamped.get("locked"), dict):
+        fresh["locked"] = {pkg: stamped["locked"].get(pkg, v) for pkg, v in fresh["locked"].items()}
+    else:
+        del fresh["locked"]  # stamped before versions were recorded: still no lockfile signal
+    closure_path(name).write_text(json.dumps(fresh, indent=2, ensure_ascii=False) + "\n")
+    dropped = (len(stamped["files"]) - len(set(stamped["files"]) & set(fresh["files"])),
+               len(old_symbols) - len(old_symbols.keys() & {(s["file"], s["symbol"])
+                                                            for s in fresh["symbols"]}))
+    return f"closure re-recorded, {dropped[0]} files and {dropped[1]} symbols dropped"
 
 
 def cmd_unanchored(args):
@@ -1333,7 +1385,7 @@ def cmd_rename(args):
             art["capabilities"] = [new if c == old else c for c in art["capabilities"]]
             renamed.append(aid)
     has_baseline = move_leaving_no_empty_folder(src, dst, base)
-    move_leaving_no_empty_folder(closure_path(old), closure_path(new), CLOSURES)
+    has_closure = move_leaving_no_empty_folder(closure_path(old), closure_path(new), CLOSURES)
     save(state)
     failed, tags = [], 0
     for f, (data, n) in rewrites.items():
@@ -1343,6 +1395,7 @@ def cmd_rename(args):
         except OSError as e:
             failed.append(f"{f} ({e.strerror or e})")
     print(f"renamed {old} to {new}" + ("; baseline moved" if has_baseline else "")
+          + ("; closure moved" if has_closure else "")
           + (f"; {len(renamed)} artifacts updated" if renamed else "")
           + (f"; {tags} tags rewritten" if tags else ""))
     if failed:

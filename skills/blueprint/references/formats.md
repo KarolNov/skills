@@ -227,6 +227,20 @@ Each change has two documents that sit side by side in the backend and link to e
     "kinds": {
       "e2e": ["e2e/**"],
       "unit": ["**/*.test.ts", "**/*_test.go"]
+    },
+    "run": { "command": "npx vitest run --reporter=junit --outputFile=reports/junit.xml", "report": "reports/junit.xml" }
+  },
+  "drift": {
+    "scoring": {
+      "decay": 0.5,
+      "packageWeight": 0.5,
+      "lockfileWeight": 0.3,
+      "threshold": 0.5,
+      "maxDepth": 6,
+      "packages": {
+        "@company/core": { "weight": 1.0 },
+        "@company/legacy": { "sideEffects": false }
+      }
     }
   }
 }
@@ -239,7 +253,7 @@ Each change has two documents that sit side by side in the backend and link to e
 - **targetRepo** (top level, optional) is set only while the repo this file describes doesn't exist yet: its intended name or URL. The file then lives in the pending folder `blueprint-setup` names, and `apply` moves it into the new repo and drops the key.
 - **baseRepo** is set when `baseCommit` belongs to another repo (a change that creates this repo from another one's code). Without it, `baseCommit` is a commit of this repo.
 - **specVersion** is whatever the backend offers as a cheap "has this page changed" marker (see the backend file). When it differs from the backend's current marker, the spec moved.
-- `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp` (and `anchorsFiles` trimmed by `drift.py prune`); never edit them by hand. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.
+- `anchorsFiles` (a hash per anchored file) and `syncedCommit` are written only by `drift.py stamp` (and `anchorsFiles` trimmed by `drift.py prune`); never edit them by hand. Stamp also writes the capability's import closure to `.blueprint/closure/<capability>.json` (below), not here. `syncedCommit` is the commit that holds the synced code, so `git diff <syncedCommit>` shows only what changed after.
 - **artifacts** (optional) maps a kebab-case id to a resource outside the repo that describes one or more capabilities, so whoever changes their code is told to check it. Older readers ignore the key, so it needs no format version bump.
   - `type` is one of `webpage` (value a URL), `file` (a file in another git repo: `<repo>:<path>`, where `<repo>` is `owner/name` on GitHub or a git URL), `notion`, `confluence`, `linear` or `github` (value the page's URL; `github` is for an issue, PR, wiki or Pages URL, while a file in a repo is `file`), `obsidian` (a path relative to the vault, or an `obsidian://` URL) or `markdown` (a path relative to the notes folder's root, or absolute). Types are named after the tool, not the repo's backend, and any type can be used whatever the backend is; when the backend is that tool, relative paths resolve against its `docs.location`.
   - `capabilities` names capabilities or domains; a domain stands for every capability in it at check time, so one added to the domain later is covered too.
@@ -249,3 +263,63 @@ Each change has two documents that sit side by side in the backend and link to e
 - **tests** (optional) says how `/blueprint coverage` reads the repo's tests. Older readers ignore the key, so it needs no format version bump, and only coverage requires it.
   - `kinds` maps each kind name to git-style globs, in order; a test file gets the first kind whose globs match it. Kinds are free-form (`contract` or `visual` beside `unit`, `integration`, `e2e`). There are no default globs: without `kinds`, `coverage.py` exits 2 naming the key. The coverage mode proposes kinds from the repo's test layout on first run and writes them on the user's yes ([coverage.md](coverage.md)).
   - A tag in a file no kind matches still claims its scenario and is reported as unclassified, so a missing glob shows up without hiding coverage.
+  - `run` (optional) says how `drift.py check --tests run` runs the tests: `{"command": "<shell command>", "report": "<JUnit XML path, relative to the repo root>"}`. The command runs at the repo root (its output goes to stderr, so `--json` stays clean) and must write the report; a failing run is fine, since failures are what the report is for. Check exits 2 when `run` is absent or not that shape, or when the report is missing or wasn't rewritten by the run. `check --tests <report.xml>` reads a report written some other way and needs no `run`. Without `--tests`, check uses no test results and never runs tests. A `testcase` counts for a scenario when its file and name match a tagged test (the test declared right below the tag, as coverage records it); failing or erroring scores 1, passing raises confidence, and skipped or unmatched is no result.
+- **drift** (optional) tunes code-side drift. Older readers ignore the key, so it needs no format version bump. `drift.scoring` sets how `drift.py check` turns what changed into a **drift chance** from 0 to 1 ([status.md](status.md)); every key is optional and takes its default when absent:
+
+  | Key | Default | Meaning |
+  | --- | --- | --- |
+  | `decay` | 0.5 | A change `n` import edges from an anchored file scores `decay^n` |
+  | `packageWeight` | 0.5 | Multiplies that score once for each workspace package the import path enters |
+  | `lockfileWeight` | 0.3 | Score of a changed locked version of an external package the closure imports |
+  | `threshold` | 0.5 | A chance at or above it is `deps-moved` (drift, exit 1); above 0 and below it, `possibly-affected` (exit 0) |
+  | `maxDepth` | 6 | Import edges followed from the anchored files; beyond 6 a change scores under 0.02 at the default decay |
+  | `packages` | `{}` | Per workspace package name: `weight` replaces `packageWeight` for paths entering it, `sideEffects` overrides its `package.json` field |
+
+  A changed anchored file always scores 1. Several signals combine as `1 − ∏(1 − sᵢ)`, so two changes scoring 0.25 give 0.4375 and nothing exceeds 1. Values must be numbers from 0 to 1 (`maxDepth` a whole number of at least 1, `sideEffects` `true`, `false` or a list of globs); anything else makes `check` and `stamp` exit 2 naming the key, reporting nothing. So `"@company/core": {"weight": 1.0}` makes a change one import away in that package score 0.5 instead of 0.25, as heavily as a change one import away inside the capability's own package.
+
+### Side effects: what an import depends on
+
+TS/JS imports are followed by symbol, like an editor's "go to definition": the repo's own `typescript` resolves each imported name to the declaration it really is, through re-exports, `export *` barrels, renames and `tsconfig` paths. A **named import from a file without side effects** depends on the imported declarations and the declarations they reference, followed across files and packages, so a change to a private helper `signToken` calls counts and a change to an unused sibling export doesn't. A **bare import** (`import '@company/polyfills'`), or any import from a file **with side effects**, depends on that whole file and everything it imports. Barrels are transparent: a reason names the symbol in the file that declares it, not the index that re-exports it.
+
+Whether a file has side effects comes from the nearest `package.json` at or above it, by the `sideEffects` field bundlers already use, for workspace packages and the app's own package alike:
+
+| `package.json` | Meaning |
+| --- | --- |
+| `"sideEffects": false` | No file has side effects: named imports are followed by symbol |
+| `"sideEffects": ["**/*.css", "./src/polyfill.ts"]` | Files matching a glob have side effects and count whole; the rest by symbol. A glob without `/` matches the file name anywhere in the package; one with `/` matches the path from the package folder (a leading `./` is dropped) |
+| field absent, or `true` | Every file has side effects: imports count whole files. Assuming "free" would hide real drift |
+
+`drift.scoring.packages["<name>"].sideEffects` overrides the field with the same values, for a package whose `package.json` you'd rather not edit or that sets it wrong:
+
+```json
+"drift": { "scoring": { "packages": {
+  "@company/legacy": { "sideEffects": false },
+  "@company/ui": { "sideEffects": ["**/*.css"] }
+} } }
+```
+
+Without Node or the repo's `typescript` (a CI checkout with no install, say), imports are followed by file: every reached file counts whole, side-effects rules don't apply, and the capability's confidence is low. External packages (`node_modules`) are leaves: only their name and locked version are recorded, never their source.
+
+## `.blueprint/closure/<capability>.json`
+
+The import closure of a TS/JS capability (one whose anchored files include `.ts`, `.tsx`, `.js`, `.jsx`, `.mts` or `.cts`), written by `drift.py stamp` beside `baseline/` and committed with it, so `check` compares hashes and needs no PR base. `drift.py rename` moves it, and refuses when one already sits at the new name; `drift.py prune` drops what the narrowed anchors no longer reach and keeps the stamped hashes of the rest. Another capability's stamp never touches it. Never edit it by hand: a stamp rewrites it.
+
+```json
+{
+  "mode": "symbol",
+  "files": {
+    "packages/core/src/token.ts": { "distance": 1, "via": ["@company/core"], "hash": "<content hash>", "whole": false },
+    "packages/polyfills/src/fill.ts": { "distance": 1, "via": ["@company/polyfills"], "hash": "<content hash>", "whole": true }
+  },
+  "symbols": [
+    { "file": "packages/core/src/token.ts", "symbol": "signToken", "distance": 1, "via": ["@company/core"], "hash": "<declaration hash>" }
+  ],
+  "external": ["zod"],
+  "locked": { "zod": "3.22.0" }
+}
+```
+
+- `mode` is `symbol` when the TypeScript helper (`drift_ts.mjs`, beside `drift.py`) resolved imports, `file` when it couldn't; then `why` says what was missing (`"typescript not installed"`, `"node not found"`), and the capability stays at low confidence until a stamp with the tooling present.
+- `files` holds every reached file with its shortest `distance` in import edges, the workspace packages the path enters (`via`, each discounted by its weight), its content hash, and `whole` when an import depends on all of it (side effects, a bare import, or `file` mode). A file that isn't `whole` is compared by its `symbols`.
+- `symbols` holds each reached top-level declaration with a hash of its text; a symbol's dependencies are its own entries, at their own distance.
+- `external` lists the external packages the closure imports; `locked` their versions from the repo-root lockfile (`package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml` or `yarn.lock`), `null` when unlocked, `"a, b"` when the lockfile holds several. A closure without `locked` (stamped by an older `drift.py`) gives no lockfile signal.

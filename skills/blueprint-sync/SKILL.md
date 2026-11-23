@@ -29,7 +29,9 @@ For each `code-moved` capability:
    - **Intended**: a commit message, PR or blueprint says so, or it extends behavior without contradicting the spec. Draft the spec edit.
    - **Suspect**: it contradicts a requirement and nothing says that was meant. Ask the user whether the code is right. If not, hand the requirement to `blueprint-drift` and leave it.
 
-For each `deps-moved` capability, its own files didn't change, but code it imports did: the `reasons` from `drift.py check` name those files. Read `git diff <its syncedCommit in blueprint.json> -- <those files>` and how the capability's anchored code uses what changed, then sort and match the changes as above. When no behavior change reaches it, there is no spec edit: say so in its report line and do the spec bookkeeping, so it reads in sync again.
+For each `deps-moved` capability, its own files didn't change, but code it imports did, or a test tagged with one of its scenarios failed: the `reasons` from `drift.py check` name what (a file, a symbol in a file, a locked version in the lockfile, or a test and the scenario it claims), with its distance in imports and score. Read `git diff <its syncedCommit in blueprint.json> -- <those files>` (for a symbol, the hunks in its declaration; for a version bump, the package's changelog between the two versions when it is at hand) and how the capability's anchored code uses what changed, then sort and match the changes as above. A failing tagged test is a suspect change by default: the scenario it claims no longer holds, so ask, and hand it to `blueprint-drift` unless the user says the spec is what's wrong. When no behavior change reaches it, there is no spec edit: say so in its report line and do the spec bookkeeping, so it reads in sync again. The bookkeeping's `drift.py stamp` re-records its import closure (`.blueprint/closure/<capability>.json`) along with the file hashes; commit the closure with the baseline.
+
+A `possibly-affected` capability (a drift chance above 0, below the threshold) is not drift: leave it out of a bare sync. Named explicitly, treat it as `deps-moved`.
 
 With `--deep`, also compare the whole spec with the code: requirements that describe behavior the code no longer has, and observable behavior in the anchored code that no requirement mentions. Run `drift.py unanchored` and propose anchors for changed files that implement behavior but belong to no capability.
 
@@ -41,7 +43,7 @@ For a capability with no spec yet, draft the whole spec from its anchored code: 
 
 ## 4. Ask about stale artifacts
 
-After the bookkeeping, run `python3 .blueprint/drift.py artifacts <the capabilities you synced>`. If it answers `unknown command: artifacts`, the repo's copy predates artifacts: overwrite `.blueprint/drift.py` with `scripts/drift.py` from the blueprint skill (no format version changes) and run it again. It prints nothing when no artifact is stale; skip this step then. Otherwise put each stale artifact to the user with its type, value, description and changed files, in one round:
+After the bookkeeping, run `python3 .blueprint/drift.py artifacts <the capabilities you synced>`. If it answers `unknown command: artifacts`, the repo's copy predates artifacts: overwrite `.blueprint/drift.py` and `.blueprint/drift_ts.mjs` with `scripts/drift.py` and `scripts/drift_ts.mjs` from the blueprint skill (no format version changes) and run it again. It prints nothing when no artifact is stale; skip this step then. Otherwise put each stale artifact to the user with its type, value, description and changed files, in one round:
 
 ```
 **<id>** · <type> · <value>: <description> (changed: <files>)
