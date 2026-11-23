@@ -6,6 +6,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,8 +14,14 @@ import unittest
 from pathlib import Path
 
 DRIFT = Path(__file__).resolve().parent / "drift.py"
+sys.path.insert(0, str(DRIFT.parent / "e2e"))
+import fakerepo  # noqa: E402  (the TS workspace fixture)
 # Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
-ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+# NODE_PATH goes too, so no typescript is found but one linked into a fixture.
+ENV = dict({k: v for k, v in os.environ.items() if k != "NODE_PATH"},
+           GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+# Tests that expect "typescript not installed" need node to get as far as looking for it.
+NEEDS_NODE = unittest.skipUnless(shutil.which("node"), "node not found")
 
 
 class Repo:
@@ -607,13 +614,23 @@ class Scoring(DriftTest):
         self.assertIn("chance 1 · confidence high", text)
         self.assertIn("lib/core.py edited (anchored) → 1", text)
 
-    def test_ts_capability_is_low_confidence(self):
+    @NEEDS_NODE
+    def test_ts_capability_without_typescript_is_low_confidence(self):
         r = self.stamped({"src/a.ts": "", "lib/b.py": ""},
                          {"specs": {"web": spec("src/**"), "py": spec("lib/**")}})
         _, rows = self.check(r)
         self.assertEqual(rows["web"]["confidence"], "low")
-        self.assertIn("not followed", rows["web"]["reasons"][-1])
+        self.assertEqual(rows["web"]["reasons"][-1], "confidence low: typescript not installed "
+                         "when stamped, so imports are followed by file")
         self.assertEqual(rows["py"]["confidence"], "high")
+        self.assertFalse((r.root / ".blueprint/closure/py.json").exists())
+
+    def test_ts_capability_stamped_before_closures(self):
+        r = self.stamped({"src/a.ts": ""}, {"specs": {"web": spec("src/**")}})
+        (r.root / ".blueprint/closure/web.json").unlink()
+        _, rows = self.check(r)
+        self.assertEqual(rows["web"]["confidence"], "low")
+        self.assertIn("no import closure stamped yet", rows["web"]["reasons"][-1])
 
     def test_unstamped_rows_carry_the_fields(self):
         r = self.repo({"a.py": ""}, {"specs": {"lazy": {"ref": None, "anchors": ["a.py"]},
@@ -678,6 +695,630 @@ class Scoring(DriftTest):
         self.assertEqual(r.drift("check").returncode, 0)
 
 
+SESSION_TEST = ("# @scenario auth/session: Expired session redirects to login\n"
+                "def test_expired():\n    assert False\n\n"
+                "# @scenario auth/session: Fresh session stays\n"
+                "def test_fresh():\n    pass\n")
+
+
+def junit(*cases):
+    """A JUnit report: cases are (classname, name, outcome) with outcome passed, failed,
+    error or skipped."""
+    body = {"passed": "", "failed": '<failure message="no"/>', "error": '<error message="x"/>',
+            "skipped": "<skipped/>"}
+    rows = "".join(f'<testcase classname="{c}" name="{n}">{body[o]}</testcase>'
+                   for c, n, o in cases)
+    return f'<?xml version="1.0"?><testsuites><testsuite name="t">{rows}</testsuite></testsuites>'
+
+
+class Tests(DriftTest):
+    """check --tests: JUnit results matched to tagged tests by file and name."""
+
+    def stamped(self, state=None, files=None):
+        r = self.repo({"lib/session.py": "x = 1\n", "tests/test_session.py": SESSION_TEST,
+                       **(files or {})},
+                      state or {"specs": {"auth/session": spec("lib/**")}})
+        self.assertEqual(r.drift("stamp", "--all").returncode, 0)
+        return r
+
+    def check(self, r, *args):
+        out = r.drift("check", "--json", *args)
+        self.assertIn(out.returncode, (0, 1), out.stderr)
+        return out, {row["capability"]: row for row in json.loads(out.stdout)}
+
+    # @scenario blueprint/sync: Failing tagged test
+    def test_failing_tagged_test(self):
+        r = self.stamped()
+        r.write("report.xml", junit(("tests.test_session", "test_expired", "failed"),
+                                    ("tests.test_session", "test_fresh", "passed")))
+        out, rows = self.check(r, "--tests", "report.xml")
+        self.assertEqual(out.returncode, 1)
+        row = rows["auth/session"]
+        self.assertEqual((row["status"], row["chance"], row["confidence"]),
+                         ("deps-moved", 1.0, "high"))
+        self.assertEqual(row["reasons"], [
+            'test "test_expired" (tests/test_session.py:1) failed, claiming '
+            '"Expired session redirects to login" → 1'])
+        self.assertNotIn("changed", row)
+
+    def test_without_tests_nothing_runs_or_counts(self):
+        r = self.stamped()
+        r.write("report.xml", junit(("tests.test_session", "test_expired", "failed")))
+        out, rows = self.check(r)
+        self.assertEqual((out.returncode, rows["auth/session"]["status"]), (0, "in-sync"))
+
+    def test_passing_skipped_and_missing_tests_dont_move_it(self):
+        r = self.stamped()
+        for report in [junit(("tests.test_session", "test_expired", "passed")),
+                       junit(("tests.test_session", "test_expired", "skipped")),
+                       junit(("tests.test_other", "test_expired", "failed"),
+                             ("tests.test_session", "test_expired_again", "failed")),
+                       junit()]:
+            with self.subTest(report=report):
+                r.write("report.xml", report)
+                out, rows = self.check(r, "--tests=report.xml")
+                self.assertEqual((out.returncode, rows["auth/session"]["status"],
+                                  rows["auth/session"]["chance"]), (0, "in-sync", 0.0))
+
+    def test_error_counts_as_failing(self):
+        r = self.stamped()
+        r.write("report.xml", junit(("tests.test_session", "test_fresh", "error")))
+        _, rows = self.check(r, "--tests", "report.xml")
+        self.assertEqual(rows["auth/session"]["status"], "deps-moved")
+        self.assertIn('"Fresh session stays"', rows["auth/session"]["reasons"][0])
+
+    def test_code_moved_and_failing(self):
+        r = self.stamped()
+        r.write("lib/session.py", "x = 2\n")
+        r.write("report.xml", junit(("tests.test_session", "test_expired", "failed")))
+        _, rows = self.check(r, "--tests", "report.xml")
+        row = rows["auth/session"]
+        self.assertEqual((row["status"], row["chance"]), ("code-moved", 1.0))
+        self.assertEqual(len(row["reasons"]), 2)
+
+    def test_runners_report_shapes(self):
+        """Vitest names the file and nests describe titles; jest-junit may add a file
+        attribute; a single <testsuite> root; pytest parametrized; Go subtests."""
+        ts = ("// @scenario auth/session: Expired session redirects to login\n"
+              "it('rejects an expired token', () => {})\n")
+        go = ("// @scenario auth/session: Expired session redirects to login\n"
+              "func TestExpired(t *testing.T) {}\n")
+        files = {"src/session.test.ts": ts, "pkg/auth/session_test.go": go}
+        reports = {
+            "vitest": '<testsuites><testsuite name="src/session.test.ts"><testcase '
+                      'classname="src/session.test.ts" name="session &gt; rejects an expired '
+                      'token"><failure/></testcase></testsuite></testsuites>',
+            "jest": '<testsuite name="session"><testcase classname="session rejects an expired '
+                    'token" name="session rejects an expired token" file="/ci/repo/src/session'
+                    '.test.ts"><failure/></testcase></testsuite>',
+            "pytest": '<testsuites><testsuite><testcase classname="tests.test_session" '
+                      'name="test_expired[case-1]"><failure/></testcase></testsuite></testsuites>',
+            "go": '<testsuites><testsuite name="example.com/shop/pkg/auth"><testcase '
+                  'classname="example.com/shop/pkg/auth" name="TestExpired/past"><failure/>'
+                  '</testcase></testsuite></testsuites>',
+        }
+        r = self.stamped(files=files)
+        for runner, report in reports.items():
+            with self.subTest(runner=runner):
+                r.write("report.xml", report)
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], "deps-moved")
+
+    def test_run(self):
+        script = ("import pathlib, sys\nprint('ran the tests')\n"
+                  "pathlib.Path('out').mkdir(exist_ok=True)\n"
+                  "pathlib.Path('out/report.xml').write_text(sys.argv[1])\nsys.exit(1)\n")
+        report = junit(("tests.test_session", "test_expired", "failed"))
+        command = f"{sys.executable} run_tests.py '{report}'"
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": {"command": command, "report": "out/report.xml"}}},
+                         {"run_tests.py": script})
+        out, rows = self.check(r, "--tests", "run")
+        self.assertEqual(rows["auth/session"]["status"], "deps-moved")
+        self.assertIn("ran the tests", out.stderr)  # its output stays off stdout
+
+    def test_run_that_writes_no_report(self):
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": {"command": "true", "report": "out/report.xml"}}})
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("tests.run didn't write its report: out/report.xml", out.stderr)
+        r.write("out/report.xml", junit())  # a stale report from an earlier run
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2)
+
+    # @scenario blueprint/sync: Run mode without a command
+    def test_run_mode_without_a_command(self):
+        r = self.stamped()
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("tests.run", out.stderr)
+        self.assertEqual(out.stdout, "")
+
+    def test_unusable_tests_argument(self):
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": "pytest"}})
+        r.write("bad.xml", "<testsuites><testcase")
+        for args, message in [(["--tests"], "--tests needs"),
+                              (["--tests", "--json"], "--tests needs"),
+                              (["--tests", "missing.xml"], "can't read the JUnit report"),
+                              (["--tests", "bad.xml"], "can't read the JUnit report"),
+                              (["--tests", "run"], "tests.run must be")]:
+            with self.subTest(args=args):
+                out = r.drift("check", *args)
+                self.assertEqual(out.returncode, 2)
+                self.assertIn(message, out.stderr)
+
+
+    def test_absolute_report_not_written(self):
+        missing = str(Path(r"/nonexistent-blueprint-dir") / "report.xml")
+        r = self.stamped({"specs": {"auth/session": spec("lib/**")},
+                          "tests": {"run": {"command": "true", "report": missing}}})
+        out = r.drift("check", "--tests", "run")
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn(f"tests.run didn't write its report: {missing}", out.stderr)
+
+    def test_longer_test_owns_its_failure(self):
+        ts = ("// @scenario auth/session: Expired session redirects to login\n"
+              "it('rejects', () => {})\nit('never rejects', () => {})\n")
+        r = self.stamped(files={"src/session.test.ts": ts})
+        r.write("report.xml", '<testsuite><testcase classname="src/session.test.ts" '
+                              'name="session &gt; never rejects"><failure/></testcase>'
+                              '<testcase classname="src/session.test.ts" '
+                              'name="session &gt; rejects"/></testsuite>')
+        _, rows = self.check(r, "--tests", "report.xml")
+        self.assertEqual((rows["auth/session"]["status"], rows["auth/session"]["chance"]),
+                         ("in-sync", 0.0))
+
+    def test_same_relative_path_in_two_packages(self):
+        ts = ("// @scenario auth/session: Expired session redirects to login\n"
+              "it('signs in', () => {})\n")
+        r = self.stamped(files={"apps/web/src/login.test.ts": ts,
+                                "apps/admin/src/login.test.ts": "it('signs in', () => {})\n"})
+        failing = ('<testsuite><testcase classname="{}" name="signs in"><failure/>'
+                   '</testcase></testsuite>')
+        for where, status in [("src/login.test.ts", "in-sync"),  # whose? can't tell
+                              ("apps/admin/src/login.test.ts", "in-sync"),
+                              ("/ci/repo/apps/web/src/login.test.ts", "deps-moved")]:
+            with self.subTest(where=where):
+                r.write("report.xml", failing.format(where))
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], status)
+
+    def test_go_module_in_a_subfolder(self):
+        go = ("// @scenario auth/session: Expired session redirects to login\n"
+              "func TestExpired(t *testing.T) {}\n")
+        r = self.stamped(files={"backend/go.mod": "module example.com/shop\n\ngo 1.22\n",
+                                "backend/pkg/auth/session_test.go": go,
+                                "backend/root_test.go": go.replace("Expired", "Root")})
+        failing = ('<testsuites><testsuite name="{0}"><testcase classname="{0}" name="{1}">'
+                   '<failure/></testcase></testsuite></testsuites>')
+        for where, name, status in [("example.com/shop/pkg/auth", "TestExpired/past", "deps-moved"),
+                                    ("example.com/shop", "TestRoot", "deps-moved"),
+                                    ("example.com/shop/pkg/other", "TestExpired", "in-sync")]:
+            with self.subTest(where=where):
+                r.write("report.xml", failing.format(where, name))
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], status)
+
+    def test_rust_cargo_report(self):
+        rs = ("pub fn f() {}\n\n#[cfg(test)]\nmod tests {\n"
+              "    // @scenario auth/session: Expired session redirects to login\n"
+              "    #[test]\n    fn expired() {}\n}\n")
+        r = self.stamped(files={"crates/shop/Cargo.toml": '[package]\nname = "shop-core"\n',
+                                "crates/shop/src/session.rs": rs})
+        failing = '<testsuite><testcase classname="{}" name="{}"><failure/></testcase></testsuite>'
+        for where, name, status in [("shop_core", "session::tests::expired", "deps-moved"),
+                                    ("shop-core", "session::tests::expired", "deps-moved"),
+                                    ("shop_core", "other::tests::expired", "in-sync"),
+                                    ("elsewhere", "session::tests::expired", "in-sync")]:
+            with self.subTest(where=where, name=name):
+                r.write("report.xml", failing.format(where, name))
+                _, rows = self.check(r, "--tests", "report.xml")
+                self.assertEqual(rows["auth/session"]["status"], status)
+
+
+class Lockfile(DriftTest):
+    """The lockfile signal on the TS workspace fixture, followed by file (no typescript)."""
+
+    def workspace(self, scoring=None):
+        r = fakerepo.FakeRepo()
+        self.addCleanup(r.close)
+        fakerepo.ts_workspace(r)
+        if scoring:
+            r.update(lambda s: s.setdefault("drift", {}).__setitem__("scoring", scoring))
+        r.sync()
+        return r
+
+    def bump(self, r, version):
+        lock = json.loads(r.read("package-lock.json"))
+        lock["packages"]["node_modules/zod"]["version"] = version
+        r.write("package-lock.json", json.dumps(lock))
+
+    def rows(self, r):
+        out = r.drift("check", "--json")
+        self.assertIn(out.returncode, (0, 1), out.stderr)
+        return {row["capability"]: row for row in json.loads(out.stdout)}
+
+    # @scenario blueprint/sync: Dependency bumped
+    def test_dependency_bumped(self):
+        r = self.workspace()
+        closure = json.loads(r.read(".blueprint/closure/web/login.json"))
+        self.assertEqual(closure["locked"], {"zod": "3.22.0"})
+        self.bump(r, "3.23.0")
+        rows = self.rows(r)
+        login = rows["web/login"]
+        self.assertEqual((login["status"], login["chance"]), ("possibly-affected", 0.3))
+        self.assertEqual(login["reasons"][0], "zod 3.22.0 → 3.23.0 in the lockfile → 0.3")
+        self.assertEqual(rows["web/admin"]["status"], "in-sync")
+        r.sync()
+        self.assertEqual(self.rows(r)["web/login"]["status"], "in-sync")
+
+    def test_weight_and_older_closures(self):
+        r = self.workspace(scoring={"lockfileWeight": 0.6})
+        self.bump(r, "4.0.0")
+        login = self.rows(r)["web/login"]
+        self.assertEqual((login["status"], login["chance"]), ("deps-moved", 0.6))
+        # A closure stamped before versions were recorded: no lockfile signal.
+        path = r.root / ".blueprint/closure/web/login.json"
+        closure = json.loads(path.read_text())
+        del closure["locked"]
+        path.write_text(json.dumps(closure))
+        self.assertEqual(self.rows(r)["web/login"]["status"], "in-sync")
+
+    def test_dropped_from_the_lockfile(self):
+        r = self.workspace()
+        r.write("package-lock.json", json.dumps({"lockfileVersion": 3, "packages": {}}))
+        self.assertEqual(self.rows(r)["web/login"]["reasons"][0],
+                         "zod 3.22.0 → not locked in the lockfile → 0.3")
+
+
+TYPESCRIPT = fakerepo.find_typescript()
+NEEDS_TS = unittest.skipUnless(TYPESCRIPT, "no typescript to link: npm install -g typescript, "
+                               "or set BLUEPRINT_TEST_TYPESCRIPT to a typescript package folder")
+
+
+class Transitive(unittest.TestCase):
+    """Import closures on the TS workspace fixture: login imports signToken from @company/core
+    (no side effects, a barrel), button from @company/ui (side effects only in CSS, a barrel),
+    @company/polyfills bare and zod; admin imports old from @company/legacy (no sideEffects)."""
+
+    def workspace(self, typescript=TYPESCRIPT, scoring=None, files=None):
+        r = fakerepo.FakeRepo()
+        self.addCleanup(r.close)
+        fakerepo.ts_workspace(r, typescript)
+        for path, text in (files or {}).items():
+            r.write(path, text)
+        if scoring:
+            r.update(lambda s: s.setdefault("drift", {}).__setitem__("scoring", scoring))
+        r.sync()
+        return r
+
+    def replace(self, r, path, old, new):
+        text = r.read(path)
+        self.assertIn(old, text)
+        r.write(path, text.replace(old, new))
+
+    def check(self, r, env=None):
+        out = subprocess.run([sys.executable, str(DRIFT), "check", "--json"], cwd=r.root,
+                             capture_output=True, text=True, env=env or fakerepo.ENV)
+        self.assertIn(out.returncode, (0, 1), out.stderr)
+        return out, {row["capability"]: row for row in json.loads(out.stdout)}
+
+    def closure(self, r, name):
+        return json.loads(r.read(f".blueprint/closure/{name}.json"))
+
+    # @scenario blueprint/sync: Closure recorded
+    @NEEDS_TS
+    def test_closure_recorded(self):
+        r = self.workspace(files={"apps/web/src/admin.ts": (
+            "import { signToken, hashPassword } from '@company/core';\n\n"
+            "export const admin = () => hashPassword(signToken('a'));\n")})
+        closure = self.closure(r, "web/admin")
+        self.assertEqual(closure["mode"], "symbol")
+        symbols = {(s["file"], s["symbol"]): s for s in closure["symbols"]}
+        for key in [("packages/core/src/token.ts", "signToken"),
+                    ("packages/core/src/password.ts", "hashPassword")]:
+            self.assertEqual((symbols[key]["distance"], symbols[key]["via"]),
+                             (1, ["@company/core"]))
+            self.assertRegex(symbols[key]["hash"], r"^[0-9a-f]{12}$")
+        # What signToken references comes along: a private helper in its file, and on.
+        self.assertEqual(symbols[("packages/core/src/token.ts", "pad")]["distance"], 1)
+        self.assertEqual(symbols[("packages/core/src/secret.ts", "secret")]["distance"], 2)
+        self.assertEqual(symbols[("packages/core/src/salt.ts", "salt")]["distance"], 3)
+        self.assertNotIn(("packages/core/src/token.ts", "verifyToken"), symbols)
+        self.assertNotIn("packages/core/src/index.ts", closure["files"])  # a barrel: transparent
+        login = self.closure(r, "web/login")
+        self.assertEqual(login["external"], ["zod"])
+        self.assertTrue(login["files"]["packages/polyfills/src/fill.ts"]["whole"])
+
+    # @scenario blueprint/sync: Imported symbol changed
+    @NEEDS_TS
+    def test_imported_symbol_changed(self):
+        r = self.workspace(scoring={"packages": {"@company/core": {"weight": 1.0}}})
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 1)
+        row = rows["web/login"]
+        self.assertEqual((row["status"], row["chance"], row["confidence"]),
+                         ("deps-moved", 0.5, "medium"))
+        self.assertEqual(row["reasons"], [
+            "packages/core/src/token.ts signToken changed, 1 import away, "
+            "via @company/core (weight 1) → 0.5",
+            "confidence medium: no test results given"])
+        self.assertNotIn("changed", row)
+        self.assertEqual(rows["web/admin"]["status"], "in-sync")
+
+    # @scenario blueprint/sync: Unused export changed
+    @NEEDS_TS
+    def test_unused_export_changed(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/token.ts", "token.length > 8", "token.length > 9")
+        self.replace(r, "packages/core/src/secret.ts", "unused = 1", "unused = 2")
+        self.replace(r, "packages/ui/src/button.ts", "return '*'", "return '+'")
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 0)
+        self.assertEqual((rows["web/login"]["status"], rows["web/login"]["chance"]), ("in-sync", 0.0))
+
+    # @scenario blueprint/sync: Distant change below threshold
+    @NEEDS_TS
+    def test_distant_change_below_threshold(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 0)
+        row = rows["web/login"]
+        self.assertEqual((row["status"], row["chance"]), ("possibly-affected", 0.0625))
+        self.assertEqual(row["reasons"][0], "packages/core/src/salt.ts salt changed, 3 imports "
+                         "away, via @company/core (weight 0.5) → 0.06")
+        self.assertIn("possibly-affected web/login  chance 0.0625 · confidence medium",
+                      r.drift("check").stdout)
+
+    # @scenario blueprint/sync: Core package weighted up
+    @NEEDS_TS
+    def test_core_package_weighted_up(self):
+        for scoring, chance in [(None, 0.25),
+                                ({"packages": {"@company/core": {"weight": 1.0}}}, 0.5)]:
+            with self.subTest(scoring=scoring):
+                r = self.workspace(scoring=scoring)
+                self.replace(r, "packages/core/src/token.ts", "padEnd(8)", "padEnd(9)")
+                _, rows = self.check(r)
+                # pad is private to token.ts: it counts through signToken, at the same distance.
+                self.assertEqual(rows["web/login"]["chance"], chance)
+                self.assertIn("token.ts pad changed, 1 import away", rows["web/login"]["reasons"][0])
+
+    # @scenario blueprint/sync: Two weak signals
+    @NEEDS_TS
+    def test_two_weak_signals(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        self.replace(r, "packages/ui/src/button.ts", "`[${label}]`", "`(${label})`")
+        _, rows = self.check(r)
+        self.assertEqual((rows["web/login"]["status"], rows["web/login"]["chance"]),
+                         ("possibly-affected", 0.4375))
+
+    # @scenario blueprint/sync: Same diff, same number
+    @NEEDS_TS
+    def test_same_diff_same_number_through_imports(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        self.assertEqual(self.check(r)[0].stdout, self.check(r)[0].stdout)
+
+    # @scenario blueprint/sync: Side-effect import
+    @NEEDS_TS
+    def test_side_effect_import(self):
+        r = self.workspace()
+        self.replace(r, "packages/polyfills/src/fill.ts", "= true", "= 1")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["reasons"][0],
+                         "packages/polyfills/src/fill.ts changed (whole file), 2 imports away, "
+                         "via @company/polyfills (weight 0.5) → 0.13")
+
+    # @scenario blueprint/sync: Field absent
+    @NEEDS_TS
+    def test_side_effects_field_absent(self):
+        r = self.workspace()
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        _, rows = self.check(r)
+        self.assertEqual((rows["web/admin"]["status"], rows["web/admin"]["chance"]),
+                         ("possibly-affected", 0.25))
+        self.assertIn("legacy/src/index.ts changed (whole file)", rows["web/admin"]["reasons"][0])
+
+    # @scenario blueprint/sync: Override
+    @NEEDS_TS
+    def test_side_effects_override(self):
+        r = self.workspace(scoring={"packages": {"@company/legacy": {"sideEffects": False}}})
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/admin"]["status"], "in-sync")
+        self.replace(r, "packages/legacy/src/index.ts", "return 1", "return 0")
+        _, rows = self.check(r)
+        self.assertIn("legacy/src/index.ts old changed", rows["web/admin"]["reasons"][0])
+
+    @NEEDS_TS
+    def test_side_effects_glob_counts_the_file_whole(self):
+        r = self.workspace(scoring={"packages": {"@company/ui": {"sideEffects": ["src/button.ts"]}}})
+        self.replace(r, "packages/ui/src/button.ts", "return '*'", "return '+'")
+        _, rows = self.check(r)
+        self.assertIn("packages/ui/src/button.ts changed (whole file), 1 import away",
+                      rows["web/login"]["reasons"][0])
+
+    # @scenario blueprint/sync: Barrel re-export
+    @NEEDS_TS
+    def test_barrel_re_export(self):
+        r = self.workspace()
+        self.replace(r, "packages/ui/src/button.ts", "`[${label}]`", "`(${label})`")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["reasons"][0], "packages/ui/src/button.ts button "
+                         "changed, 1 import away, via @company/ui (weight 0.5) → 0.25")
+
+    # @scenario blueprint/sync: No test results
+    @NEEDS_TS
+    def test_no_test_results(self):
+        r = self.workspace()
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["confidence"], "medium")
+        self.assertEqual(rows["web/login"]["reasons"], ["confidence medium: no test results given"])
+
+    @NEEDS_TS
+    def test_test_results_raise_confidence(self):
+        r = self.workspace(files={"apps/web/src/login.test.ts": (
+            "// @scenario web/login: Signs in\nit('signs in', () => {})\n")})
+        for outcome, (confidence, reasons) in {
+                "passed": ("high", []),
+                "skipped": ("medium", ["confidence medium: no results for its tagged tests in "
+                                       "the report"])}.items():
+            with self.subTest(outcome=outcome):
+                r.write("report.xml", junit(("apps/web/src/login.test.ts", "signs in", outcome)))
+                out = subprocess.run([sys.executable, str(DRIFT), "check", "--json", "--tests",
+                                      "report.xml"], cwd=r.root, capture_output=True, text=True,
+                                     env=fakerepo.ENV)
+                row = {x["capability"]: x for x in json.loads(out.stdout)}["web/login"]
+                self.assertEqual((row["status"], row["confidence"], row["reasons"]),
+                                 ("in-sync", confidence, reasons))
+
+    @NEEDS_TS
+    def test_max_depth_cuts_the_closure(self):
+        r = self.workspace(scoring={"maxDepth": 2})
+        symbols = {s["symbol"] for s in self.closure(r, "web/login")["symbols"]}
+        self.assertIn("secret", symbols)
+        self.assertNotIn("salt", symbols)
+
+    # @scenario blueprint/sync: CI without node_modules
+    @NEEDS_TS
+    def test_ci_without_typescript(self):
+        r = self.workspace()
+        fakerepo.unlink_typescript(r)
+        self.replace(r, "packages/core/src/secret.ts", "unused = 1", "unused = 2")
+        out, rows = self.check(r)
+        row = rows["web/login"]
+        self.assertEqual((row["status"], row["confidence"]), ("possibly-affected", "low"))
+        self.assertEqual(row["reasons"], [
+            "packages/core/src/secret.ts changed, 2 imports away, via @company/core (weight 0.5)"
+            " → 0.13",
+            "confidence low: typescript not installed, so imports are followed by file"])
+        self.assertEqual(out.stderr.count("notice:"), 1)
+        self.assertIn("typescript not installed", out.stderr)
+        self.assertFalse((r.root / "node_modules/typescript").exists())  # never installed
+
+    def test_node_not_found(self):
+        r = self.workspace(typescript=None)
+        self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
+        # A PATH holding git alone: node often shares a folder with git, so none is dropped.
+        bin_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, bin_dir)
+        (bin_dir / "git").symlink_to(shutil.which("git"))
+        env = dict(fakerepo.ENV, PATH=str(bin_dir))
+        out = subprocess.run([sys.executable, str(DRIFT), "stamp", "--all"], cwd=r.root,
+                             capture_output=True, text=True, env=env)
+        self.assertIn("node not found", out.stderr)
+        self.assertEqual(self.closure(r, "web/login")["why"], "node not found")
+
+    @NEEDS_NODE
+    def test_stamp_without_typescript_follows_files(self):
+        r = self.workspace(typescript=None)
+        closure = self.closure(r, "web/login")
+        self.assertEqual((closure["mode"], closure["why"], closure["symbols"]),
+                         ("file", "typescript not installed", []))
+        files = {f: (rec["distance"], rec["via"]) for f, rec in closure["files"].items()}
+        # By file, a barrel is a hop of its own, and every file it re-exports comes along.
+        self.assertEqual(files["packages/core/src/index.ts"], (1, ["@company/core"]))
+        self.assertEqual(files["packages/core/src/token.ts"], (2, ["@company/core"]))
+        self.assertEqual(files["packages/core/src/password.ts"], (2, ["@company/core"]))
+        self.assertEqual(files["packages/core/src/salt.ts"], (4, ["@company/core"]))
+        self.assertEqual(files["packages/polyfills/src/fill.ts"], (2, ["@company/polyfills"]))
+        self.assertEqual(files["packages/ui/src/button.ts"], (2, ["@company/ui"]))
+        self.assertEqual(closure["external"], ["zod"])
+        self.assertTrue(all(rec["whole"] for rec in closure["files"].values()))
+        self.replace(r, "packages/core/src/token.ts", "token.length > 8", "token.length > 9")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["reasons"], [
+            "packages/core/src/token.ts changed, 2 imports away, via @company/core (weight 0.5)"
+            " → 0.13",
+            "confidence low: typescript not installed when stamped, so imports are followed by "
+            "file"])
+
+    def test_rename_moves_the_closure(self):
+        r = self.workspace(typescript=None)
+        r.checked_run("drift.py", "rename", "web/login", "web/signin")
+        self.assertFalse((r.root / ".blueprint/closure/web/login.json").exists())
+        self.assertEqual(self.closure(r, "web/signin")["mode"], "file")
+        r.write(".blueprint/closure/web/taken.json", "{}")
+        out = r.drift("rename", "web/admin", "web/taken")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("closure already exists", out.stderr)
+
+    def narrowed(self, typescript):
+        """web/app anchors login.ts and admin.ts; after its stamp, code both import moves, then
+        its anchors narrow to login.ts and prune runs."""
+        r = self.workspace(typescript=typescript)
+        r.capability("web/app", ["apps/web/src/login.ts", "apps/web/src/admin.ts"])
+        r.sync()
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        r.update(lambda s: s["specs"]["web/app"].__setitem__("anchors", ["apps/web/src/login.ts"]))
+        out = r.checked_run("drift.py", "prune", "web/app")
+        self.assertIn("closure re-recorded", out.stdout)
+        return r
+
+    def test_prune_re_records_the_closure_keeping_what_moved(self):
+        r = self.narrowed(None)
+        closure = self.closure(r, "web/app")
+        self.assertFalse(any(f.startswith("packages/legacy/") for f in closure["files"]))
+        self.assertIn("packages/core/src/token.ts", closure["files"])
+        row = self.check(r)[1]["web/app"]
+        self.assertTrue(any(x.startswith("packages/core/src/token.ts changed") for x in row["reasons"]))
+        self.assertFalse(any("legacy" in x for x in row["reasons"]))
+        self.assertEqual(row["status"], "possibly-affected")
+
+    @NEEDS_TS
+    def test_prune_re_records_the_closure_by_symbol(self):
+        r = self.narrowed(TYPESCRIPT)
+        closure = self.closure(r, "web/app")
+        self.assertEqual(closure["mode"], "symbol")
+        self.assertFalse(any(s["file"].startswith("packages/legacy/") for s in closure["symbols"]))
+        row = self.check(r)[1]["web/app"]
+        self.assertEqual(row["reasons"][0], "packages/core/src/token.ts signToken changed, 1 "
+                         "import away, via @company/core (weight 0.5) → 0.25")
+        self.assertFalse(any("legacy" in x for x in row["reasons"]))
+
+    def test_prune_leaves_an_unstamped_closure_alone(self):
+        r = self.workspace(typescript=None)
+        (r.root / ".blueprint/closure/web/admin.json").unlink()
+        r.checked_run("drift.py", "prune", "web/admin")
+        self.assertFalse((r.root / ".blueprint/closure/web/admin.json").exists())
+
+    @NEEDS_TS
+    def test_prune_keeps_a_closure_whose_mode_would_change(self):
+        r = self.workspace()
+        before = r.read(".blueprint/closure/web/login.json")
+        self.assertEqual(json.loads(before)["mode"], "symbol")
+        fakerepo.unlink_typescript(r)
+        out = r.checked_run("drift.py", "prune", "web/login")
+        self.assertNotIn("closure re-recorded", out.stdout)
+        self.assertIn("closure kept as stamped: it was followed by symbol, and now would be by "
+                      "file (typescript not installed)", out.stderr)
+        self.assertEqual(r.read(".blueprint/closure/web/login.json"), before)
+
+    def test_prune_removes_the_closure_when_no_ts_is_left(self):
+        r = self.workspace(typescript=None, files={"apps/web/src/admin.css": "a {}\n",
+                                                    "apps/web/src/login.css": "a {}\n"})
+        for name in ("web/admin", "web/login"):
+            css = f"apps/web/src/{name.split('/')[1]}.css"
+            r.update(lambda s: s["specs"][name].__setitem__("anchors", [css]))
+            out = r.checked_run("drift.py", "prune", name)
+            self.assertIn("closure removed (no TS/JS files left)", out.stdout)
+        self.assertFalse((r.root / ".blueprint/closure/web").exists())
+
+    def test_restamp_clears_it(self):
+        r = self.workspace(typescript=None)
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        self.assertEqual(self.check(r)[1]["web/admin"]["status"], "possibly-affected")
+        r.sync()
+        self.assertEqual(self.check(r)[1]["web/admin"]["status"], "in-sync")
+
+
 class Combine(unittest.TestCase):
     """The formula itself, imported (drift.py only needs to run inside a git repo)."""
 
@@ -691,6 +1332,88 @@ class Combine(unittest.TestCase):
         self.assertEqual(self.drift.combine([0.25, 0.25]), 0.4375)
         self.assertEqual(self.drift.combine([1.0, 0.3]), 1.0)
         self.assertEqual(self.drift.combine([]), 0.0)
+
+    def test_npm_lockfiles(self):
+        v3 = {"lockfileVersion": 3, "packages": {
+            "": {"name": "app"}, "node_modules/zod": {"version": "3.22.0"},
+            "node_modules/@scope/x": {"version": "1.0.0"},
+            "node_modules/a/node_modules/zod": {"version": "3.21.0"},
+            "node_modules/@company/core": {"resolved": "packages/core", "link": True}}}
+        self.assertEqual(sorted(self.drift.npm_versions(json.dumps(v3))), [
+            ("@scope/x", "1.0.0"), ("zod", "3.21.0"), ("zod", "3.22.0")])
+        v1 = {"lockfileVersion": 1, "dependencies": {"zod": {"version": "3.0.0", "dependencies": {
+            "tslib": {"version": "2.0.0"}}}}}
+        self.assertEqual(sorted(self.drift.npm_versions(json.dumps(v1))), [
+            ("tslib", "2.0.0"), ("zod", "3.0.0")])
+        self.assertEqual(list(self.drift.npm_versions("{not json")), [])
+
+    def test_pnpm_lockfiles(self):
+        v9 = ("lockfileVersion: '9.0'\n\nimporters:\n  .:\n    dependencies:\n      zod:\n"
+              "        specifier: ^3.22.0\n        version: 3.22.0\n\npackages:\n\n"
+              "  zod@3.22.0:\n    resolution: {integrity: sha512-x}\n\n"
+              "  '@scope/x@1.0.0(react@18.2.0)':\n    resolution: {integrity: sha512-y}\n\n"
+              "snapshots:\n\n  zod@3.22.0: {}\n")
+        self.assertEqual(sorted(self.drift.pnpm_versions(v9)), [
+            ("@scope/x", "1.0.0"), ("zod", "3.22.0")])
+        v6 = "lockfileVersion: '6.0'\n\npackages:\n\n  /zod@3.22.0:\n    dev: false\n"
+        self.assertEqual(list(self.drift.pnpm_versions(v6)), [("zod", "3.22.0")])
+        v5 = ("lockfileVersion: 5.4\n\npackages:\n\n  /zod/3.22.0:\n    dev: false\n"
+              "  /@scope/x/1.0.0_react@18.2.0:\n    dev: false\n")
+        self.assertEqual(list(self.drift.pnpm_versions(v5)), [
+            ("zod", "3.22.0"), ("@scope/x", "1.0.0")])
+
+    def test_yarn_lockfiles(self):
+        classic = ('# yarn lockfile v1\n\n\n"@scope/x@^1.0.0", "@scope/x@^1.0.1":\n'
+                   '  version "1.0.2"\n  resolved "https://r/x.tgz"\n  dependencies:\n'
+                   '    version "9"\n\nzod@^3.22.0:\n  version "3.22.4"\n')
+        self.assertEqual(list(self.drift.yarn_versions(classic)), [
+            ("@scope/x", "1.0.2"), ("zod", "3.22.4")])
+        berry = ('__metadata:\n  version: 6\n\n"zod@npm:^3.22.0":\n  version: 3.22.4\n'
+                 '  resolution: "zod@npm:3.22.4"\n')
+        self.assertEqual(list(self.drift.yarn_versions(berry)), [("zod", "3.22.4")])
+
+    def test_report_locators(self):
+        locates = self.drift.locates
+        self.assertTrue(locates("tests.test_session", "tests/test_session.py"))
+        self.assertTrue(locates("test_session.TestLogin", "tests/test_session.py"))
+        self.assertTrue(locates("/ci/repo/src/a.test.ts", "src/a.test.ts"))
+        self.assertTrue(locates("example.com/shop/pkg/auth", "pkg/auth/x_test.go"))
+        self.assertFalse(locates("tests.test_other", "tests/test_session.py"))
+        self.assertFalse(locates("", "a.py"))
+
+    def test_report_names(self):
+        match = self.drift.names_match
+        self.assertTrue(match("session > rejects", "rejects"))
+        self.assertTrue(match("session > rejects", "session"))
+        self.assertTrue(match("test_x[1-2]", "test_x"))
+        self.assertTrue(match("TestX/sub", "TestX"))
+        self.assertFalse(match("test_xy", "test_x"))
+        self.assertFalse(match("rejects later", "rejects"))
+
+    def test_longer_declared_test_owns_the_case(self):
+        claims = self.drift.claims
+        self.assertFalse(claims("never rejects", "rejects", {"rejects", "never rejects"}))
+        self.assertTrue(claims("never rejects", "rejects", {"rejects"}))  # jest: "describe test"
+        self.assertTrue(claims("session > rejects", "session", {"session", "rejects"}))
+        self.assertTrue(claims("tests::expired", "expired", {"expired"}))
+
+    def test_cfg_test_is_not_a_test_attribute(self):
+        text = ("// @scenario a/b: X\n#[cfg_attr(test, derive(Debug))]\nfn helper() {}\n"
+                "// @scenario a/b: Y\n#[rstest]\nfn cases() {}\n")
+        self.assertEqual([t[3] for t in self.drift.scan_tags(text)], [None, "cases"])
+        self.assertEqual(self.drift.declared_tests(text), {"cases"})
+
+    def test_node_builtins_are_no_package(self):
+        resolve = self.drift.resolve_import
+        self.assertIsNone(resolve("events", "src/a.ts", set(), {}, {}))
+        self.assertEqual(resolve("zod", "src/a.ts", set(), {}, {}), ("external", "zod"))
+        settings = self.drift.scoring({})
+        old = {"mode": "file", "locked": {"events": "3.3.0", "zod": "3.22.0"}}
+        self.assertEqual([r for _, r in self.drift.lock_signals(
+            old, {"events": "3.3.1", "zod": "3.22.0"}, settings)], [])
+        symbol = dict(old, mode="symbol")  # resolved by typescript into node_modules/events
+        self.assertEqual(len(self.drift.lock_signals(symbol, {"events": "3.3.1", "zod": "3.22.0"},
+                                                     settings)), 1)
 
     def test_defaults(self):
         self.assertEqual(self.drift.scoring({}), {

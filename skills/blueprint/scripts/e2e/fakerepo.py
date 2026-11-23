@@ -32,9 +32,10 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent  # the scripts under test
 # Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
-ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
-           GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
-           GIT_COMMITTER_EMAIL="t@t")
+# NODE_PATH goes too, so the only typescript a fixture's node sees is the one linked into it.
+ENV = dict({k: v for k, v in os.environ.items() if k != "NODE_PATH"}, GIT_CONFIG_GLOBAL=os.devnull,
+           GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+           GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
 AT = "@" + "scenario"  # split, so this file's own lines never read as tags
 MARK = ".demo-map"  # sits in a demo repo, so a rerun knows it may replace the folder
 
@@ -182,6 +183,110 @@ class FakeRepo:
         args = ["--out", str(out)] if out else []
         lines = self.checked_run("graph.py", *args).stdout.strip().splitlines()
         return Path(lines[0]), lines[1]
+
+
+# A TS workspace: an app importing from workspace packages with and without side effects, a
+# barrel, a bare import, an external dependency and a lockfile, for transitive drift.
+
+TS_FILES = {
+    "package.json": json.dumps({"name": "acme", "private": True,
+                                "workspaces": ["apps/*", "packages/*"]}, indent=2),
+    "tsconfig.json": json.dumps({"compilerOptions": {
+        "strict": True, "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler"}},
+        indent=2),
+    ".gitignore": "node_modules/\n",
+    "package-lock.json": json.dumps({"name": "acme", "lockfileVersion": 3, "packages": {
+        "node_modules/zod": {"version": "3.22.0"}}}, indent=2),
+    # The app: each capability anchors one file.
+    "apps/web/package.json": json.dumps({"name": "@company/web", "private": True,
+                                         "sideEffects": False}, indent=2),
+    "apps/web/src/login.ts": (
+        "import { signToken } from '@company/core';\n"
+        "import { button } from '@company/ui';\n"
+        "import '@company/polyfills';\n"
+        "import { z } from 'zod';\n\n"
+        "export function login(user: string) {\n"
+        "  return button(signToken(user)) + String(z);\n}\n"),
+    "apps/web/src/admin.ts": (
+        "import { old } from '@company/legacy';\n\n"
+        "export function admin() {\n  return old();\n}\n"),
+    # No side effects: imports depend on symbols. The index is a barrel.
+    "packages/core/package.json": json.dumps({"name": "@company/core", "main": "src/index.ts",
+                                              "sideEffects": False}, indent=2),
+    "packages/core/src/index.ts": ("export * from './token';\n"
+                                   "export { hashPassword } from './password';\n"),
+    "packages/core/src/token.ts": (
+        "import { secret } from './secret';\n\n"
+        "function pad(s: string) {\n  return s.padEnd(8);\n}\n\n"
+        "export function signToken(user: string) {\n  return pad(user) + secret();\n}\n\n"
+        "export function verifyToken(token: string) {\n  return token.length > 8;\n}\n"),
+    "packages/core/src/secret.ts": (
+        "import { salt } from './salt';\n\n"
+        "export function secret() {\n  return 'k' + salt();\n}\n\n"
+        "export const unused = 1;\n"),
+    "packages/core/src/salt.ts": "export function salt() {\n  return 's';\n}\n",
+    "packages/core/src/password.ts": "export function hashPassword(p: string) {\n  return p;\n}\n",
+    # No sideEffects field: the whole package counts.
+    "packages/legacy/package.json": json.dumps({"name": "@company/legacy",
+                                                "main": "src/index.ts"}, indent=2),
+    "packages/legacy/src/index.ts": ("export function old() {\n  return 1;\n}\n\n"
+                                     "export function other() {\n  return 2;\n}\n"),
+    # Side effects only in CSS: TS imports go by symbol, through a barrel.
+    "packages/ui/package.json": json.dumps({"name": "@company/ui", "main": "src/index.ts",
+                                            "sideEffects": ["*.css"]}, indent=2),
+    "packages/ui/src/index.ts": "export * from './button';\n",
+    "packages/ui/src/button.ts": ("export function button(label: string) {\n"
+                                  "  return `[${label}]`;\n}\n\n"
+                                  "export function icon() {\n  return '*';\n}\n"),
+    # Imported bare, for its side effects.
+    "packages/polyfills/package.json": json.dumps({"name": "@company/polyfills",
+                                                   "main": "src/index.ts",
+                                                   "sideEffects": False}, indent=2),
+    "packages/polyfills/src/index.ts": "import './fill';\n",
+    "packages/polyfills/src/fill.ts": "(globalThis as any).polyfilled = true;\n",
+}
+WORKSPACE = {"@company/core": "packages/core", "@company/legacy": "packages/legacy",
+             "@company/ui": "packages/ui", "@company/polyfills": "packages/polyfills",
+             "@company/web": "apps/web"}
+
+
+def find_typescript():
+    """A typescript package folder to link into fixtures, or None: $BLUEPRINT_TEST_TYPESCRIPT,
+    else the global one from `npm root -g`."""
+    if env := os.environ.get("BLUEPRINT_TEST_TYPESCRIPT"):
+        return Path(env) if (Path(env) / "package.json").is_file() else None
+    try:
+        out = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    found = Path(out.stdout.strip()) / "typescript"
+    return found if out.returncode == 0 and (found / "package.json").is_file() else None
+
+
+def ts_workspace(r, typescript=None):
+    """Write the TS workspace into a FakeRepo and map web/login and web/admin. node_modules is
+    what an install would leave (ignored by git): workspace packages linked, zod as an external
+    package, and typescript linked from `typescript` when given. Stamped by the next sync()."""
+    for path, text in TS_FILES.items():
+        r.write(path, text if text.endswith("\n") else text + "\n")
+    modules = r.root / "node_modules"
+    for name, folder in WORKSPACE.items():
+        link = modules / name
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(r.root / folder, target_is_directory=True)
+    r.write("node_modules/zod/package.json", json.dumps({"name": "zod", "version": "3.22.0",
+                                                         "types": "index.d.ts"}))
+    r.write("node_modules/zod/index.d.ts", "export declare const z: number;\n")
+    if typescript:
+        (modules / "typescript").symlink_to(Path(typescript).resolve(), target_is_directory=True)
+    r.domain("web", "The web app.")
+    r.capability("web/login", ["apps/web/src/login.ts"])
+    r.capability("web/admin", ["apps/web/src/admin.ts"])
+
+
+def unlink_typescript(r):
+    """Take typescript away, as a CI checkout without an install has it."""
+    (r.root / "node_modules" / "typescript").unlink()
 
 
 # The demo shop: a seeded, realistic repo.

@@ -2,3 +2,6 @@
 #   pip install -r requirements-dev.txt && python3 -m playwright install chromium
 PyYAML>=6         # skills/blueprint/scripts/e2e/test_drift_workflow.py
 playwright>=1.40  # skills/blueprint/scripts/e2e/test_map_page.py
+# test_drift.py's TypeScript tests also need node and a typescript package, linked into its
+# fixtures: `npm install -g typescript`, or BLUEPRINT_TEST_TYPESCRIPT=<path to a typescript
+# package folder>. Without one they are skipped.

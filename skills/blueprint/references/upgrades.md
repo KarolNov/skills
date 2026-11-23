@@ -27,7 +27,7 @@ Entries are append-only. A new format version adds a section at the end, raises 
 **Migrate**
 
 - `blueprint.json`: add `"version": 2` as the first key and `"domains": {}` before `specs`. Leave every other key as it is.
-- `.blueprint/drift.py`: overwrite with `scripts/drift.py` from the blueprint skill. With the Notion backend, also overwrite `.blueprint/notion_normalize.py` with `scripts/notion_normalize.py`.
+- `.blueprint/drift.py` and `.blueprint/drift_ts.mjs`: overwrite with `scripts/drift.py` and `scripts/drift_ts.mjs` from the blueprint skill. With the Notion backend, also overwrite `.blueprint/notion_normalize.py` with `scripts/notion_normalize.py`.
 - Backend, by `docs.backend`:
   - **notion**: add `"Kind" SELECT('Capability':gray, 'Domain':blue)` to the Specs data source and set every existing row to `Capability`, then turn on sub-items for it (a `Parent item` self-relation), so a domain row can hold capability rows.
   - **obsidian**: move each capability note from the flattened `<specs>/<domain>__<capability>.md` to the folder `<specs>/<domain>/<capability>.md`, then update its `ref` in `blueprint.json` and the `[[wikilinks]]` that point to it. Rewriting links changes the content hash of every spec note that holds one, so first note which spec notes are in sync (current marker equals `specVersion`); after the rewrite, make the same link change in their `baseline/<capability>.md` and record their new marker as `specVersion`. A note that had already moved keeps its old `specVersion`, so it still reads as moved. A bare capability stays at `<specs>/<capability>.md`.
