@@ -265,6 +265,13 @@
       "baseCommit": "011e7d3e97c8b7422865ed5cd402b49fc0e6a2da",
       "branch": "kn/blueprint-coverage-specs",
       "pr": "https://github.com/KarolNov/skills/pull/55"
+    },
+    "transitive-drift": {
+      "brief": "https://app.notion.com/p/42143cce21f28197909bf81f1d454713",
+      "review": "https://app.notion.com/p/41e43cce21f28136838cea65f042b09d",
+      "playground": "embedded in the review (transitive-drift-playground.html)",
+      "status": "approved",
+      "baseCommit": "a4645688e90c862c2bb236ee90c6749f87b6cf29"
     }
   },
   "artifacts": {
