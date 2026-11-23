@@ -1352,6 +1352,7 @@ class Combine(unittest.TestCase):
         self.assertEqual(self.drift.combine([1.0, 0.3]), 1.0)
         self.assertEqual(self.drift.combine([]), 0.0)
 
+    # @scenario blueprint/sync: Meter in the terminal
     def test_meter(self):
         meter = self.drift.meter
         self.assertEqual(meter(0.5, "medium"), "■■■■■□□□□□ 0.5 · medium")
