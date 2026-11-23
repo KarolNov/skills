@@ -251,12 +251,20 @@ class OnAPullRequest(WorkflowTest):
         self.assertTrue(run.passed, run.output)
         self.assertEqual(run.steps["Fail on drift"], "skipped")
         [comment] = run.drift_comments()
-        self.assertIn("**`orders/checkout`**", comment["body"])
-        self.assertIn("  - `src/checkout/pay.ts`", comment["body"])
-        self.assertNotIn("orders/cart", comment["body"])
+        body = comment["body"]
+        self.assertIn("1 capability drifted since its spec was last synced:", body)
+        self.assertRegex(body, r"- \*\*`orders/checkout`\*\* \(since `[0-9a-f]{9}`\): "
+                               r"chance 1 · confidence low\n"
+                               r"  - src/checkout/pay\.ts edited \(anchored\) → 1\n"
+                               r"  - confidence low: imports of its TS/JS files are not followed")
+        self.assertNotIn("orders/cart", body)
+        self.assertNotIn("#### Possibly affected", body)
+        # This drift.py doesn't follow imports, so the Node step wouldn't help: no hint.
+        self.assertNotIn("Node step", body)
         [warning] = [w for w in run.annotations("warning") if "Blueprint drift" in w]
         self.assertRegex(warning, r"^::warning title=Blueprint drift::orders/checkout: 1 anchored "
-                                  r"file\(s\) changed since [0-9a-f]{9}: src/checkout/pay\.ts$")
+                                  r"file\(s\) changed since [0-9a-f]{9} \(chance 1 · confidence "
+                                  r"low\): src/checkout/pay\.ts$")
         self.assertEqual(len(run.writes("POST")), 1)
         self.assertNoReviewerCommentTouched(run)
 
@@ -287,7 +295,7 @@ class OnAPullRequest(WorkflowTest):
         self.assertEqual(c2["id"], c1["id"])
         self.assertNotEqual(c2["body"], c1["body"])
         self.assertIn("**`orders/cart`**", c2["body"])
-        self.assertIn("2 capabilities changed", c2["body"])
+        self.assertIn("2 capabilities drifted since their specs were last synced", c2["body"])
         self.assertEqual(len(second.writes("POST")), 1)  # still only the first run's
         self.assertEqual(len(second.writes("PATCH")), 1)
         self.assertNoReviewerCommentTouched(second)
@@ -303,8 +311,8 @@ class OnAPullRequest(WorkflowTest):
         self.assertTrue(run.passed, run.output)
         [c2] = run.drift_comments()
         self.assertEqual(c2["id"], c1["id"])
-        self.assertIn("Back in sync: no capability's code moved since its spec was synced, "
-                      "and no artifact needs a check.", c2["body"])
+        self.assertIn("Back in sync: no capability's code or imported code moved since its "
+                      "spec was synced, and no artifact needs a check.", c2["body"])
         self.assertNotIn("Artifacts that may need an update", c2["body"])
         self.assertEqual(run.annotations("warning"), [])
 
@@ -363,7 +371,7 @@ class Strict(WorkflowTest):
         self.assertTrue(run.passed, run.output)
         self.assertEqual(run.steps["Fail on drift"], "skipped")
         [comment] = run.drift_comments()
-        self.assertNotIn("changed since their spec was last synced", comment["body"])
+        self.assertNotIn("drifted since", comment["body"])
         self.assertIn("- **`checkout-figma`** (webpage)", comment["body"])
         self.assertEqual(run.annotations("error"), [])
 
@@ -394,7 +402,7 @@ class OlderDriftPy(WorkflowTest):
         self.assertTrue(run.passed, run.output)
         [comment] = run.drift_comments()
         self.assertIn("**`orders/checkout`**", comment["body"])
-        self.assertIn("  - `src/checkout/pay.ts`", comment["body"])
+        self.assertIn("  - src/checkout/pay.ts edited (anchored) → 1", comment["body"])
         self.assertNotIn("Artifacts that may need an update", comment["body"])
         self.assertIn("Artifacts skipped: `.blueprint/drift.py` predates them.", comment["body"])
         self.assertTrue(any(n.startswith("::notice title=Blueprint artifacts::.blueprint/drift.py "
@@ -412,8 +420,8 @@ class OlderDriftPy(WorkflowTest):
         run = self.run_workflow()
         [c2] = run.drift_comments()
         self.assertEqual(c2["id"], c1["id"])
-        self.assertIn("Back in sync: no capability's code moved since its spec was synced.\n",
-                      c2["body"])
+        self.assertIn("Back in sync: no capability's code or imported code moved since its "
+                      "spec was synced.\n", c2["body"])
 
 
 class Failures(WorkflowTest):
@@ -425,6 +433,141 @@ class Failures(WorkflowTest):
         self.assertEqual(run.steps["Check drift"], "failure")
         self.assertEqual(run.steps["Comment on the PR"], "skipped")
         self.assertIn("::error::drift.py check failed (exit 3)", run.annotations("error"))
+
+
+# check --json rows as drift.py reports them once imports are followed (group 2 of transitive
+# drift produces them); stubbed here so the comment and annotations are tested on their own.
+IN_SYNC = {"status": "in-sync", "chance": 0.0, "confidence": "medium",
+           "reasons": ["confidence medium: no test results given"]}
+DEPS_MOVED = {"capability": "orders/checkout", "status": "deps-moved", "chance": 0.5,
+              "confidence": "medium", "reasons": [
+                  "packages/core/src/token.ts signToken changed, 1 import away, "
+                  "via @company/core (weight 1) → 0.5",
+                  "confidence medium: no test results given"]}
+POSSIBLE = {"capability": "orders/cart", "status": "possibly-affected", "chance": 0.0625,
+            "confidence": "medium", "reasons": [
+                "packages/core/src/money.ts round_cents changed, 3 imports away, "
+                "via @company/core (weight 0.5) → 0.0625",
+                "confidence medium: no test results given"]}
+
+
+def in_sync(cap):
+    return dict(IN_SYNC, capability=cap)
+
+
+class Scored(WorkflowTest):
+    def stub(self, report):
+        """Replaces .blueprint/drift.py with one whose `check --json` prints this report, with
+        drift.py's exit rule, and whose `artifacts` lists nothing."""
+        code = 1 if any(r["status"] in ("code-moved", "deps-moved") for r in report) else 0
+        self.r.write(".blueprint/drift.py",
+                     "import sys\n"
+                     "if sys.argv[1] == 'check':\n"
+                     f"    print({json.dumps(json.dumps(report))})\n"
+                     f"    sys.exit({code})\n"
+                     "print('[]')\n")
+        self.r.commit("stub drift.py")
+
+    # @scenario blueprint/setup: Possibly affected on a PR
+    def test_possibly_affected_is_listed_with_its_chance_and_reasons_but_no_annotation(self):
+        self.stub([in_sync("orders/checkout"), POSSIBLE])
+        run = self.run_workflow(strict="true")
+        self.assertTrue(run.passed, run.output)  # never fails the job, even in strict mode
+        self.assertEqual(run.steps["Fail on drift"], "skipped")
+        [comment] = run.drift_comments()
+        body = comment["body"]
+        self.assertIn("#### Possibly affected\n\nCode these import changed, below the drift "
+                      "threshold: worth a look, not counted as drift:\n\n"
+                      "- **`orders/cart`**: chance 0.0625 · confidence medium\n"
+                      "  - packages/core/src/money.ts round\\_cents changed, 3 imports away, "
+                      "via `@company/core` (weight 0.5) → 0.0625\n"
+                      "  - confidence medium: no test results given\n", body)
+        self.assertNotIn("drifted since", body)
+        self.assertNotIn("orders/checkout", body)
+        self.assertNotIn("Node step", body)  # nothing low confidence
+        self.assertEqual(run.annotations("warning"), [])
+        self.assertEqual(len(run.writes("POST")), 1)
+
+    def test_deps_moved_is_drifted_with_its_chance_reasons_and_a_warning(self):
+        self.stub([DEPS_MOVED, in_sync("orders/cart")])
+        run = self.run_workflow(strict="true")
+        self.assertFalse(run.passed)
+        self.assertEqual(run.steps["Fail on drift"], "failure")
+        [comment] = run.drift_comments()
+        self.assertIn("1 capability drifted since its spec was last synced:\n\n"
+                      "- **`orders/checkout`** (imported code moved): chance 0.5 · confidence "
+                      "medium\n"
+                      "  - packages/core/src/token.ts signToken changed, 1 import away, "
+                      "via `@company/core` (weight 1) → 0.5\n"
+                      "  - confidence medium: no test results given\n", comment["body"])
+        self.assertNotIn("#### Possibly affected", comment["body"])
+        self.assertEqual(run.annotations("warning"), [
+            "::warning title=Blueprint drift::orders/checkout: imported code moved (chance 0.5 · "
+            "confidence medium): packages/core/src/token.ts signToken changed, 1 import away, "
+            "via @company/core (weight 1) → 0.5"])
+
+    def test_drifted_comes_before_possibly_affected_and_only_drifted_is_annotated(self):
+        self.stub([DEPS_MOVED, POSSIBLE])
+        run = self.run_workflow()
+        self.assertTrue(run.passed, run.output)
+        [comment] = run.drift_comments()
+        body = comment["body"]
+        self.assertLess(body.index("**`orders/checkout`**"), body.index("#### Possibly affected"))
+        self.assertLess(body.index("#### Possibly affected"), body.index("**`orders/cart`**"))
+        [warning] = run.annotations("warning")
+        self.assertIn("orders/checkout", warning)
+
+    # @scenario blueprint/setup: Back in sync
+    def test_possibly_affected_then_in_sync_marks_the_same_comment_back_in_sync(self):
+        self.stub([in_sync("orders/checkout"), POSSIBLE])
+        [c1] = self.run_workflow().drift_comments()
+        self.stub([in_sync("orders/checkout"), in_sync("orders/cart")])
+        run = self.run_workflow()
+        [c2] = run.drift_comments()
+        self.assertEqual(c2["id"], c1["id"])
+        self.assertIn("Back in sync:", c2["body"])
+        self.assertNotIn("#### Possibly affected", c2["body"])
+
+    def test_imports_followed_by_file_point_at_the_node_step(self):
+        self.stub([dict(DEPS_MOVED, confidence="low", reasons=[
+            "packages/core/src/token.ts changed, 1 import away → 0.5",
+            "confidence low: no node_modules, so imports are followed by file"])])
+        [comment] = self.run_workflow().drift_comments()
+        self.assertIn("the workflow's commented-out Node step raises it", comment["body"])
+
+    def test_deps_moved_with_only_a_confidence_reason_has_no_dangling_colon(self):
+        self.stub([dict(DEPS_MOVED, reasons=["confidence medium: no test results given"])])
+        [warning] = self.run_workflow().annotations("warning")
+        self.assertTrue(warning.endswith("imported code moved (chance 0.5 · confidence medium)"),
+                        warning)
+
+    def test_annotations_escape_percent_signs(self):
+        self.stub([dict(DEPS_MOVED, reasons=["src/fee.ts rate changed to 5%, 1 import away → 0.5"])])
+        run = self.run_workflow()
+        [warning] = run.annotations("warning")
+        self.assertTrue(warning.endswith("rate changed to 5%25, 1 import away → 0.5"), warning)
+
+    def test_drift_py_before_scores_lists_the_changed_files(self):
+        self.stub([{"capability": "orders/checkout", "status": "code-moved",
+                    "syncedCommit": "abcdef1234567", "changed": ["src/checkout/pay.ts"]},
+                   {"capability": "orders/cart", "status": "in-sync"}])
+        run = self.run_workflow()
+        [comment] = run.drift_comments()
+        self.assertIn("- **`orders/checkout`** (since `abcdef123`)\n  - `src/checkout/pay.ts`\n",
+                      comment["body"])
+        self.assertEqual(run.annotations("warning"), [
+            "::warning title=Blueprint drift::orders/checkout: 1 anchored file(s) changed since "
+            "abcdef123: src/checkout/pay.ts"])
+
+
+class NodeStep(unittest.TestCase):
+    def test_node_install_step_is_offered_commented_out(self):
+        text = WORKFLOW.read_text()
+        self.assertIn("      # - name: Set up Node\n      #   uses: actions/setup-node@v4\n", text)
+        self.assertIn("      # - name: Install dependencies\n      #   run: npm ci\n", text)
+        if yaml:
+            steps = yaml.safe_load(text)["jobs"]["drift"]["steps"]
+            self.assertFalse(any("setup-node" in s.get("uses", "") for s in steps), steps)
 
 
 if __name__ == "__main__":
