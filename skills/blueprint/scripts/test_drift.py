@@ -1032,6 +1032,7 @@ class Transitive(unittest.TestCase):
         self.assertEqual(login["external"], ["zod"])
         self.assertTrue(login["files"]["packages/polyfills/src/fill.ts"]["whole"])
 
+    # @scenario blueprint/sync: Ignored file left out
     @NEEDS_TS
     def test_ignored_file_left_out(self):
         # Generated, git-ignored types (another checkout won't have them) are not repo code.
