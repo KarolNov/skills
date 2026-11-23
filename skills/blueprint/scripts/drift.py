@@ -10,7 +10,9 @@ since its spec was last synced. It never talks to the spec backend.
                                                confidence and reasons; exit 1 if any is
                                                code-moved or deps-moved, 2 on a bad
                                                drift.scoring setting or unknown capability
-    drift.py stamp CAPABILITY ... | --all      record the current state as synced
+    drift.py stamp CAPABILITY ... | --all      record the current state as synced, with the
+                                               import closure of TS/JS capabilities in
+                                               .blueprint/closure/<capability>.json
     drift.py files CAPABILITY [ANCHOR ...]     list the files a capability's anchors match, or
                                                the given anchors instead (writes nothing)
     drift.py unanchored [--since REF]          changed files no capability covers
@@ -29,14 +31,22 @@ since its spec was last synced. It never talks to the spec backend.
     drift.py artifacts remove ID               drop one
     drift.py version                           the format version of blueprint.json
 
+TS/JS imports are resolved by symbol through drift_ts.mjs (beside this script), which loads
+the repo's own typescript with node. Without either, imports are followed by file, at
+confidence low. Nothing is ever installed.
+
 Run from anywhere inside the repository.
 """
 
 import hashlib
 import json
+import posixpath
 import re
+import shutil
 import subprocess
 import sys
+from collections import deque
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from urllib.parse import quote
 
@@ -233,11 +243,12 @@ def is_ts(paths):
     return any(p.endswith(TS_EXTENSIONS) for p in paths)
 
 
-def assess(spec, paths, settings, hashes=file_hashes):
+def assess(spec, paths, settings, hashes=file_hashes, imports=None):
     """One capability's row for check: status, drift chance, confidence and reasons.
 
-    Signals are (score, reason) pairs. Only direct changes to anchored files are scored
-    here; a TS/JS capability is marked low confidence, since what it imports isn't followed.
+    Signals are (score, reason) pairs. A changed anchored file scores 1. `imports` is what
+    compare_closure found for a TS/JS capability: (signals, confidence, confidence reason);
+    None for one with no closure stamped, which is then low confidence, direct changes only.
     """
     status, changed = code_status(spec, paths, hashes)
     if status in ("no-anchors", "no-spec"):
@@ -245,6 +256,8 @@ def assess(spec, paths, settings, hashes=file_hashes):
         return {"status": status, "changed": [], "chance": 0.0, "confidence": "low",
                 "reasons": [f"confidence low: {why}"]}
     signals = [(1.0, f"{f} {verb(f, spec)} (anchored) → 1") for f in changed]
+    if imports is not None:
+        signals += imports[0]
     chance = combine(s for s, _ in signals)
     if changed:
         status = "code-moved"
@@ -255,10 +268,13 @@ def assess(spec, paths, settings, hashes=file_hashes):
     else:
         status = "in-sync"
     reasons = [r for _, r in sorted(signals, key=lambda x: (-x[0], x[1]))]
-    if is_ts(paths) or is_ts(spec.get("anchorsFiles", {})):
+    if imports is not None:
+        confidence = imports[1]
+        reasons.append(imports[2])
+    elif is_ts(paths) or is_ts(spec.get("anchorsFiles", {})):
         confidence = "low"
-        reasons.append("confidence low: imports of its TS/JS files are not followed, "
-                       "so only direct changes count")
+        reasons.append("confidence low: no import closure stamped yet (stamp it to follow "
+                       "imports), so only direct changes count")
     else:
         confidence = "high"
     return {"status": status, "changed": changed, "chance": chance, "confidence": confidence,
@@ -270,6 +286,317 @@ def verb(path, spec):
     if path not in stamped:
         return "added"
     return "edited" if (ROOT / path).is_file() else "removed"
+
+
+# Transitive drift: what a TS/JS capability's anchored files import, as a closure stamped in
+# .blueprint/closure/<capability>.json. Each entry is a top-level declaration (by symbol) or a
+# whole file, with its distance in import edges from the anchored files, the workspace
+# packages the path enters, and a content hash. check compares it with the tree as it is now.
+
+HELPER = Path(__file__).resolve().with_name("drift_ts.mjs")
+CLOSURES = ROOT / ".blueprint" / "closure"
+JS_EXTS = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
+HELPER_MISSING = 3  # drift_ts.mjs's exit code when the repo's typescript can't be loaded
+
+
+def closure_path(name):
+    return CLOSURES / f"{name}.json"
+
+
+def read_closure(name):
+    try:
+        closure = json.loads(closure_path(name).read_text())
+    except (OSError, ValueError):
+        return None
+    return closure if isinstance(closure, dict) and "files" in closure else None
+
+
+def ts_entries(paths):
+    return sorted(p for p in paths if p.endswith(TS_EXTENSIONS))
+
+
+def run_helper(entries, settings):
+    """({"closures": {name: {"nodes", "external"}}}, None) from drift_ts.mjs, or (None, why it
+    couldn't run). entries maps each capability to its anchored TS/JS files."""
+    if not HELPER.is_file():
+        return None, "drift_ts.mjs is missing beside drift.py"
+    node = shutil.which("node")
+    if not node:
+        return None, "node not found"
+    overrides = {name: pkg["sideEffects"] for name, pkg in settings["packages"].items()
+                 if "sideEffects" in pkg}
+    payload = {"root": str(ROOT), "maxDepth": settings["maxDepth"], "sideEffects": overrides,
+               "capabilities": entries}
+    try:
+        out = subprocess.run([node, str(HELPER)], input=json.dumps(payload), capture_output=True,
+                             text=True, cwd=ROOT, timeout=900)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"the TypeScript helper failed ({e})"
+    if out.returncode == HELPER_MISSING:
+        return None, "typescript not installed"
+    if out.returncode != 0:
+        last = (out.stderr.strip().splitlines() or ["no output"])[-1]
+        return None, f"the TypeScript helper failed ({last})"
+    try:
+        return json.loads(out.stdout), None
+    except ValueError:
+        return None, "the TypeScript helper printed no closure"
+
+
+def notice(why):
+    print(f"notice: {why}: imports of TS/JS capabilities are followed by file, at confidence low",
+          file=sys.stderr, flush=True)
+
+
+# The file-level fallback: import specifiers read with a regex, resolved like a bundler would
+# (relative paths, workspace packages by name), every reachable file counted whole.
+
+IMPORT = re.compile(r"""(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*(['"])([^'"\n]+)\1""")
+BUILD_DIR = re.compile(r"^(?:\./)?(?:dist|lib|build|out)/")
+
+
+def manifests(files):
+    """{folder ("" for the root): package.json contents} for the repo's own packages."""
+    out = {}
+    for f in files:
+        if posixpath.basename(f) != "package.json" or "node_modules/" in f:
+            continue
+        try:
+            data = json.loads((ROOT / f).read_text())
+        except (OSError, ValueError):
+            data = {}
+        out[posixpath.dirname(f)] = data if isinstance(data, dict) else {}
+    return out
+
+
+def package_dir(path, packages):
+    folder = posixpath.dirname(path)
+    while True:
+        if folder in packages:
+            return folder
+        if not folder:
+            return None
+        folder = posixpath.dirname(folder)
+
+
+def resolve_path(base, fileset):
+    """The repo file an import of `base` (repo-relative, no extension needed) lands on."""
+    base = posixpath.normpath(base)
+    if base.startswith(".."):
+        return None
+    swaps = {".js": (".ts", ".tsx"), ".jsx": (".tsx",), ".mjs": (".mts",), ".cjs": (".cts",)}
+    alts = next(([base[:-len(js)] + e for e in ts] for js, ts in swaps.items()
+                 if base.endswith(js)), [])
+    candidates = [base, *alts, *(base + e for e in JS_EXTS),
+                  *(f"{base}/index{e}" for e in JS_EXTS)]
+    return next((c for c in candidates if c in fileset), None)
+
+
+def export_target(value):
+    """The first path in a package.json `exports` value, preferring source and types."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return next((t for v in value if (t := export_target(v))), None)
+    if isinstance(value, dict):
+        keys = [k for k in ("source", "types", "import", "module", "default", "require")
+                if k in value] + [k for k in value if not k.startswith(".")]
+        return next((t for k in keys if (t := export_target(value[k]))), None)
+    return None
+
+
+def package_entry(folder, manifest, sub, fileset):
+    exports = manifest.get("exports")
+    if sub:
+        targets = [export_target(exports.get(f"./{sub}")) if isinstance(exports, dict) else None,
+                   sub]
+    else:
+        if isinstance(exports, dict) and any(k.startswith(".") for k in exports):
+            exports = exports.get(".")
+        targets = [export_target(exports)] + [manifest.get(k) for k in
+                                              ("source", "types", "typings", "module", "main")]
+        targets += ["src/index", "index"]
+    for target in targets:
+        if not isinstance(target, str):
+            continue
+        for t in (target, BUILD_DIR.sub("src/", target)):
+            t = re.sub(r"\.d\.ts$", "", t)
+            if hit := resolve_path(posixpath.join(folder, t), fileset):
+                return hit
+    return None
+
+
+def resolve_import(spec, importer, fileset, names, packages):
+    """("file", path) or ("external", package name) for one import specifier, or None."""
+    if spec.startswith("."):
+        hit = resolve_path(posixpath.join(posixpath.dirname(importer), spec), fileset)
+        return ("file", hit) if hit else None
+    if spec.startswith(("/", "node:")) or ":" in spec.split("/")[0]:
+        return None
+    parts = spec.split("/")
+    n = 2 if spec.startswith("@") else 1
+    name, sub = "/".join(parts[:n]), "/".join(parts[n:])
+    if name in names:
+        hit = package_entry(names[name], packages[names[name]], sub, fileset)
+        return ("file", hit) if hit else None
+    return ("external", name)
+
+
+def file_closure(entries, files, settings):
+    """{"nodes", "external"} like drift_ts.mjs prints, every node a whole file."""
+    fileset, packages = set(files), manifests(files)
+    names = {m["name"]: d for d, m in packages.items() if isinstance(m.get("name"), str)}
+
+    def package(path):
+        folder = package_dir(path, packages)
+        return None if folder is None else packages[folder].get("name")
+
+    best, external = {}, set()
+    queue = deque((e, 0, ()) for e in entries)
+    while queue:
+        path, distance, via = queue.popleft()
+        if distance >= settings["maxDepth"]:
+            continue
+        try:
+            text = (ROOT / path).read_text(errors="replace")
+        except OSError:
+            continue
+        for m in IMPORT.finditer(text):
+            hit = resolve_import(m.group(2), path, fileset, names, packages)
+            if hit is None:
+                continue
+            if hit[0] == "external":
+                external.add(hit[1])
+                continue
+            target = hit[1]
+            if target in entries or target in best:
+                continue  # breadth first: the first visit is the shortest
+            to = package(target)
+            step = via + (to,) if to and to != package(path) else via
+            best[target] = (distance + 1, list(step))
+            queue.append((target, distance + 1, step))
+    nodes = [{"file": f, "symbol": None, "distance": d, "via": v}
+             for f, (d, v) in sorted(best.items())]
+    return {"nodes": nodes, "external": sorted(external)}
+
+
+def build_closure(mode, found, why=None):
+    """The closure file's contents from drift_ts.mjs's or file_closure's output for one
+    capability: symbols with their hashes, files (min distance, hash, whether reached whole)."""
+    nodes = found["nodes"]
+    hashes = file_hashes(sorted({n["file"] for n in nodes if (ROOT / n["file"]).is_file()}))
+    files, symbols = {}, []
+    for n in sorted(nodes, key=lambda n: (n["distance"], len(n["via"]))):
+        whole = n["symbol"] is None
+        rec = files.setdefault(n["file"], {"distance": n["distance"], "via": n["via"],
+                                           "hash": hashes.get(n["file"]), "whole": False})
+        rec["whole"] = rec["whole"] or whole
+        if not whole:
+            symbols.append({k: n.get(k) for k in ("file", "symbol", "distance", "via", "hash")})
+    out = {"mode": mode}
+    if why:
+        out["why"] = why
+    out.update(files=dict(sorted(files.items())),
+               symbols=sorted(symbols, key=lambda s: (s["file"], s["symbol"])),
+               external=found["external"])
+    return out
+
+
+def stamp_closures(names, specs, files, settings):
+    """Write the closure of each TS/JS capability among names; drop stale ones. Returns
+    {name: closure}."""
+    entries = {n: ts_entries(matched(specs[n], files)) for n in names}
+    for n, e in entries.items():
+        if not e and closure_path(n).exists():
+            closure_path(n).unlink()
+    wanted = {n: e for n, e in entries.items() if e}
+    if not wanted:
+        return {}
+    found, why = run_helper(wanted, settings)
+    if why:
+        notice(why)
+    out = {}
+    for n, e in wanted.items():
+        closure = (build_closure("symbol", found["closures"][n]) if found
+                   else build_closure("file", file_closure(e, files, settings), why))
+        path = closure_path(n)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(closure, indent=2, ensure_ascii=False) + "\n")
+        out[n] = closure
+    return out
+
+
+def path_score(distance, via, settings):
+    """decay^distance, times the weight of each workspace package the path enters."""
+    score = settings["decay"] ** distance
+    for pkg in via:
+        score *= package_weight(pkg, settings)
+    return score
+
+
+def package_weight(pkg, settings):
+    return settings["packages"].get(pkg, {}).get("weight", settings["packageWeight"])
+
+
+def fmt_score(score):
+    """Two decimals, half up, as people round (0.125 → 0.13)."""
+    return format(Decimal(repr(score)).quantize(Decimal("0.01"), ROUND_HALF_UP).normalize(), "f")
+
+
+def import_reason(what, rec, settings, score):
+    d = rec["distance"]
+    via = "".join(f", via {p} (weight {package_weight(p, settings):g})" for p in rec["via"])
+    return f"{what}, {d} import{'' if d == 1 else 's'} away{via} → {fmt_score(score)}"
+
+
+def compare_closure(stamped, now, settings):
+    """(score, reason) signals for what changed in a stamped closure. `now` is the current
+    drift_ts.mjs output for the capability, compared by symbol; None compares by file."""
+    signals = []
+    current = file_hashes([f for f in stamped["files"] if (ROOT / f).is_file()])
+
+    def signal(what, rec):
+        score = path_score(rec["distance"], rec["via"], settings)
+        if score > 0:
+            signals.append((score, import_reason(what, rec, settings, score)))
+
+    for f, rec in stamped["files"].items():
+        if now is not None and not rec.get("whole"):
+            continue  # compared by its symbols below
+        if current.get(f) != rec.get("hash"):
+            state = "removed" if f not in current else "changed"
+            signal(f"{f} {state}" + (" (whole file)" if now is not None else ""), rec)
+    if now is not None:
+        hashes = {(n["file"], n["symbol"]): n.get("hash") for n in now["nodes"]
+                  if n["symbol"] is not None}
+        for s in stamped.get("symbols", []):
+            hash_now = hashes.get((s["file"], s["symbol"]))
+            if hash_now != s["hash"]:
+                signal(f"{s['file']} {s['symbol']} {'changed' if hash_now else 'removed'}", s)
+    return signals
+
+
+def import_signals(rows, settings):
+    """{name: (signals, confidence, confidence reason)} for TS/JS capabilities with a stamped
+    closure. rows maps each capability to the files its anchors match now. Runs drift_ts.mjs
+    once for all those stamped by symbol; prints one notice when it can't."""
+    closures = {n: c for n in rows if (c := read_closure(n)) is not None}
+    by_symbol = {n: ts_entries(rows[n]) for n, c in closures.items() if c.get("mode") == "symbol"}
+    found, why = run_helper(by_symbol, settings) if by_symbol else (None, None)
+    if why:
+        notice(why)
+    out = {}
+    for n, closure in closures.items():
+        if n in by_symbol and found:
+            now = found["closures"].get(n, {"nodes": [], "external": []})
+            out[n] = (compare_closure(closure, now, settings), "medium",
+                      "confidence medium: no test results given")
+        else:
+            reason = (why if n in by_symbol else
+                      f"{closure.get('why') or 'typescript was not used'} when stamped")
+            out[n] = (compare_closure(closure, None, settings), "low",
+                      f"confidence low: {reason}, so imports are followed by file")
+    return out
 
 
 DRIFTED = ("code-moved", "deps-moved")
@@ -289,10 +616,15 @@ def cmd_check(args):
         print(f"unknown capability: {', '.join(unknown)}", file=sys.stderr)
         return 2
     hashes = cached_hashes()
+    paths = {name: matched(specs[name], files) for name in names or specs}
+    # Only stamped capabilities have a closure to compare; the rest report as before.
+    imports = import_signals({n: p for n, p in paths.items()
+                              if specs[n].get("anchors") and specs[n].get("ref")
+                              and "anchorsFiles" in specs[n]}, settings)
     report = []
     for name in names or specs:
         spec = specs[name]
-        row = assess(spec, matched(spec, files), settings, hashes)
+        row = assess(spec, paths[name], settings, hashes, imports.get(name))
         out = {"capability": name, "status": row["status"]}
         if row["status"] == "code-moved":
             out["syncedCommit"] = spec.get("syncedCommit")
@@ -320,15 +652,25 @@ def cmd_stamp(args):
     names = list(specs) if "--all" in args else [a for a in args if not a.startswith("--")]
     if not names:
         sys.exit("stamp needs capability names or --all")
+    if unknown := [n for n in names if n not in specs]:
+        sys.exit(f"unknown capability: {', '.join(unknown)}")
+    try:
+        settings = scoring(state)
+    except SettingError as e:
+        print(f"bad setting: {e}", file=sys.stderr)
+        return 2
     head = head_commit()
     dirty = uncommitted() if head else set(files)
+    closures = stamp_closures(names, specs, files, settings)
     for name in names:
-        if name not in specs:
-            sys.exit(f"unknown capability: {name}")
         paths = matched(specs[name], files)
         specs[name]["anchorsFiles"] = file_hashes(paths)
         specs[name]["syncedCommit"] = head
-        print(f"stamped {name}: {len(paths)} files at {(head or 'no commit')[:9]}", flush=True)
+        line = f"stamped {name}: {len(paths)} files at {(head or 'no commit')[:9]}"
+        if closure := closures.get(name):
+            line += (f"; imports: {len(closure['symbols'])} symbols in {len(closure['files'])} "
+                     f"files, by {closure['mode']}")
+        print(line, flush=True)
         if pending := dirty.intersection(paths):
             # syncedCommit is what `git diff <syncedCommit>` reads; it must hold this code.
             print(f"  warning: {len(pending)} of them uncommitted, so syncedCommit predates "
@@ -495,6 +837,19 @@ def tag_rewrites(old, new):
     return out, unreadable
 
 
+def move_leaving_no_empty_folder(src, dst, base):
+    """Move src to dst when it exists, dropping folders the move left empty up to base."""
+    if not src.exists():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
+    parent = src.parent
+    while parent != base and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+    return True
+
+
 def cmd_rename(args):
     if len(args) != 2:
         sys.exit("rename takes OLD NEW")
@@ -514,6 +869,8 @@ def cmd_rename(args):
     if dst.exists():
         # A leftover baseline would silently become the renamed capability's merge base.
         sys.exit(f"baseline already exists: {dst.relative_to(ROOT)}")
+    if closure_path(new).exists():
+        sys.exit(f"closure already exists: {closure_path(new).relative_to(ROOT)}")
     # Rebuild in place so the key keeps its position, and with it the order of check's report.
     state["specs"] = {(new if k == old else k): v for k, v in specs.items()}
     renamed = []
@@ -521,15 +878,8 @@ def cmd_rename(args):
         if old in art.get("capabilities", []):
             art["capabilities"] = [new if c == old else c for c in art["capabilities"]]
             renamed.append(aid)
-    has_baseline = src.exists()
-    if has_baseline:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        src.rename(dst)
-        # Drop folders the move left empty, up to baseline/ itself.
-        parent = src.parent
-        while parent != base and not any(parent.iterdir()):
-            parent.rmdir()
-            parent = parent.parent
+    has_baseline = move_leaving_no_empty_folder(src, dst, base)
+    move_leaving_no_empty_folder(closure_path(old), closure_path(new), CLOSURES)
     save(state)
     failed, tags = [], 0
     for f, (data, n) in rewrites.items():

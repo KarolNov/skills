@@ -13,6 +13,8 @@ import unittest
 from pathlib import Path
 
 DRIFT = Path(__file__).resolve().parent / "drift.py"
+sys.path.insert(0, str(DRIFT.parent / "e2e"))
+import fakerepo  # noqa: E402  (the TS workspace fixture)
 # Ignore the developer's git config (signing, hooks, templates) in the throwaway repos.
 ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
 
@@ -607,13 +609,22 @@ class Scoring(DriftTest):
         self.assertIn("chance 1 · confidence high", text)
         self.assertIn("lib/core.py edited (anchored) → 1", text)
 
-    def test_ts_capability_is_low_confidence(self):
+    def test_ts_capability_without_typescript_is_low_confidence(self):
         r = self.stamped({"src/a.ts": "", "lib/b.py": ""},
                          {"specs": {"web": spec("src/**"), "py": spec("lib/**")}})
         _, rows = self.check(r)
         self.assertEqual(rows["web"]["confidence"], "low")
-        self.assertIn("not followed", rows["web"]["reasons"][-1])
+        self.assertEqual(rows["web"]["reasons"][-1], "confidence low: typescript not installed "
+                         "when stamped, so imports are followed by file")
         self.assertEqual(rows["py"]["confidence"], "high")
+        self.assertFalse((r.root / ".blueprint/closure/py.json").exists())
+
+    def test_ts_capability_stamped_before_closures(self):
+        r = self.stamped({"src/a.ts": ""}, {"specs": {"web": spec("src/**")}})
+        (r.root / ".blueprint/closure/web.json").unlink()
+        _, rows = self.check(r)
+        self.assertEqual(rows["web"]["confidence"], "low")
+        self.assertIn("no import closure stamped yet", rows["web"]["reasons"][-1])
 
     def test_unstamped_rows_carry_the_fields(self):
         r = self.repo({"a.py": ""}, {"specs": {"lazy": {"ref": None, "anchors": ["a.py"]},
@@ -676,6 +687,270 @@ class Scoring(DriftTest):
             "decay": 1, "packageWeight": 0, "lockfileWeight": 0.3, "threshold": 0.9,
             "maxDepth": 3, "packages": {"@co/core": {"weight": 1.0, "sideEffects": ["*.css"]}}}}})
         self.assertEqual(r.drift("check").returncode, 0)
+
+
+TYPESCRIPT = fakerepo.find_typescript()
+NEEDS_TS = unittest.skipUnless(TYPESCRIPT, "no typescript to link: npm install -g typescript, "
+                               "or set BLUEPRINT_TEST_TYPESCRIPT to a typescript package folder")
+
+
+class Transitive(unittest.TestCase):
+    """Import closures on the TS workspace fixture: login imports signToken from @company/core
+    (no side effects, a barrel), button from @company/ui (side effects only in CSS, a barrel),
+    @company/polyfills bare and zod; admin imports old from @company/legacy (no sideEffects)."""
+
+    def workspace(self, typescript=TYPESCRIPT, scoring=None, files=None):
+        r = fakerepo.FakeRepo()
+        self.addCleanup(r.close)
+        fakerepo.ts_workspace(r, typescript)
+        for path, text in (files or {}).items():
+            r.write(path, text)
+        if scoring:
+            r.update(lambda s: s.setdefault("drift", {}).__setitem__("scoring", scoring))
+        r.sync()
+        return r
+
+    def replace(self, r, path, old, new):
+        text = r.read(path)
+        self.assertIn(old, text)
+        r.write(path, text.replace(old, new))
+
+    def check(self, r, env=None):
+        out = subprocess.run([sys.executable, str(DRIFT), "check", "--json"], cwd=r.root,
+                             capture_output=True, text=True, env=env or fakerepo.ENV)
+        self.assertIn(out.returncode, (0, 1), out.stderr)
+        return out, {row["capability"]: row for row in json.loads(out.stdout)}
+
+    def closure(self, r, name):
+        return json.loads(r.read(f".blueprint/closure/{name}.json"))
+
+    # @scenario blueprint/sync: Closure recorded
+    @NEEDS_TS
+    def test_closure_recorded(self):
+        r = self.workspace(files={"apps/web/src/admin.ts": (
+            "import { signToken, hashPassword } from '@company/core';\n\n"
+            "export const admin = () => hashPassword(signToken('a'));\n")})
+        closure = self.closure(r, "web/admin")
+        self.assertEqual(closure["mode"], "symbol")
+        symbols = {(s["file"], s["symbol"]): s for s in closure["symbols"]}
+        for key in [("packages/core/src/token.ts", "signToken"),
+                    ("packages/core/src/password.ts", "hashPassword")]:
+            self.assertEqual((symbols[key]["distance"], symbols[key]["via"]),
+                             (1, ["@company/core"]))
+            self.assertRegex(symbols[key]["hash"], r"^[0-9a-f]{12}$")
+        # What signToken references comes along: a private helper in its file, and on.
+        self.assertEqual(symbols[("packages/core/src/token.ts", "pad")]["distance"], 1)
+        self.assertEqual(symbols[("packages/core/src/secret.ts", "secret")]["distance"], 2)
+        self.assertEqual(symbols[("packages/core/src/salt.ts", "salt")]["distance"], 3)
+        self.assertNotIn(("packages/core/src/token.ts", "verifyToken"), symbols)
+        self.assertNotIn("packages/core/src/index.ts", closure["files"])  # a barrel: transparent
+        login = self.closure(r, "web/login")
+        self.assertEqual(login["external"], ["zod"])
+        self.assertTrue(login["files"]["packages/polyfills/src/fill.ts"]["whole"])
+
+    # @scenario blueprint/sync: Imported symbol changed
+    @NEEDS_TS
+    def test_imported_symbol_changed(self):
+        r = self.workspace(scoring={"packages": {"@company/core": {"weight": 1.0}}})
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 1)
+        row = rows["web/login"]
+        self.assertEqual((row["status"], row["chance"], row["confidence"]),
+                         ("deps-moved", 0.5, "medium"))
+        self.assertEqual(row["reasons"], [
+            "packages/core/src/token.ts signToken changed, 1 import away, "
+            "via @company/core (weight 1) → 0.5",
+            "confidence medium: no test results given"])
+        self.assertNotIn("changed", row)
+        self.assertEqual(rows["web/admin"]["status"], "in-sync")
+
+    # @scenario blueprint/sync: Unused export changed
+    @NEEDS_TS
+    def test_unused_export_changed(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/token.ts", "token.length > 8", "token.length > 9")
+        self.replace(r, "packages/core/src/secret.ts", "unused = 1", "unused = 2")
+        self.replace(r, "packages/ui/src/button.ts", "return '*'", "return '+'")
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 0)
+        self.assertEqual((rows["web/login"]["status"], rows["web/login"]["chance"]), ("in-sync", 0.0))
+
+    # @scenario blueprint/sync: Distant change below threshold
+    @NEEDS_TS
+    def test_distant_change_below_threshold(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
+        out, rows = self.check(r)
+        self.assertEqual(out.returncode, 0)
+        row = rows["web/login"]
+        self.assertEqual((row["status"], row["chance"]), ("possibly-affected", 0.0625))
+        self.assertEqual(row["reasons"][0], "packages/core/src/salt.ts salt changed, 3 imports "
+                         "away, via @company/core (weight 0.5) → 0.06")
+        self.assertIn("possibly-affected web/login  chance 0.0625 · confidence medium",
+                      r.drift("check").stdout)
+
+    # @scenario blueprint/sync: Core package weighted up
+    @NEEDS_TS
+    def test_core_package_weighted_up(self):
+        for scoring, chance in [(None, 0.25),
+                                ({"packages": {"@company/core": {"weight": 1.0}}}, 0.5)]:
+            with self.subTest(scoring=scoring):
+                r = self.workspace(scoring=scoring)
+                self.replace(r, "packages/core/src/token.ts", "padEnd(8)", "padEnd(9)")
+                _, rows = self.check(r)
+                # pad is private to token.ts: it counts through signToken, at the same distance.
+                self.assertEqual(rows["web/login"]["chance"], chance)
+                self.assertIn("token.ts pad changed, 1 import away", rows["web/login"]["reasons"][0])
+
+    # @scenario blueprint/sync: Two weak signals
+    @NEEDS_TS
+    def test_two_weak_signals(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        self.replace(r, "packages/ui/src/button.ts", "`[${label}]`", "`(${label})`")
+        _, rows = self.check(r)
+        self.assertEqual((rows["web/login"]["status"], rows["web/login"]["chance"]),
+                         ("possibly-affected", 0.4375))
+
+    # @scenario blueprint/sync: Same diff, same number
+    @NEEDS_TS
+    def test_same_diff_same_number_through_imports(self):
+        r = self.workspace()
+        self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        self.assertEqual(self.check(r)[0].stdout, self.check(r)[0].stdout)
+
+    # @scenario blueprint/sync: Side-effect import
+    @NEEDS_TS
+    def test_side_effect_import(self):
+        r = self.workspace()
+        self.replace(r, "packages/polyfills/src/fill.ts", "= true", "= 1")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["reasons"][0],
+                         "packages/polyfills/src/fill.ts changed (whole file), 2 imports away, "
+                         "via @company/polyfills (weight 0.5) → 0.13")
+
+    # @scenario blueprint/sync: Field absent
+    @NEEDS_TS
+    def test_side_effects_field_absent(self):
+        r = self.workspace()
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        _, rows = self.check(r)
+        self.assertEqual((rows["web/admin"]["status"], rows["web/admin"]["chance"]),
+                         ("possibly-affected", 0.25))
+        self.assertIn("legacy/src/index.ts changed (whole file)", rows["web/admin"]["reasons"][0])
+
+    # @scenario blueprint/sync: Override
+    @NEEDS_TS
+    def test_side_effects_override(self):
+        r = self.workspace(scoring={"packages": {"@company/legacy": {"sideEffects": False}}})
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/admin"]["status"], "in-sync")
+        self.replace(r, "packages/legacy/src/index.ts", "return 1", "return 0")
+        _, rows = self.check(r)
+        self.assertIn("legacy/src/index.ts old changed", rows["web/admin"]["reasons"][0])
+
+    @NEEDS_TS
+    def test_side_effects_glob_counts_the_file_whole(self):
+        r = self.workspace(scoring={"packages": {"@company/ui": {"sideEffects": ["src/button.ts"]}}})
+        self.replace(r, "packages/ui/src/button.ts", "return '*'", "return '+'")
+        _, rows = self.check(r)
+        self.assertIn("packages/ui/src/button.ts changed (whole file), 1 import away",
+                      rows["web/login"]["reasons"][0])
+
+    # @scenario blueprint/sync: Barrel re-export
+    @NEEDS_TS
+    def test_barrel_re_export(self):
+        r = self.workspace()
+        self.replace(r, "packages/ui/src/button.ts", "`[${label}]`", "`(${label})`")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["reasons"][0], "packages/ui/src/button.ts button "
+                         "changed, 1 import away, via @company/ui (weight 0.5) → 0.25")
+
+    # @scenario blueprint/sync: No test results
+    @NEEDS_TS
+    def test_no_test_results(self):
+        r = self.workspace()
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["confidence"], "medium")
+        self.assertEqual(rows["web/login"]["reasons"], ["confidence medium: no test results given"])
+
+    @NEEDS_TS
+    def test_max_depth_cuts_the_closure(self):
+        r = self.workspace(scoring={"maxDepth": 2})
+        symbols = {s["symbol"] for s in self.closure(r, "web/login")["symbols"]}
+        self.assertIn("secret", symbols)
+        self.assertNotIn("salt", symbols)
+
+    # @scenario blueprint/sync: CI without node_modules
+    @NEEDS_TS
+    def test_ci_without_typescript(self):
+        r = self.workspace()
+        fakerepo.unlink_typescript(r)
+        self.replace(r, "packages/core/src/secret.ts", "unused = 1", "unused = 2")
+        out, rows = self.check(r)
+        row = rows["web/login"]
+        self.assertEqual((row["status"], row["confidence"]), ("possibly-affected", "low"))
+        self.assertEqual(row["reasons"], [
+            "packages/core/src/secret.ts changed, 2 imports away, via @company/core (weight 0.5)"
+            " → 0.13",
+            "confidence low: typescript not installed, so imports are followed by file"])
+        self.assertEqual(out.stderr.count("notice:"), 1)
+        self.assertIn("typescript not installed", out.stderr)
+        self.assertFalse((r.root / "node_modules/typescript").exists())  # never installed
+
+    def test_node_not_found(self):
+        r = self.workspace(typescript=None)
+        self.replace(r, "packages/core/src/salt.ts", "'s'", "'t'")
+        env = dict(fakerepo.ENV, PATH=os.pathsep.join(
+            p for p in os.environ["PATH"].split(os.pathsep)
+            if not (Path(p) / "node").exists()))
+        out = subprocess.run([sys.executable, str(DRIFT), "stamp", "--all"], cwd=r.root,
+                             capture_output=True, text=True, env=env)
+        self.assertIn("node not found", out.stderr)
+        self.assertEqual(self.closure(r, "web/login")["why"], "node not found")
+
+    def test_stamp_without_typescript_follows_files(self):
+        r = self.workspace(typescript=None)
+        closure = self.closure(r, "web/login")
+        self.assertEqual((closure["mode"], closure["why"], closure["symbols"]),
+                         ("file", "typescript not installed", []))
+        files = {f: (rec["distance"], rec["via"]) for f, rec in closure["files"].items()}
+        # By file, a barrel is a hop of its own, and every file it re-exports comes along.
+        self.assertEqual(files["packages/core/src/index.ts"], (1, ["@company/core"]))
+        self.assertEqual(files["packages/core/src/token.ts"], (2, ["@company/core"]))
+        self.assertEqual(files["packages/core/src/password.ts"], (2, ["@company/core"]))
+        self.assertEqual(files["packages/core/src/salt.ts"], (4, ["@company/core"]))
+        self.assertEqual(files["packages/polyfills/src/fill.ts"], (2, ["@company/polyfills"]))
+        self.assertEqual(files["packages/ui/src/button.ts"], (2, ["@company/ui"]))
+        self.assertEqual(closure["external"], ["zod"])
+        self.assertTrue(all(rec["whole"] for rec in closure["files"].values()))
+        self.replace(r, "packages/core/src/token.ts", "token.length > 8", "token.length > 9")
+        _, rows = self.check(r)
+        self.assertEqual(rows["web/login"]["reasons"], [
+            "packages/core/src/token.ts changed, 2 imports away, via @company/core (weight 0.5)"
+            " → 0.13",
+            "confidence low: typescript not installed when stamped, so imports are followed by "
+            "file"])
+
+    def test_rename_moves_the_closure(self):
+        r = self.workspace(typescript=None)
+        r.checked_run("drift.py", "rename", "web/login", "web/signin")
+        self.assertFalse((r.root / ".blueprint/closure/web/login.json").exists())
+        self.assertEqual(self.closure(r, "web/signin")["mode"], "file")
+        r.write(".blueprint/closure/web/taken.json", "{}")
+        out = r.drift("rename", "web/admin", "web/taken")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("closure already exists", out.stderr)
+
+    def test_restamp_clears_it(self):
+        r = self.workspace(typescript=None)
+        self.replace(r, "packages/legacy/src/index.ts", "return 2", "return 3")
+        self.assertEqual(self.check(r)[1]["web/admin"]["status"], "possibly-affected")
+        r.sync()
+        self.assertEqual(self.check(r)[1]["web/admin"]["status"], "in-sync")
 
 
 class Combine(unittest.TestCase):
