@@ -80,7 +80,7 @@
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "7e76f26c62cd74dd",
+      "specVersion": "0fe1c52fe568501c",
       "anchorsFiles": {
         "skills/blueprint-setup/SKILL.md": "5804a047a59f",
         "skills/blueprint-setup/templates/blueprint-drift.yml": "296b8e93dcdd"
@@ -95,7 +95,7 @@
         "skills/blueprint/scripts/drift_ts.mjs",
         "skills/blueprint/references/status.md"
       ],
-      "specVersion": "08fd2f7155d12d5e",
+      "specVersion": "c438edbbe0adfe19",
       "anchorsFiles": {
         "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
         "skills/blueprint/references/status.md": "7d6ca146666d",

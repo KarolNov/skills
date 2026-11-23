@@ -51,12 +51,12 @@ Setup SHALL ask whether to write specs now or lazily. Lazy capabilities get `"re
 
 ### Requirement: Repo files written
 
-Setup SHALL write `.blueprint/blueprint.json` with a `domains` map and, on a new setup, the current format `version`, a fresh copy of `drift.py` and `drift_ts.mjs`, a fresh copy of `notion_normalize.py` when the backend is Notion, a `baseline/` folder with a baseline for every existing spec, and a short `README.md`. It SHALL create an overview page for each accepted domain, listing a capability without a spec as "no spec yet". It SHALL commit nothing, and SHALL only offer the `CLAUDE.md` line and a drift guard, adding them on a yes.
+Setup SHALL write `.blueprint/blueprint.json` with a `domains` map and, on a new setup, the current format `version`, a fresh copy of `drift.py` and `drift_ts.mjs`, a fresh copy of `notion_normalize.py` when the backend is Notion, a `baseline/` folder with a baseline for every existing spec, a short `README.md`, and `.gitattributes` lines marking `.blueprint/closure/**`, `.blueprint/drift.py`, `.blueprint/drift_ts.mjs` and `.blueprint/notion_normalize.py` as `linguist-generated=true`, adding only the lines that are missing and keeping the rest of the file. It SHALL create an overview page for each accepted domain, listing a capability without a spec as "no spec yet". It SHALL commit nothing, and SHALL only offer the `CLAUDE.md` line and a drift guard, adding them on a yes.
 
 - **Scenario: Rerun**
   - **GIVEN** `.blueprint/` already exists
   - **WHEN** setup runs again
-  - **THEN** it updates location, capabilities, `drift.py`, `drift_ts.mjs` and `notion_normalize.py` without losing recorded specs or changes, and keeps the recorded `version` exactly
+  - **THEN** it updates location, capabilities, `drift.py`, `drift_ts.mjs`, `notion_normalize.py` and the `.gitattributes` lines without losing recorded specs or changes, and keeps the recorded `version` exactly
 - **Scenario: Rerun on an older format**
   - **GIVEN** `.blueprint/` is on an older format version
   - **WHEN** setup runs again

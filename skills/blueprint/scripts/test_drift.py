@@ -1235,6 +1235,7 @@ class Transitive(unittest.TestCase):
         self.assertEqual(self.closure(r, "web/login")["why"], "node not found")
 
     @NEEDS_NODE
+    # @scenario blueprint/sync: Closure one entry per line
     def test_closure_written_one_entry_per_line(self):
         # So a restamp diffs by the entries that moved, and a big closure stays short.
         r = self.workspace(typescript=None)
