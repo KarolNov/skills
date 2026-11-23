@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""The map page in a real browser: graph.py's map.html, opened in headless Chrome.
+"""The map page in a real browser: graph.py's map.html, opened in headless Chromium by Playwright.
 
+    pip install -r requirements-dev.txt && python3 -m playwright install chromium
     python3 skills/blueprint/scripts/e2e/test_map_page.py
 
 Pages come from fakerepo.py: the demo shop for the whole-page checks (offline, written twice),
-and a small music studio for the named scenarios (looper, jams, pads, tempo). Input goes through
-the DevTools protocol as real mouse and keyboard events, so d3's own drag, zoom and click handling
-runs. Needs Chrome or Chromium (see chrome.py); skips without one. Nothing here is used by the
-skill itself.
+and a small music studio for the named scenarios (looper, jams, pads, tempo). Input is real mouse
+and keyboard events, so d3's own drag, zoom and click handling runs. Uses Playwright's Chromium,
+or installed Chrome without it; skips when Playwright or a browser is missing. Nothing here is
+used by the skill itself.
 """
 
 import json
@@ -18,8 +19,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import chrome
 from fakerepo import ENV, FakeRepo
+
+try:
+    from playwright.sync_api import Error as PlaywrightError, sync_playwright
+except ImportError:
+    sync_playwright = None
 
 FAKEREPO = Path(__file__).resolve().parent / "fakerepo.py"
 
@@ -43,53 +48,80 @@ STATE = """(() => {
 })()"""
 
 
-def centre_of(page, selector):
-    r = page.eval(f"(() => {{ const r = document.querySelector({json.dumps(selector)}).getBoundingClientRect();"
-                  " return [r.left + r.width / 2, r.top + r.height / 2]; })()")
-    return r
+def launch(playwright):
+    """Playwright's own Chromium, else the Chrome installed on the machine; None without either."""
+    for channel in (None, "chrome"):
+        try:
+            return playwright.chromium.launch(channel=channel)
+        except PlaywrightError:
+            pass
+    return None
 
 
-@unittest.skipUnless(chrome.find(), "needs Chrome or Chromium (set $CHROME)")
+def wheel(page, x, y, dy):
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, dy)
+
+
+def drag(page, start, end):
+    page.mouse.move(*start)
+    page.mouse.down()
+    page.mouse.move(*end, steps=20)
+    page.mouse.up()
+
+
+@unittest.skipUnless(sync_playwright, "needs Playwright: pip install -r requirements-dev.txt")
 class MapPage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.browser = chrome.Chrome()
+        cls.playwright = sync_playwright().start()
+        cls.browser = launch(cls.playwright)
+        if not cls.browser:
+            cls.playwright.stop()
+            raise unittest.SkipTest("needs a browser: python3 -m playwright install chromium")
 
     @classmethod
     def tearDownClass(cls):
         cls.browser.close()
+        cls.playwright.stop()
 
-    def open(self, path, block_network=True):
-        page = self.browser.page(block_network=block_network)
-        page.goto(path)
-        page.wait("document.querySelectorAll('g.cap').length > 0")
-        page.sleep(0.2)
+    def open(self, path):
+        """The page, offline: every request that isn't the page's own file fails, and is recorded."""
+        page = self.browser.new_page(viewport={"width": 1400, "height": 900}, device_scale_factor=1)
+        page.errors, page.blocked = [], []
+        page.on("pageerror", lambda e: page.errors.append(str(e)))
+        page.on("console", lambda m: m.type == "error" and page.errors.append(m.text))
+
+        def offline(route):
+            page.blocked.append(route.request.url)
+            route.abort("internetdisconnected")
+        page.route(lambda url: not url.startswith(("file:", "data:", "about:")), offline)
+        page.goto(Path(path).resolve().as_uri())
+        page.wait_for_function("document.querySelectorAll('g.cap').length > 0")
+        page.wait_for_timeout(200)
+        self.addCleanup(page.close)
         self.addCleanup(lambda: self.assertEqual(page.errors, [], "errors in the page"))
         return page
 
     def state(self, page):
-        return page.eval(STATE)
+        return page.evaluate(STATE)
 
     def click_cap(self, page, cap):
-        x, y = self.state(page)["caps"][cap]["s"]
-        page.click(x, y)
-
-    def click(self, page, selector):
-        page.click(*centre_of(page, selector))
+        page.mouse.click(*self.state(page)["caps"][cap]["s"])
 
     def toggle(self, page, kind):
         """Opens the "Show as nodes" menu and clicks one switch, as a user would."""
-        if not page.eval("document.getElementById('nodes').open"):
-            self.click(page, "#nodes summary")
-        before = page.eval(f"document.getElementById('{kind}').checked")
-        self.click(page, f"#{kind}")
-        self.assertNotEqual(page.eval(f"document.getElementById('{kind}').checked"), before)
-        self.click(page, "#repo")  # a press elsewhere closes the menu
+        if not page.evaluate("document.getElementById('nodes').open"):
+            page.click("#nodes summary")
+        before = page.is_checked(f"#{kind}")
+        page.click(f"#{kind}")
+        self.assertNotEqual(page.is_checked(f"#{kind}"), before)
+        page.click("#repo")  # a press elsewhere closes the menu
         self.settle(page)
 
     def settle(self, page):
         """Waits out a glide, a fade-in or a refit: until the view and the nodes stop moving."""
-        page.sleep(0.4)
+        page.wait_for_timeout(400)
         last = None
         for _ in range(40):
             s = self.state(page)
@@ -97,7 +129,7 @@ class MapPage(unittest.TestCase):
             if now == last:
                 return
             last = now
-            page.sleep(0.15)
+            page.wait_for_timeout(150)
         self.fail("the map kept moving")
 
     def zoom_out_below(self, page, k):
@@ -106,8 +138,8 @@ class MapPage(unittest.TestCase):
         for _ in range(20):
             if self.state(page)["k"] < k:
                 return
-            page.wheel(cx, cy, 120)
-            page.sleep(0.05)
+            wheel(page, cx, cy, 120)
+            page.wait_for_timeout(50)
         self.fail("could not zoom out")
 
 
@@ -157,56 +189,54 @@ class Shop(MapPage):
         page = self.open(self.map)
         s = self.state(page)
         self.assertEqual(len(s["caps"]), 22)
-        self.assertEqual(page.eval("document.querySelectorAll('.hull').length"), 5)
+        self.assertEqual(page.evaluate("document.querySelectorAll('.hull').length"), 5)
         # Search: matches listed, the rest dimmed; Escape clears it.
-        self.click(page, "#q")
-        page.type("refund")
-        self.assertRegex(page.eval("document.getElementById('count').textContent"), r"^\d+ capabilit")
-        self.assertTrue(page.eval("document.querySelectorAll('.result').length > 0"))
-        self.assertTrue(page.eval("document.querySelectorAll('g.cap.dim').length > 0"))
-        page.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Escape", "code": "Escape",
-                                             "windowsVirtualKeyCode": 27})
-        self.assertEqual(page.eval("document.querySelectorAll('g.cap.dim').length"), 0)
+        page.click("#q")
+        page.keyboard.type("refund")
+        self.assertRegex(page.evaluate("document.getElementById('count').textContent"), r"^\d+ capabilit")
+        self.assertTrue(page.evaluate("document.querySelectorAll('.result').length > 0"))
+        self.assertTrue(page.evaluate("document.querySelectorAll('g.cap.dim').length > 0"))
+        page.keyboard.press("Escape")
+        self.assertEqual(page.evaluate("document.querySelectorAll('g.cap.dim').length"), 0)
         # "/" focuses the search.
-        self.click(page, "#repo")
-        page.send("Input.dispatchKeyEvent", {"type": "char", "key": "/", "text": "/"})
-        page.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": "/", "code": "Slash", "text": "/"})
-        self.assertEqual(page.eval("document.activeElement.id"), "q")
+        page.click("#repo")
+        page.keyboard.press("/")
+        self.assertEqual(page.evaluate("document.activeElement.id"), "q")
         # A capability opens its panel; the back link returns to the overview.
         self.click_cap(page, "orders/checkout")
         self.assertEqual(self.state(page)["panel"], "orders/checkout")
-        self.click(page, "#panel a.back")
-        self.assertEqual(page.eval("document.querySelectorAll('#panel a.back').length"), 0)
+        page.click("#panel a.back")
+        self.assertEqual(page.evaluate("document.querySelectorAll('#panel a.back').length"), 0)
         self.assertNotEqual(self.state(page)["panel"], "orders/checkout")
         # Each kind of node switches on and off.
-        self.assertTrue(page.eval("document.getElementById('artifacts').checked"))
-        arts = lambda: page.eval("document.querySelectorAll('g.file.art').length")
+        self.assertTrue(page.evaluate("document.getElementById('artifacts').checked"))
+        arts = lambda: page.evaluate("document.querySelectorAll('g.file.art').length")
         self.assertGreater(arts(), 0)
         self.toggle(page, "artifacts")
         self.assertEqual(arts(), 0)
         self.toggle(page, "files")
-        self.assertGreater(page.eval("document.querySelectorAll('g.fgroup .bubble:not(.art):not(.test)').length"), 0)
+        self.assertGreater(page.evaluate("document.querySelectorAll('g.fgroup .bubble:not(.art):not(.test)').length"), 0)
         self.toggle(page, "tests")
-        self.assertGreater(page.eval("document.querySelectorAll('g.file.test').length"), 0)
-        self.assertEqual(page.eval("document.getElementById('nodes-on').textContent"), "files, tests")
+        self.assertGreater(page.evaluate("document.querySelectorAll('g.file.test').length"), 0)
+        self.assertEqual(page.evaluate("document.getElementById('nodes-on').textContent"), "files, tests")
         # Scroll zooms, dragging the background pans, Fit puts it back.
         fitted = self.state(page)
         cx, cy = (fitted["box"][0] + fitted["box"][2]) / 2, fitted["box"][1] + 30
-        page.wheel(cx, cy, -400)
+        wheel(page, cx, cy, -400)
         self.settle(page)
         self.assertGreater(self.state(page)["k"], fitted["k"])
         before = self.state(page)
-        page.drag((cx, cy), (cx + 120, cy + 60))
+        drag(page, (cx, cy), (cx + 120, cy + 60))
         self.settle(page)
         after = self.state(page)
         self.assertAlmostEqual(after["tx"] - before["tx"], 120, delta=2)
-        self.click(page, "#fit")
+        page.click("#fit")
         self.settle(page)
         self.assertAlmostEqual(self.state(page)["k"], fitted["k"], delta=0.02)
         # The legend opens.
-        self.assertFalse(page.eval("document.getElementById('legend').open"))
-        self.click(page, "#legend summary")
-        self.assertTrue(page.eval("document.getElementById('legend').open"))
+        self.assertFalse(page.evaluate("document.getElementById('legend').open"))
+        page.click("#legend summary")
+        self.assertTrue(page.evaluate("document.getElementById('legend').open"))
         # Nothing left the machine, nothing failed.
         self.assertEqual(page.blocked, [])
         self.assertEqual(page.errors, [])
@@ -264,14 +294,14 @@ class Studio(MapPage):
                 self.assertEqual((g["n"], g["count"], g["bubble"], g["shown"]), (23, "23", "inline", 0))
                 self.assertNotIn("split", g["cls"])
                 if how == "click":
-                    page.click(*g["s"])
-                    page.sleep(0.6)
+                    page.mouse.click(*g["s"])
+                    page.wait_for_timeout(600)
                 else:
                     for _ in range(20):
                         if self.state(page)["k"] >= 1.3:
                             break
-                        page.wheel(*self.samples(self.state(page))["s"], -100)
-                        page.sleep(0.05)
+                        wheel(page, *self.samples(self.state(page))["s"], -100)
+                        page.wait_for_timeout(50)
                 g = self.samples(self.state(page))
                 self.assertIn("split", g["cls"])
                 self.assertEqual((g["bubble"], g["shown"]), ("none", 23))
@@ -281,9 +311,9 @@ class Studio(MapPage):
         page = self.open(self.map)
         self.click_cap(page, "studio/looper")
         self.assertEqual(self.state(page)["panel"], "studio/looper")
-        self.assertIn("Shares files with", page.eval("document.getElementById('panel').textContent"))
-        self.click(page, '#panel a.link[data-id="studio/jams"]')
-        page.sleep(0.6)  # the 350ms pan
+        self.assertIn("Shares files with", page.evaluate("document.getElementById('panel').textContent"))
+        page.click('#panel a.link[data-id="studio/jams"]')
+        page.wait_for_timeout(600)  # the 350ms pan
         s = self.state(page)
         self.assertEqual(s["panel"], "studio/jams")
         x0, y0, x1, y1 = s["box"]
@@ -294,20 +324,20 @@ class Studio(MapPage):
     # @scenario blueprint/map: Find the logic for tempo
     def test_tempo_lists_highlights_and_opens_the_tempo_requirement(self):
         page = self.open(self.map)
-        self.click(page, "#q")
-        page.type("tempo")
-        results = page.eval("[...document.querySelectorAll('.result')].map((r) => r.dataset.id)")
+        page.click("#q")
+        page.keyboard.type("tempo")
+        results = page.evaluate("[...document.querySelectorAll('.result')].map((r) => r.dataset.id)")
         self.assertEqual(sorted(results), ["studio/looper", "studio/metronome"])
-        self.assertEqual(page.eval("document.getElementById('count').textContent"), "2 capabilities match")
+        self.assertEqual(page.evaluate("document.getElementById('count').textContent"), "2 capabilities match")
         for cap, c in self.state(page)["caps"].items():
             if cap in results:
                 self.assertIn("hit", c["cls"].split(), cap)
                 self.assertNotIn("dim", c["cls"].split(), cap)
             else:
                 self.assertIn("dim", c["cls"].split(), cap)
-        self.click(page, '.result[data-id="studio/looper"]')
+        page.click('.result[data-id="studio/looper"]')
         self.assertEqual(self.state(page)["panel"], "studio/looper")
-        opened = page.eval("[...document.querySelectorAll('#panel details.req')].map((d) => "
+        opened = page.evaluate("[...document.querySelectorAll('#panel details.req')].map((d) => "
                            "[d.querySelector('summary').textContent.trim(), d.open, "
                            "[...d.querySelectorAll('mark')].map((m) => m.textContent)])")
         by = {title.split(" ")[0]: (is_open, marks) for title, is_open, marks in opened}
@@ -332,8 +362,8 @@ class Studio(MapPage):
                     for y in range(int(y0) + 80, int(y1) - 80, 20)),
                    key=lambda p: min(math.dist(p, q) for q in points))
         self.assertGreater(min(math.dist(spot, q) for q in points), 100)
-        page.drag(pads["s"], spot)
-        page.sleep(1.5)  # let the simulation settle
+        drag(page, pads["s"], spot)
+        page.wait_for_timeout(1500)  # let the simulation settle
         after = self.state(page)
         self.assertAlmostEqual(after["caps"]["studio/pads"]["s"][0], spot[0], delta=1)
         self.assertAlmostEqual(after["caps"]["studio/pads"]["s"][1], spot[1], delta=1)
@@ -346,7 +376,7 @@ class Studio(MapPage):
         for cap, c in before["caps"].items():
             if cap != "studio/pads":
                 self.assertLess(math.dist(c["s"], after["caps"][cap]["s"]), 40, cap)
-        page.sleep(1)
+        page.wait_for_timeout(1000)
         self.assertEqual(self.state(page)["caps"]["studio/pads"]["s"], after["caps"]["studio/pads"]["s"])
 
 
@@ -376,13 +406,14 @@ class OneDomain(MapPage):
     # @scenario blueprint/map: Files switched on
     def test_files_switched_on_keep_the_view_and_fade_in(self):
         page = self.open(self.map)
-        self.click(page, ".hull")  # the domain: selected and centred
-        page.sleep(0.6)
+        box = page.locator(".hull").bounding_box()  # the domain: selected and centred
+        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(600)
         before = self.state(page)
         self.assertGreater(before["k"], 1.3)  # zoomed in
         self.assertEqual(before["groups"], {})
         # Watch the file groups as they arrive: they start transparent.
-        page.eval("window.seen = []; new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach("
+        page.evaluate("window.seen = []; new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach("
                   "(n) => n.classList && n.classList.contains('fgroup') && "
                   "window.seen.push([n.getAttribute('class'), getComputedStyle(n).opacity])))).observe("
                   "document.querySelector('#graph svg'), { childList: true, subtree: true })")
@@ -396,7 +427,7 @@ class OneDomain(MapPage):
         for g in after["groups"].values():
             self.assertIn("enter", g["cls"].split())
             self.assertEqual(g["anim"], "enter")
-        seen = page.eval("window.seen")
+        seen = page.evaluate("window.seen")
         self.assertTrue(seen)
         self.assertTrue(all("enter" in cls for cls, _ in seen))
 
