@@ -364,9 +364,15 @@ def run_helper(entries, settings):
         last = (out.stderr.strip().splitlines() or ["no output"])[-1]
         return None, f"the TypeScript helper failed ({last})"
     try:
-        return json.loads(out.stdout), None
+        found = json.loads(out.stdout)
     except ValueError:
         return None, "the TypeScript helper printed no closure"
+    # Files git ignores (generated types, local stubs) aren't in another checkout, so they'd
+    # read as removed there: leave them out, as the file-level fallback does.
+    known = set(repo_files())
+    for closure in found["closures"].values():
+        closure["nodes"] = [n for n in closure["nodes"] if n["file"] in known]
+    return found, None
 
 
 def notice(why):
