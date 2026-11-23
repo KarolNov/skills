@@ -126,6 +126,16 @@ jobs:
                   return ""
               return f"chance {r['chance']:g} · confidence {r.get('confidence', '?')}"
 
+          FILL = {"high": "🟩", "medium": "🟨", "low": "🟥"}
+
+          def meter(r):
+              """`🟨🟨🟨🟨🟨⬜⬜⬜⬜⬜ 0.5 · medium`: 10 squares filled by the drift chance (rounded
+              half up, at least 1 above 0), colored by the confidence."""
+              c = r["chance"]
+              n = 0 if c <= 0 else max(1, min(10, int(c * 10 + 0.5)))
+              conf = r.get("confidence", "?")
+              return f"{FILL.get(conf, '⬛') * n}{'⬜' * (10 - n)} {c:g} · {conf}"
+
           def capability(r):
               """A capability's comment entry: name, since, chance, then its reasons (or, from a
               drift.py that predates scores, its changed files)."""
@@ -135,7 +145,7 @@ jobs:
               elif r["status"] == "deps-moved":
                   head += " (imported code moved)"
               if chance(r):
-                  head += f": {chance(r)}"
+                  head += f": {meter(r)}"
               details = ([plain(x) for x in r["reasons"]] if "reasons" in r
                          else [code(f) for f in r.get("changed", [])])
               return [head] + [f"  - {d}" for d in details]
@@ -209,7 +219,11 @@ jobs:
           low = any(r.get("confidence") == "low"
                     and any("imports are followed by file" in x for x in r.get("reasons", []))
                     for r in moved + possible)
-          lines += ["", "<sub>Code-side drift only; spec pages edited outside the code are "
+          scored = any("chance" in r for r in moved + possible)
+          lines += ["", "<sub>"
+                    + ("Squares fill with the drift chance (0 to 1) and are colored by "
+                       "confidence: 🟩 high, 🟨 medium, 🟥 low. " if scored else "")
+                    + "Code-side drift only; spec pages edited outside the code are "
                     "reported by `/blueprint-sync`."
                     + (" Low confidence where imports weren't followed by symbol: the "
                        "workflow's commented-out Node step raises it for TS/JS capabilities."

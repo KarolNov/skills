@@ -611,7 +611,7 @@ class Scoring(DriftTest):
                                           "lib/new.py added (anchored) → 1",
                                           "lib/old.py removed (anchored) → 1"])
         text = r.drift("check").stdout
-        self.assertIn("chance 1 · confidence high", text)
+        self.assertIn("■■■■■■■■■■ 1 · high", text)
         self.assertIn("lib/core.py edited (anchored) → 1", text)
 
     @NEEDS_NODE
@@ -1090,7 +1090,7 @@ class Transitive(unittest.TestCase):
         self.assertEqual((row["status"], row["chance"]), ("possibly-affected", 0.0625))
         self.assertEqual(row["reasons"][0], "packages/core/src/salt.ts salt changed, 3 imports "
                          "away, via @company/core (weight 0.5) → 0.06")
-        self.assertIn("possibly-affected web/login  chance 0.0625 · confidence medium",
+        self.assertIn("possibly-affected web/login  ■□□□□□□□□□ 0.0625 · medium",
                       r.drift("check").stdout)
 
     # @scenario blueprint/sync: Core package weighted up
@@ -1351,6 +1351,15 @@ class Combine(unittest.TestCase):
         self.assertEqual(self.drift.combine([0.25, 0.25]), 0.4375)
         self.assertEqual(self.drift.combine([1.0, 0.3]), 1.0)
         self.assertEqual(self.drift.combine([]), 0.0)
+
+    def test_meter(self):
+        meter = self.drift.meter
+        self.assertEqual(meter(0.5, "medium"), "■■■■■□□□□□ 0.5 · medium")
+        self.assertEqual(meter(1.0, "high"), "■■■■■■■■■■ 1 · high")
+        self.assertEqual(meter(0.0625, "low"), "■□□□□□□□□□ 0.0625 · low")  # never empty above 0
+        self.assertEqual(meter(0.25, "medium"), "■■■□□□□□□□ 0.25 · medium")  # half up
+        self.assertEqual(meter(0.5, "low", color=True), "\033[31m■■■■■\033[0m□□□□□ 0.5 · low")
+        self.assertEqual(meter(0.5, "high", color=True), "\033[32m■■■■■\033[0m□□□□□ 0.5 · high")
 
     def test_npm_lockfiles(self):
         v3 = {"lockfileVersion": 3, "packages": {

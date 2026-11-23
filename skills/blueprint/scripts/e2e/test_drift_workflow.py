@@ -254,7 +254,7 @@ class OnAPullRequest(WorkflowTest):
         body = comment["body"]
         self.assertIn("1 capability drifted since its spec was last synced:", body)
         self.assertRegex(body, r"- \*\*`orders/checkout`\*\* \(since `[0-9a-f]{9}`\): "
-                               r"chance 1 · confidence low\n"
+                               r"🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥 1 · low\n"
                                r"  - src/checkout/pay\.ts edited \(anchored\) → 1\n"
                                r"  - confidence low: typescript not installed when stamped, "
                                r"so imports are followed by file")
@@ -479,13 +479,15 @@ class Scored(WorkflowTest):
         body = comment["body"]
         self.assertIn("#### Possibly affected\n\nCode these import changed, below the drift "
                       "threshold: worth a look, not counted as drift:\n\n"
-                      "- **`orders/cart`**: chance 0.0625 · confidence medium\n"
+                      "- **`orders/cart`**: 🟨⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0.0625 · medium\n"
                       "  - packages/core/src/money.ts round\\_cents changed, 3 imports away, "
                       "via `@company/core` (weight 0.5) → 0.0625\n"
                       "  - confidence medium: no test results given\n", body)
         self.assertNotIn("drifted since", body)
         self.assertNotIn("orders/checkout", body)
         self.assertNotIn("Node step", body)  # nothing low confidence
+        self.assertIn("Squares fill with the drift chance (0 to 1) and are colored by "
+                      "confidence: 🟩 high, 🟨 medium, 🟥 low.", body)
         self.assertEqual(run.annotations("warning"), [])
         self.assertEqual(len(run.writes("POST")), 1)
 
@@ -496,7 +498,7 @@ class Scored(WorkflowTest):
         self.assertEqual(run.steps["Fail on drift"], "failure")
         [comment] = run.drift_comments()
         self.assertIn("1 capability drifted since its spec was last synced:\n\n"
-                      "- **`orders/checkout`** (imported code moved): chance 0.5 · confidence "
+                      "- **`orders/checkout`** (imported code moved): 🟨🟨🟨🟨🟨⬜⬜⬜⬜⬜ 0.5 · "
                       "medium\n"
                       "  - packages/core/src/token.ts signToken changed, 1 import away, "
                       "via `@company/core` (weight 1) → 0.5\n"
