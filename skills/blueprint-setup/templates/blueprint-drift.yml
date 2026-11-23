@@ -1,26 +1,34 @@
 # Blueprint drift report, copied by /blueprint-setup (step 7, "Drift guard").
 #
 # On every pull request it runs `python3 .blueprint/drift.py check` and
-# `python3 .blueprint/drift.py artifacts` and reports capabilities whose anchored
-# code moved since their spec was last synced, and artifacts (resources outside
-# the repo that describe a capability) whose capabilities' code changed since
-# someone last checked them:
-#   - one PR comment, updated on each push (and marked "back in sync" when both
-#     lists are empty),
-#   - a ::warning annotation per drifted capability and per stale artifact,
-#     which fork PRs see too (their token can't comment),
+# `python3 .blueprint/drift.py artifacts` and reports:
+#   - drifted capabilities: their anchored code moved (code-moved), or code they
+#     import moved enough to reach the drift threshold (deps-moved),
+#   - possibly affected capabilities: imported code moved, below the threshold,
+#   - artifacts (resources outside the repo that describe a capability) whose
+#     capabilities' code changed since someone last checked them.
+# Each capability shows its drift chance (0-1), confidence and the reasons for both.
+# It leaves:
+#   - one PR comment, updated on each push (and marked "back in sync" when all
+#     three lists are empty),
+#   - a ::warning annotation per drifted capability and per stale artifact, none
+#     for a possibly affected one; fork PRs see them too (their token can't comment),
 #   - a failed job only when BLUEPRINT_DRIFT_FAIL is "true" and a capability
-#     drifted; stale artifacts alone never fail it.
+#     drifted; possibly affected capabilities and stale artifacts never fail it.
 # An older .blueprint/drift.py without the `artifacts` command still gets the
-# drift report; the artifacts section is skipped with a notice.
+# drift report; the artifacts section is skipped with a notice. One that predates
+# drift chances lists the changed files instead.
 # Only code-side drift is checked; spec-side drift (someone edited a spec page)
 # needs the backend, so `/blueprint-sync` and `/blueprint-drift` report it.
 # Needs only actions/checkout, python3 and gh, all on GitHub-hosted runners.
+# Without the repo's node_modules, imports of TS/JS capabilities are followed by
+# file at low confidence; uncomment the "Set up Node" step below to follow them by
+# symbol through the repo's own typescript.
 #
 # This is the recommended shape, not a fixed one: this copy belongs to the repo.
 # Edit it to fit the team (add a "drifted" label, request a reviewer, change
 # the wording or trigger); the steps after "Check drift" read its outputs
-# (`drifted`, `stale`, `artifacts_skipped`, and drift.json, artifacts.json and
+# (`drifted`, `possible`, `stale`, `artifacts_skipped`, and drift.json, artifacts.json and
 # drift-comment.md in $RUNNER_TEMP, kept out of the checkout so the scan never
 # counts them as changed files).
 
@@ -42,6 +50,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Optional: install the repo's dependencies so drift.py can resolve TS/JS imports
+      # by symbol with the repo's own typescript, which raises confidence for those
+      # capabilities from low to medium. drift.py never installs anything itself.
+      # Uncomment, and use the install command the repo uses (npm ci, pnpm install
+      # --frozen-lockfile, yarn install --immutable).
+      # - name: Set up Node
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 20
+      #     cache: npm
+      # - name: Install dependencies
+      #   run: npm ci
 
       - name: Check drift
         id: check
@@ -78,7 +99,8 @@ jobs:
           import json, os, re
           out = os.environ["RUNNER_TEMP"]
           report = json.load(open(f"{out}/drift.json"))
-          moved = [r for r in report if r["status"] == "code-moved"]
+          moved = [r for r in report if r["status"] in ("code-moved", "deps-moved")]
+          possible = [r for r in report if r["status"] == "possibly-affected"]
           skipped = os.environ["ARTIFACTS_SKIPPED"] == "true"
           stale = json.load(open(f"{out}/artifacts.json"))
           MAX_FILES = 10  # per artifact, so domain-wide ones keep the comment readable
@@ -93,6 +115,30 @@ jobs:
               """Text with markdown's inline syntax escaped."""
               return re.sub(r"([\\`*_\[\]<>|])", r"\\\1", text)
 
+          def annotation(text):
+              """A workflow command's message, escaped so % and newlines survive."""
+              return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          def chance(r):
+              """`chance 0.5 · confidence medium`, or "" from a drift.py that predates scores."""
+              if "chance" not in r:
+                  return ""
+              return f"chance {r['chance']:g} · confidence {r.get('confidence', '?')}"
+
+          def capability(r):
+              """A capability's comment entry: name, since, chance, then its reasons (or, from a
+              drift.py that predates scores, its changed files)."""
+              head = f"- **{code(r['capability'])}**"
+              if r["status"] == "code-moved":
+                  head += f" (since `{(r.get('syncedCommit') or '?')[:9]}`)"
+              elif r["status"] == "deps-moved":
+                  head += " (imported code moved)"
+              if chance(r):
+                  head += f": {chance(r)}"
+              details = ([plain(x) for x in r["reasons"]] if "reasons" in r
+                         else [code(f) for f in r.get("changed", [])])
+              return [head] + [f"  - {d}" for d in details]
+
           def files(paths):
               shown = ", ".join(code(f) for f in paths[:MAX_FILES])
               more = len(paths) - MAX_FILES
@@ -101,20 +147,33 @@ jobs:
           marker = "<!-- blueprint-drift -->"
           lines = [marker, "### Blueprint drift", ""]
           if moved:
-              lines += [f"{len(moved)} capabilit{'y' if len(moved) == 1 else 'ies'} changed "
-                        "since their spec was last synced:", ""]
+              lines += [("1 capability drifted since its spec was last synced:" if len(moved) == 1
+                         else f"{len(moved)} capabilities drifted since their specs were last synced:"),
+                        ""]
               for r in moved:
-                  since = (r.get("syncedCommit") or "?")[:9]
-                  lines.append(f"- **`{r['capability']}`** (since `{since}`)")
-                  lines += [f"  - `{f}`" for f in r["changed"]]
-                  print(f"::warning title=Blueprint drift::{r['capability']}: "
-                        f"{len(r['changed'])} anchored file(s) changed since {since}: "
-                        + ", ".join(r["changed"]))
+                  lines += capability(r)
+                  score = f" ({chance(r)})" if chance(r) else ""
+                  if r["status"] == "code-moved":
+                      since = (r.get("syncedCommit") or "?")[:9]
+                      what = (f"{len(r['changed'])} anchored file(s) changed since {since}"
+                              f"{score}: " + ", ".join(r["changed"]))
+                  else:
+                      what = f"imported code moved{score}: " + "; ".join(
+                          x for x in r.get("reasons", []) if not x.startswith("confidence "))
+                  print(f"::warning title=Blueprint drift::{annotation(r['capability'] + ': ' + what)}")
               lines += ["", "If the code is right, run `/blueprint-sync <capability>` and commit "
                         "the updated `.blueprint/`; if the spec is right, run "
                         "`/blueprint-drift <capability>` to fix the code."]
-          if stale:
+          if possible:
               if moved:
+                  lines.append("")
+              lines += ["#### Possibly affected", "",
+                        "Code these import changed, below the drift threshold: worth a look, "
+                        "not counted as drift:", ""]
+              for r in possible:
+                  lines += capability(r)
+          if stale:
+              if moved or possible:
                   lines.append("")
               lines += ["#### Artifacts that may need an update", "",
                         "The code these describe changed since they were last checked:", ""]
@@ -136,16 +195,21 @@ jobs:
                                    + ", no longer a capability or domain: fix its `capabilities` "
                                    "in `.blueprint/blueprint.json` before marking it checked")
                   what = f"{len(changed)} file(s) changed" if changed else "no files changed"
-                  print(f"::warning title=Blueprint artifact::{a['id']} ({a['value']}): {what}"
-                        + (f"; unknown capability: {', '.join(unknown)}" if unknown else ""))
+                  print("::warning title=Blueprint artifact::" + annotation(
+                      f"{a['id']} ({a['value']}): {what}"
+                      + (f"; unknown capability: {', '.join(unknown)}" if unknown else "")))
               lines += ["", "Once each is updated (or still accurate), run "
                         "`python3 .blueprint/drift.py artifacts checked <id>` and commit "
                         "`.blueprint/blueprint.json`."]
-          if not moved and not stale:
-              lines.append("Back in sync: no capability's code moved since its spec was synced"
-                           + ("." if skipped else ", and no artifact needs a check."))
+          if not moved and not possible and not stale:
+              lines.append("Back in sync: no capability's code or imported code moved since its "
+                           "spec was synced" + ("." if skipped else ", and no artifact needs a check."))
+          low = any(r.get("confidence") == "low" for r in moved + possible)
           lines += ["", "<sub>Code-side drift only; spec pages edited outside the code are "
                     "reported by `/blueprint-sync`."
+                    + (" Low confidence where imports weren't followed by symbol: the "
+                       "workflow's commented-out Node step raises it for TS/JS capabilities."
+                       if low else "")
                     + (" Artifacts skipped: `.blueprint/drift.py` predates them." if skipped else "")
                     + "</sub>"]
           body = "\n".join(lines) + "\n"
@@ -156,6 +220,7 @@ jobs:
           open(f"{out}/drift-comment.md", "w").write(body)
           with open(os.environ["GITHUB_OUTPUT"], "a") as gh_out:
               gh_out.write(f"drifted={len(moved)}\n")
+              gh_out.write(f"possible={len(possible)}\n")
               gh_out.write(f"stale={len(stale)}\n")
               gh_out.write(f"artifacts_skipped={'true' if skipped else 'false'}\n")
           PY
@@ -165,6 +230,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           DRIFTED: ${{ steps.check.outputs.drifted }}
+          POSSIBLE: ${{ steps.check.outputs.possible }}
           STALE: ${{ steps.check.outputs.stale }}
         run: |
           # Find this workflow's earlier comment, if any, by its hidden marker.
@@ -175,13 +241,14 @@ jobs:
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" \
               -F body=@"$RUNNER_TEMP/drift-comment.md" > /dev/null \
               || echo "::notice::Could not update the drift comment (fork PRs can't comment); see the warnings above."
-          elif [ "$DRIFTED" != "0" ] || [ "$STALE" != "0" ]; then
+          elif [ "$DRIFTED" != "0" ] || [ "$POSSIBLE" != "0" ] || [ "$STALE" != "0" ]; then
             gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
               -F body=@"$RUNNER_TEMP/drift-comment.md" > /dev/null \
               || echo "::notice::Could not comment on the PR (fork PRs can't comment); see the warnings above."
           fi
 
-      # Stale artifacts never fail the job; only drifted capabilities do.
+      # Possibly affected capabilities and stale artifacts never fail the job; only
+      # drifted ones (code-moved, deps-moved) do.
       - name: Fail on drift
         if: env.BLUEPRINT_DRIFT_FAIL == 'true' && steps.check.outputs.drifted != '0'
         run: |
