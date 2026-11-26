@@ -44,9 +44,9 @@ class Repo:
         script = (f"import sys, json; sys.path.insert(0, {str(GRAPH.parent)!r}); sys.argv[1:] = {list(args)!r}\n"
                   "import drift, graph\n"
                   f"rows = json.loads({json.dumps(rows)!r}); real = drift.assess\n"
-                  "def fake(spec, paths, settings, hashes=drift.file_hashes):\n"
+                  "def fake(spec, paths, settings, hashes=drift.file_hashes, imports=None):\n"
                   "    name = next(n for n, s in drift.load()['specs'].items() if s.get('anchors') == spec.get('anchors'))\n"
-                  "    return rows[name] if name in rows else real(spec, paths, settings, hashes)\n"
+                  "    return rows[name] if name in rows else real(spec, paths, settings, hashes, imports)\n"
                   "drift.assess = fake\n"
                   "sys.exit(graph.main(sys.argv[1:]))\n")
         return subprocess.run([sys.executable, "-c", script], cwd=self.root, capture_output=True,

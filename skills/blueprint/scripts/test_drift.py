@@ -1068,6 +1068,22 @@ class Transitive(unittest.TestCase):
         self.assertNotIn("changed", row)
         self.assertEqual(rows["web/admin"]["status"], "in-sync")
 
+    @NEEDS_TS
+    def test_map_follows_imports_like_check(self):
+        # graph.py once scored direct changes only, so the map missed imports-moved drift.
+        r = self.workspace(scoring={"packages": {"@company/core": {"weight": 1.0}}})
+        self.replace(r, "packages/core/src/token.ts", "pad(user) + secret()", "secret() + pad(user)")
+        _, rows = self.check(r)
+        out = subprocess.run([sys.executable, str(DRIFT.parent / "graph.py"), "--json"], cwd=r.root,
+                             capture_output=True, text=True, env=fakerepo.ENV)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        nodes = {n["id"]: n for n in json.loads(out.stdout)["nodes"]}
+        self.assertEqual(nodes["web/login"]["status"], "deps-moved")
+        for name, row in rows.items():
+            self.assertEqual((nodes[name]["status"], nodes[name]["chance"], nodes[name]["confidence"],
+                              nodes[name]["reasons"]),
+                             (row["status"], row["chance"], row["confidence"], row["reasons"]))
+
     # @scenario blueprint/sync: Unused export changed
     @NEEDS_TS
     def test_unused_export_changed(self):
