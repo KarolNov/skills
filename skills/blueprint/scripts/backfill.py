@@ -17,6 +17,9 @@
     backfill.py fold [DOMAIN ...]     merge every domain that finished pass 3 (or those named)
                                       into blueprint.json and mark it folded; exit 1 if a named
                                       domain can't fold yet, saying why
+    backfill.py finish                report what the backfill wrote and delete the folder,
+                                      once every domain is folded and has finished pass 5;
+                                      exit 1 and say what's left otherwise
 
 The folder:
 
@@ -29,13 +32,15 @@ The folder:
                                       {"domain", "passes": {"2".."5": STATE}, "ref" (the
                                        domain overview page), "covered" (user confirmed),
                                        "glue": [glob], "folded": bool,
+                                       "artifacts": [id] (recorded in pass 5),
                                        "capabilities": {name: {"purpose", "anchors",
                                          "existing" (already in blueprint.json), "ref",
                                          "specVersion", "anchorsFiles", "syncedCommit",
-                                         "review": {"accepted", "amended", "rejected"}}}}
+                                         "review": {"accepted", "amended", "rejected"},
+                                         "tags" (@scenario tags added in pass 4)}}}
       drafts/<capability>.md          spec drafts awaiting scenario review
 
-A domain session never writes blueprint.json: only fold does, for every finished domain at
+A domain session never writes blueprint.json before fold: only fold does, for every finished domain at
 once, so parallel domain sessions don't conflict. Baselines go to .blueprint/baseline/ and
 closures to .blueprint/closure/ as usual: one file per capability, so they don't conflict
 either. Anchors match as in drift.py. Run from anywhere inside the repository. Standard
@@ -43,6 +48,7 @@ library only.
 """
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -483,12 +489,76 @@ def cmd_fold(args):
     return 1 if refused else 0
 
 
+def finish_problems(progress, report):
+    problems = []
+    if report["passes"]["1"] != "done":
+        problems.append("pass 1 isn't done")
+    if not report["domains"]:
+        problems.append("the backfill has no domains")
+    for d in report["domains"]:
+        if not d["folded"]:
+            problems.append(f"{d['name']} isn't folded")
+        if left := [k for k, v in d["passes"].items() if v != "done"]:
+            problems.append(f"{d['name']}: pass {', '.join(left)} not done")
+        if d["drafts"]:
+            problems.append(f"{d['name']}: {len(d['drafts'])} drafts awaiting review")
+    return problems
+
+
+def count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def cmd_finish(args):
+    if args:
+        raise Problem("finish takes no arguments")
+    progress = load_progress()
+    report = overview(progress)
+    if problems := finish_problems(progress, report):
+        print("the backfill isn't finished:", file=sys.stderr)
+        for p in problems:
+            print(f"  {p}", file=sys.stderr)
+        for step in report["next"]:
+            print(f"  next: {step['command']}  ({step['why']})", file=sys.stderr)
+        return 1
+    totals = dict.fromkeys(("capabilities", "new", "accepted", "amended", "rejected", "tags",
+                            "artifacts"), 0)
+    lines = []
+    for name in progress["domains"]:
+        dom = load_domain(name)
+        caps = dom["capabilities"]
+        review = {k: sum(count((c.get("review") or {}).get(k)) for c in caps.values())
+                  for k in ("accepted", "amended", "rejected")}
+        row = {"capabilities": len(caps),
+               "new": sum(not c.get("existing") for c in caps.values()),
+               **review,
+               "tags": sum(count(c.get("tags")) for c in caps.values()),
+               "artifacts": len(dom.get("artifacts") or [])}
+        for k in totals:
+            totals[k] += row[k]
+        lines.append((name, row))
+
+    def describe(row):
+        return (f"{row['capabilities']} capabilities ({row['new']} new) · scenarios "
+                f"{row['accepted']} accepted, {row['amended']} amended, "
+                f"{row['rejected']} rejected · {row['tags']} tags · "
+                f"{row['artifacts']} artifacts")
+
+    print(f"backfill finished: {len(lines)} domains · {describe(totals)}")
+    for name, row in lines:
+        print(f"  {name}: {describe(row)}")
+    shutil.rmtree(FOLDER)
+    print(f"deleted {rel(FOLDER)}/ (git history keeps it)")
+    return 0
+
+
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print(__doc__)
         return 0
     handlers = {"init": cmd_init, "status": cmd_status, "uncovered": cmd_uncovered,
-                "stamp": cmd_stamp, "pass": cmd_pass, "fold": cmd_fold}
+                "stamp": cmd_stamp, "pass": cmd_pass, "fold": cmd_fold,
+                "finish": cmd_finish}
     cmd = sys.argv[1]
     if cmd not in handlers:
         print(f"unknown command: {cmd}", file=sys.stderr)

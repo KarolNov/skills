@@ -471,5 +471,68 @@ class Fold(unittest.TestCase):
         self.assertIn("no baseline", out.stderr)
 
 
+class Finish(unittest.TestCase):
+    def setUp(self):
+        self.repo = Repo()
+        self.repo.init()
+        reviewed(self.repo, "auth", {"auth/session": ["src/auth/session.py"],
+                                     "auth/tokens": ["src/auth/**"]})
+        reviewed(self.repo, "billing", {"billing/invoices": ["src/billing/**"]},
+                 ref="https://notion/billing")
+        self.repo.ok("fold")
+
+    def tearDown(self):
+        self.repo.close()
+
+    def finish_passes(self, *domains):
+        for name in domains:
+            for n in ("4", "5"):
+                self.repo.ok("pass", name, n, "done")
+
+    # @scenario blueprint/backfill: Last pass done
+    def test_reports_what_the_backfill_wrote_and_deletes_the_folder(self):
+        self.finish_passes("auth", "billing")
+        auth = self.repo.domain("auth")
+        auth["capabilities"]["auth/session"]["existing"] = True
+        auth["capabilities"]["auth/tokens"].update(
+            review={"accepted": 3, "amended": 1, "rejected": 2}, tags=4)
+        auth["artifacts"] = ["auth-guide", "login-help"]
+        self.repo.set_domain("auth", auth)
+        billing = self.repo.domain("billing")
+        billing["capabilities"]["billing/invoices"].update(review={"accepted": 2}, tags=1)
+        self.repo.set_domain("billing", billing)
+        self.assertIn("finish the backfill", self.repo.status()["next"][0]["why"])
+        out = self.repo.ok("finish")
+        self.assertIn("backfill finished: 2 domains · 3 capabilities (2 new) · scenarios "
+                      "5 accepted, 1 amended, 2 rejected · 5 tags · 2 artifacts", out)
+        self.assertIn("  auth: 2 capabilities (1 new)", out)
+        self.assertFalse((self.repo.root / ".blueprint/backfill").exists())
+        self.assertEqual(self.repo.status(), {"active": False})
+        self.assertIn("auth/tokens", self.repo.read(".blueprint/blueprint.json")["specs"])
+
+    def test_refuses_while_a_domain_has_passes_left(self):
+        self.finish_passes("auth")
+        self.repo.ok("pass", "billing", "4", "done")
+        out = self.repo.run("finish")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("billing: pass 5 not done", out.stderr)
+        self.assertIn("/blueprint-backfill domain billing", out.stderr)
+        self.assertTrue((self.repo.root / ".blueprint/backfill/progress.json").is_file())
+
+    def test_refuses_an_unfolded_domain(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.init()
+        reviewed(repo, "auth", {"auth/tokens": ["src/auth/tokens.py"]})
+        out = repo.run("finish")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("auth isn't folded", out.stderr)
+
+    def test_without_a_backfill(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        self.assertEqual(repo.run("finish").returncode, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
