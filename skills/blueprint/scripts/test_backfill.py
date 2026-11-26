@@ -501,6 +501,7 @@ class Finish(unittest.TestCase):
         billing = self.repo.domain("billing")
         billing["capabilities"]["billing/invoices"].update(review={"accepted": 2}, tags=1)
         self.repo.set_domain("billing", billing)
+        self.repo.commit("passes 4 and 5")
         self.assertIn("finish the backfill", self.repo.status()["next"][0]["why"])
         out = self.repo.ok("finish")
         self.assertIn("backfill finished: 2 domains · 3 capabilities (2 new) · scenarios "
@@ -518,6 +519,35 @@ class Finish(unittest.TestCase):
         self.assertIn("billing: pass 5 not done", out.stderr)
         self.assertIn("/blueprint-backfill domain billing", out.stderr)
         self.assertTrue((self.repo.root / ".blueprint/backfill/progress.json").is_file())
+
+    def test_leftover_drafts_block_finish_and_status_agrees(self):
+        self.finish_passes("auth", "billing")
+        self.repo.write(".blueprint/backfill/drafts/auth/dropped.md", "x\n")
+        self.repo.commit("passes 4 and 5")
+        nxt = self.repo.status()["next"]
+        self.assertEqual([s["command"] for s in nxt], ["/blueprint-backfill domain auth"])
+        self.assertIn("drafts left", nxt[0]["why"])
+        out = self.repo.run("finish")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("auth: 1 drafts awaiting review", out.stderr)
+
+    def test_refuses_uncommitted_progress(self):
+        self.finish_passes("auth", "billing")
+        out = self.repo.run("finish")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("aren't committed", out.stderr)
+        self.assertTrue((self.repo.root / ".blueprint/backfill/progress.json").is_file())
+
+    def test_counts_only_a_list_of_artifacts(self):
+        self.finish_passes("auth", "billing")
+        auth = self.repo.domain("auth")
+        auth["artifacts"] = "auth-guide"
+        self.repo.set_domain("auth", auth)
+        self.repo.commit("passes 4 and 5")
+        self.assertIn("· 0 artifacts", self.repo.ok("finish"))
+
+    def test_takes_no_arguments(self):
+        self.assertEqual(self.repo.run("finish", "extra").returncode, 2)
 
     def test_refuses_an_unfolded_domain(self):
         repo = Repo()

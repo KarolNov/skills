@@ -25,7 +25,7 @@ Shared material lives in the `blueprint` skill next to this one: `../blueprint/r
 | 5. Artifacts | per folded domain | `blueprint.json` artifacts | [references/pass-5.md](references/pass-5.md) |
 | Finish | once every domain is folded and done | deletes `.blueprint/backfill/` | [references/finish.md](references/finish.md) |
 
-Each domain's passes 2 to 4 can run in their own session, on their own branch: that is what the progress folder is for. Pass 5 writes `blueprint.json`, so it runs on the default branch.
+Each domain's passes 2 to 4 can run in their own session, on their own branch: that is what the progress folder is for. Pass 5 writes `blueprint.json`, so it runs on the default branch, once the domain's branch for passes 2 to 4 is merged there.
 
 ## Pick the work
 
@@ -33,7 +33,7 @@ By the arguments:
 
 - **`fold`**, alone or with domain names: read [references/fold.md](references/fold.md).
 - **`finish`**: read [references/finish.md](references/finish.md).
-- **`domain <name>`**: run that domain's next pass. Read it from `backfill.py status --json` (`domains[].nextPass`): 2 or 3 → that pass's file; 4 or more on an unfolded domain → it waits for fold: say so and offer `/blueprint-backfill fold <name>`; 4 or 5 on a folded domain → that pass's file; none (every pass done) → say so, with the next commands from `backfill.py status`.
+- **`domain <name>`**: run that domain's next pass. Read it from `backfill.py status --json` (`domains[].nextPass`): 2 or 3 → that pass's file; 4 or more on an unfolded domain → it waits for fold: say so and offer `/blueprint-backfill fold <name>`; 4 or 5 on a folded domain → that pass's file; none (every pass done) → say so, with the next commands from `backfill.py status`; when the domain still has drafts, show them and, per draft, review it as pass 3 does or delete it on the user's yes, then commit.
 - **Nothing**, with no `.blueprint/backfill/progress.json`: start the backfill with pass 1.
 - **Nothing**, when `backfill.py status` names `/blueprint-backfill` to finish the backfill (every domain folded, pass 5 done everywhere): read [references/finish.md](references/finish.md).
 - **Nothing**, with a backfill in progress: **resume**. Run `backfill.py status` and show its board line, one line per domain and its `next:` list. Offer to continue with the first next step, and name the others as sessions to run (`/blueprint-backfill domain <name>`), so the user can start them in parallel. On a yes, carry on here as that step's arguments would.

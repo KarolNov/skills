@@ -2,9 +2,9 @@
 
 Per folded domain, after its pass 4. Ends with the outside resources the user names for the domain recorded as artifacts in `blueprint.json`, so whoever changes the domain's code is told to check them. Artifacts are asked for, never searched for: don't look through the backend, the web or other repos for candidates.
 
-Run `backfill.py pass <domain> 5 in-progress`.
-
 `drift.py artifacts add` writes `blueprint.json`, which separate domain branches would each edit in the same `artifacts` object. Run this pass on the default branch (it is short), or on a branch merged before the next domain's pass 5 starts.
+
+First, the domain's branch for passes 2 to 4 must be merged here: run `backfill.py status` and check the domain shows pass 4 `done`. When it doesn't, stop and ask the user to merge that branch; `pass <domain> 5 done` refuses while pass 4 isn't done. Then run `backfill.py pass <domain> 5 in-progress`.
 
 ## 1. Ask once
 

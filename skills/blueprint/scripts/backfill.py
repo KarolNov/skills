@@ -213,6 +213,10 @@ def next_steps(pass1, domains):
     for d in domains:
         n, name = d["nextPass"], d["name"]
         if n is None and d["folded"]:
+            if d["drafts"]:
+                steps.append({"command": f"/blueprint-backfill domain {name}", "domain": name,
+                              "why": f"{name} has {len(d['drafts'])} drafts left: review "
+                                     "or delete them"})
             continue
         if (n is None or n >= 4) and not d["folded"]:
             steps.append({"command": "/blueprint-backfill fold", "domain": name,
@@ -489,7 +493,7 @@ def cmd_fold(args):
     return 1 if refused else 0
 
 
-def finish_problems(progress, report):
+def finish_problems(report):
     problems = []
     if report["passes"]["1"] != "done":
         problems.append("pass 1 isn't done")
@@ -514,7 +518,13 @@ def cmd_finish(args):
         raise Problem("finish takes no arguments")
     progress = load_progress()
     report = overview(progress)
-    if problems := finish_problems(progress, report):
+    problems = finish_problems(report)
+    if not problems and (dirty := sorted(f for f in drift.uncommitted()
+                                         if f.startswith(rel(FOLDER) + "/"))):
+        problems.append(f"{len(dirty)} files in {rel(FOLDER)}/ aren't committed "
+                        f"({', '.join(dirty[:3])}{', …' if len(dirty) > 3 else ''}): "
+                        "commit them first, so git history keeps them")
+    if problems:
         print("the backfill isn't finished:", file=sys.stderr)
         for p in problems:
             print(f"  {p}", file=sys.stderr)
@@ -533,7 +543,7 @@ def cmd_finish(args):
                "new": sum(not c.get("existing") for c in caps.values()),
                **review,
                "tags": sum(count(c.get("tags")) for c in caps.values()),
-               "artifacts": len(dom.get("artifacts") or [])}
+               "artifacts": len(a) if isinstance(a := dom.get("artifacts"), list) else 0}
         for k in totals:
             totals[k] += row[k]
         lines.append((name, row))

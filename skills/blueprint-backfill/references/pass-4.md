@@ -26,4 +26,4 @@ Run `backfill.py pass <domain> 4 done` and commit.
 
 ## Done when
 
-Every capability in the domain has a `"tags"` count in the progress file, pass 4 is done, and the tags and progress file are committed. Report the tags added per capability, the scenarios claimed before and after, and the scenarios still unclaimed. Then carry on with pass 5 in this session when the user wants, or end with `/blueprint-backfill domain <domain>` as the next command.
+Every capability in the domain has a `"tags"` count in the progress file, pass 4 is done, and the tags and progress file are committed. Report the tags added per capability, the scenarios claimed before and after, and the scenarios still unclaimed. Pass 5 writes `blueprint.json`, so it runs on the default branch: when this session is on it, carry on with pass 5 here if the user wants. On a domain branch, end by asking the user to merge this branch, then run `/blueprint-backfill domain <domain>` on the default branch.
