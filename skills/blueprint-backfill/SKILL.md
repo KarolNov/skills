@@ -19,13 +19,13 @@ Shared material lives in the `blueprint` skill next to this one: `../blueprint/r
 | --- | --- | --- | --- |
 | 1. Survey and domains | once, in this session | `progress.json`, `README.md` | [references/pass-1.md](references/pass-1.md) |
 | 2. Capabilities and anchors | per domain | the domain's progress file, its overview page | [references/pass-2.md](references/pass-2.md) |
-| 3. Spec drafts and scenario review | per domain | drafts, spec pages, baselines | [references/pass-3.md](references/pass-3.md) |
+| 3. Spec drafts and scenario review | per domain, cards in the `blueprint-ui` pane or in chat | drafts, spec pages, baselines | [references/pass-3.md](references/pass-3.md) |
 | Fold | when domains finish pass 3 | `blueprint.json` | [references/fold.md](references/fold.md) |
 | 4. Test tags | per folded domain | `@scenario` tags in tests | [references/pass-4.md](references/pass-4.md) |
 | 5. Artifacts | per folded domain | `blueprint.json` artifacts | [references/pass-5.md](references/pass-5.md) |
 | Finish | once every domain is folded and done | deletes `.blueprint/backfill/` | [references/finish.md](references/finish.md) |
 
-Each domain's passes 2 to 4 can run in their own session, on their own branch: that is what the progress folder is for. Pass 5 writes `blueprint.json`, so it runs on the default branch, once the domain's branch for passes 2 to 4 is merged there.
+Pass 3's scenario review runs in the `blueprint-ui` pane's Backfill view when that mod is installed (its `backfill` tool is in the session), and in chat otherwise: [references/pass-3.md](references/pass-3.md), step 2. Each domain's passes 2 to 4 can run in their own session, on their own branch: that is what the progress folder is for. Pass 5 writes `blueprint.json`, so it runs on the default branch, once the domain's branch for passes 2 to 4 is merged there.
 
 ## Pick the work
 

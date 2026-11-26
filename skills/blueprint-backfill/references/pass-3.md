@@ -12,7 +12,9 @@ Save each to `drafts/<domain>/<name>.md` (a bare capability: `drafts/<capability
 
 ## 2. Review, one card per scenario
 
-Take the capabilities in the order pass 2 found them; within one, the undecided scenarios in document order. A scenario is **undecided** while its line carries no decision mark. Show each as one card:
+**With blueprint-ui installed** (the session has its `backfill` tool, `mcp__blueprint-ui__backfill`; load it through ToolSearch when it is deferred), call it with the domain and end your turn: the pane's Backfill view shows the cards below one at a time with Accept, Amend and Reject, and saves each decision to the draft and the progress file exactly as this step says, before the next card. It doesn't commit. Each time a capability's last card is decided, a message asks you to write its spec: do step 3 for that capability, commit the whole `.blueprint/backfill/` folder with it (so the decisions made since in the pane go in together), report it in a line, and end your turn again while the user goes on in the pane. When the user stops partway, commit what the pane saved. If the tool answers that no pane is showing, or with an error, ask the cards in chat as below.
+
+**Without the pane**, ask the cards in chat. Take the capabilities in the order pass 2 found them; within one, the undecided scenarios in document order. A scenario is **undecided** while its line carries no decision mark. Show each as one card:
 
 ```
 **auth/tokens** · card 3 of 11 · 26 left in auth
@@ -49,7 +51,7 @@ When a capability has no undecided scenario left:
 4. Link it from the overview's Capabilities list: link its "no spec yet" line and drop the marker.
 5. Delete the draft and commit the progress file, baseline and closure.
 
-Report the page with its counts (accepted, amended, rejected), then show the next capability's first card.
+Report the page with its counts (accepted, amended, rejected), then show the next capability's first card (with the pane, the pane already shows it: end your turn).
 
 ## Done when
 

@@ -150,7 +150,9 @@ maps and shows the chosen page read-only. Press "+" beside a block to comment on
 wording, as on a GitHub diff line; comments batch up like a pending review, and "Submit review" hands
 the batch to `/blueprint review`, which shows one preview and writes on your yes. It reads Notion through
 your session's Notion connection (the server name is a setting, `claude.ai Notion` by default) and
-works the same in the terminal and the desktop app. Install it next to `blueprint`.
+works the same in the terminal and the desktop app. While a `/blueprint-backfill` is in progress, the board's
+first line shows its pass, and choosing it opens the Backfill view: one scenario card at a time, with
+Accept, Amend and Reject, each decision saved before the next card. Install it next to `blueprint`.
 
 Try it: `/blueprint-setup`, then *"/blueprint move session storage from cookies to Redis, keyed by
 user id, with a 30-day sliding expiry"*.

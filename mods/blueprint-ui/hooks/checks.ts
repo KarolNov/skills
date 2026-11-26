@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { BlueprintUiCode, BlueprintUiDriftRow, BlueprintUiSpecs } from '../types'
+import { checkBackfill } from './backfill'
 import { commandNamed } from './board'
 import type { Step } from './board'
 import { candidates, fetchMarker } from './notion'
@@ -35,7 +36,7 @@ function joined(runs: typeof codeRuns, root: string, start: () => Promise<void>)
   return run
 }
 
-/** Runs `drift.py check --json` and `unanchored --since <oldest sync>`; a run already going is joined, not repeated. */
+/** Runs `drift.py check --json` and `unanchored --since <oldest sync>`, and reads the backfill's status; a run already going is joined, not repeated. */
 export function checkCode($: EngineInterface, map: Map): Promise<void> {
   return joined(codeRuns, map.root, () => runCode($, map))
 }
@@ -47,7 +48,8 @@ export async function recheckCode($: EngineInterface, map: Map): Promise<void> {
 
 async function runCode($: EngineInterface, map: Map): Promise<void> {
   await update($, code, (c): BlueprintUiCode => (c.status === 'ready' ? c : { status: 'checking' }))
-  const next = await codeStatus($, map)
+  // A backfill in progress is read with the code side, so its board line keeps up with every check.
+  const [next] = await Promise.all([codeStatus($, map), checkBackfill($, map.root).catch(() => undefined)])
   await update($, code, () => next)
 }
 
