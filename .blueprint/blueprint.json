@@ -307,7 +307,8 @@
       "review": "https://app.notion.com/p/41e43cce21f28198ba8fe34a1643e231",
       "status": "applied",
       "baseCommit": "4f91fb6ffeb2177e5fca00926698493cbc590cb7",
-      "branch": "kn/backfill-specs-specs"
+      "branch": "kn/backfill-specs-specs",
+      "pr": "https://github.com/KarolNov/skills/pull/76"
     }
   },
   "artifacts": {
