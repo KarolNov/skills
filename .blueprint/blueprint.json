@@ -80,12 +80,12 @@
       "anchors": [
         "skills/blueprint-setup/**"
       ],
-      "specVersion": "0fe1c52fe568501c",
+      "specVersion": "0d66b4a18e0be1b2",
       "anchorsFiles": {
-        "skills/blueprint-setup/SKILL.md": "dd8aa74e6a59",
+        "skills/blueprint-setup/SKILL.md": "77660a2d4d0d",
         "skills/blueprint-setup/templates/blueprint-drift.yml": "296b8e93dcdd"
       },
-      "syncedCommit": "fab5c188087e0059630b56fc178baccbc85fa89c"
+      "syncedCommit": "eea5d26614252358ad28cc37492dce42b3cd1c88"
     },
     "blueprint/sync": {
       "ref": "https://app.notion.com/p/41c43cce21f281ef9bfcf823c8b351e2",
@@ -121,26 +121,29 @@
         ".claude-plugin/**",
         "README.md"
       ],
-      "specVersion": "fb311da69bc03e7e",
+      "specVersion": "d99b10e5e5f0da57",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "507a8a170709",
-        "README.md": "27c2074eb7fc"
+        ".claude-plugin/marketplace.json": "29c47cb911d3",
+        "README.md": "d92bd76761c7"
       },
-      "syncedCommit": "42dd40970573dabdc9d2c71d6ff86c79da68aa0b"
+      "syncedCommit": "e620f529494c322a4193e2d364af09187ab2ebb6"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
       "anchors": [
         "mods/blueprint-ui/**"
       ],
-      "specVersion": "5905ce6a2e3aa2b7",
+      "specVersion": "6c8cc1d2b335fbbe",
       "anchorsFiles": {
-        "mods/blueprint-ui/.claude-plugin/plugin.json": "6361b79a3669",
+        "mods/blueprint-ui/.claude-plugin/plugin.json": "b73c6e0a6739",
+        "mods/blueprint-ui/hooks/backfill-view.test.tsx": "315cf30709fb",
+        "mods/blueprint-ui/hooks/backfill.test.ts": "99ca64532975",
+        "mods/blueprint-ui/hooks/backfill.ts": "1322f6935170",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
         "mods/blueprint-ui/hooks/blocks.ts": "9efd548adfa7",
         "mods/blueprint-ui/hooks/board.test.ts": "ff27882fc891",
-        "mods/blueprint-ui/hooks/board.ts": "236ef12e26f7",
-        "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
+        "mods/blueprint-ui/hooks/board.ts": "2cca8ea91e07",
+        "mods/blueprint-ui/hooks/checks.ts": "66e8d413e8c8",
         "mods/blueprint-ui/hooks/comment.test.tsx": "580523934513",
         "mods/blueprint-ui/hooks/follow.test.tsx": "77487ef47eda",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
@@ -148,7 +151,7 @@
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
         "mods/blueprint-ui/hooks/read.test.tsx": "15759035f3fe",
         "mods/blueprint-ui/hooks/register.test.tsx": "5ea41ead50c4",
-        "mods/blueprint-ui/hooks/register.tsx": "bdd16764ae57",
+        "mods/blueprint-ui/hooks/register.tsx": "343f02c9287c",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
         "mods/blueprint-ui/hooks/split.test.tsx": "7a0d8f19a96e",
         "mods/blueprint-ui/hooks/split.ts": "6047e7e6dcfc",
@@ -157,9 +160,9 @@
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "5120823a1d59"
+        "mods/blueprint-ui/types/index.d.ts": "4bd11f473d57"
       },
-      "syncedCommit": "8ddcaae869f9e30ef7337a9192018ba3bbf44c4b"
+      "syncedCommit": "eea5d26614252358ad28cc37492dce42b3cd1c88"
     },
     "blueprint/review": {
       "ref": "https://app.notion.com/p/41c43cce21f28101b224d766c2c7bccd",
@@ -218,12 +221,26 @@
       "syncedCommit": "0fe365fd4961c1b8d7d4552e0660fd24b0e51e25"
     },
     "blueprint/backfill": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/42443cce21f281b781d2e9638268fdb2",
       "anchors": [
         "skills/blueprint-backfill/**",
         "skills/blueprint/scripts/backfill.py",
         "skills/blueprint/scripts/test_backfill.py"
-      ]
+      ],
+      "specVersion": "3821ddc16657041d",
+      "anchorsFiles": {
+        "skills/blueprint-backfill/SKILL.md": "4623b807d4fa",
+        "skills/blueprint-backfill/references/finish.md": "8d46ff313058",
+        "skills/blueprint-backfill/references/fold.md": "0f7eadfc44fe",
+        "skills/blueprint-backfill/references/pass-1.md": "6839f8c3c794",
+        "skills/blueprint-backfill/references/pass-2.md": "9760e06a699f",
+        "skills/blueprint-backfill/references/pass-3.md": "bf68bf7a7f09",
+        "skills/blueprint-backfill/references/pass-4.md": "3860471d302b",
+        "skills/blueprint-backfill/references/pass-5.md": "399eb1998f78",
+        "skills/blueprint/scripts/backfill.py": "4fbb2c3a9f58",
+        "skills/blueprint/scripts/test_backfill.py": "47b61646304c"
+      },
+      "syncedCommit": "eea5d26614252358ad28cc37492dce42b3cd1c88"
     }
   },
   "changes": {
@@ -288,8 +305,10 @@
     "backfill-specs": {
       "brief": "https://app.notion.com/p/42343cce21f28165b23ec11937b74006",
       "review": "https://app.notion.com/p/41e43cce21f28198ba8fe34a1643e231",
-      "status": "building",
-      "baseCommit": "4f91fb6ffeb2177e5fca00926698493cbc590cb7"
+      "status": "applied",
+      "baseCommit": "4f91fb6ffeb2177e5fca00926698493cbc590cb7",
+      "branch": "kn/backfill-specs-specs",
+      "pr": "https://github.com/KarolNov/skills/pull/76"
     }
   },
   "artifacts": {
