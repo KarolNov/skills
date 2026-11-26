@@ -136,7 +136,10 @@ class Init(unittest.TestCase):
         self.assertIn("already in progress", out.stderr)
 
     def test_init_refuses_a_domain_that_is_a_capability_or_nested(self):
-        for name in ("auth/session", "a/b"):
+        state = json.loads(json.dumps(STATE))
+        state["specs"]["session"] = {"ref": None, "anchors": ["src/auth/session.py"]}
+        self.repo.write(".blueprint/blueprint.json", json.dumps(state))
+        for name in ("session", "auth/session", "a/b"):
             plan = {"domains": {name: {"folders": ["src"]}}}
             out = self.repo.run("init", stdin=json.dumps(plan))
             self.assertEqual(out.returncode, 2, name)
@@ -205,6 +208,13 @@ class Status(unittest.TestCase):
         self.repo.write(".blueprint/backfill/drafts/auth/tokens.md", "draft\n")
         auth = next(d for d in self.repo.status()["domains"] if d["name"] == "auth")
         self.assertEqual(auth["drafts"], ["auth/tokens"])
+
+    def test_lists_drafts_of_bare_capabilities(self):
+        self.repo.init()
+        self.repo.set_domain("auth", {"capabilities": {"tokens": {"anchors": ["src"]}}})
+        self.repo.write(".blueprint/backfill/drafts/tokens.md", "draft\n")
+        auth = next(d for d in self.repo.status()["domains"] if d["name"] == "auth")
+        self.assertEqual(auth["drafts"], ["tokens"])
 
     def test_bad_state_is_reported(self):
         self.repo.init()
@@ -284,6 +294,32 @@ class Stamp(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("uncommitted", out.stderr)
 
+    def test_refuses_a_capability_blueprint_json_owns(self):
+        self.repo.set_domain("auth", {"capabilities": {"auth/session":
+                                                       {"anchors": ["src/auth/session.py"]}}})
+        out = self.repo.run("stamp", "auth/session")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("drift.py stamp", out.stderr)
+
+    def test_writes_nothing_when_one_capability_lacks_anchors(self):
+        self.repo.set_domain("auth", {"capabilities": {"auth/tokens":
+                                                       {"anchors": ["src/auth/tokens.py"]}}})
+        out = self.repo.run("stamp", "auth/tokens", "billing/invoices")
+        self.assertEqual(out.returncode, 2)
+        self.assertNotIn("anchorsFiles", self.repo.domain("auth")["capabilities"]["auth/tokens"])
+
+    def test_finds_the_domain_that_lists_the_capability(self):
+        self.repo.set_domain("auth", {"capabilities": {"billing/x":
+                                                       {"anchors": ["src/auth/oauth.py"]}}})
+        self.repo.ok("stamp", "billing/x")
+        self.assertIn("syncedCommit", self.repo.domain("auth")["capabilities"]["billing/x"])
+
+    def test_malformed_progress_exits_2(self):
+        self.repo.set_domain("auth", {"passes": ["done"]})
+        self.assertEqual(self.repo.run("stamp", "auth/tokens").returncode, 2)
+        self.repo.set_domain("auth", {"capabilities": {"auth/tokens": "x"}})
+        self.assertEqual(self.repo.run("stamp", "auth/tokens").returncode, 2)
+
     def test_refuses_without_anchors(self):
         out = self.repo.run("stamp", "auth/tokens")
         self.assertEqual(out.returncode, 2)
@@ -305,6 +341,17 @@ class Pass(unittest.TestCase):
     def test_refuses_bad_values(self):
         for args in (("auth", "1", "done"), ("auth", "2", "finished"), ("nope", "2", "done")):
             self.assertEqual(self.repo.run("pass", *args).returncode, 2, args)
+
+    def test_a_pass_waits_for_the_one_before(self):
+        out = self.repo.run("pass", "auth", "3", "done")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("pass 2 is pending", out.stderr)
+
+    def test_leaves_the_shared_readme_alone(self):
+        readme = self.repo.root / ".blueprint/backfill/README.md"
+        before = readme.read_text()
+        self.repo.ok("pass", "auth", "2", "done")
+        self.assertEqual(readme.read_text(), before)
 
     def test_tags_and_artifacts_wait_for_fold(self):
         out = self.repo.run("pass", "auth", "4", "in-progress")
@@ -380,7 +427,8 @@ class Fold(unittest.TestCase):
         self.assertIn("pass 3 is in-progress", out.stderr)
 
     def test_refuses_unstamped_or_misnamed_capabilities(self):
-        self.repo.set_domain("auth", {"ref": "r", "passes": {"2": "done", "3": "done"},
+        self.repo.set_domain("auth", {"ref": "r", "covered": True,
+                                      "passes": {"2": "done", "3": "done"},
                                       "capabilities": {
                                           "auth/tokens": {"ref": "x", "anchors": ["src/auth/tokens.py"]},
                                           "billing/x": {"ref": "x", "anchors": ["src"],
@@ -389,7 +437,7 @@ class Fold(unittest.TestCase):
         before = (self.repo.root / ".blueprint/blueprint.json").read_text()
         out = self.repo.run("fold", "auth")
         self.assertEqual(out.returncode, 1)
-        self.assertIn("auth/tokens has no anchorsFiles", out.stderr)
+        self.assertIn("auth/tokens isn't stamped", out.stderr)
         self.assertIn("billing/x isn't named auth/<capability>", out.stderr)
         self.assertEqual((self.repo.root / ".blueprint/blueprint.json").read_text(), before)
         self.assertFalse(self.repo.domain("auth").get("folded"))
@@ -399,6 +447,21 @@ class Fold(unittest.TestCase):
         out = self.repo.run("fold")
         self.assertEqual(out.returncode, 1)
         self.assertIn("no overview page", out.stderr)
+
+    def test_refuses_an_uncovered_domain(self):
+        reviewed(self.repo, "auth", {"auth/tokens": ["src/auth/tokens.py"]})
+        dom = self.repo.domain("auth")
+        dom["covered"] = False
+        self.repo.set_domain("auth", dom)
+        out = self.repo.run("fold", "auth")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("coverage isn't confirmed", out.stderr)
+
+    def test_anchors_matching_nothing_are_named(self):
+        reviewed(self.repo, "auth", {"auth/legacy": ["src/legacy/**"]})
+        out = self.repo.run("fold", "auth")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("anchors match no files", out.stderr)
 
     def test_refuses_a_capability_without_a_baseline(self):
         reviewed(self.repo, "auth", {"auth/tokens": ["src/auth/tokens.py"]})

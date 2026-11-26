@@ -22,7 +22,7 @@ The folder:
 
     .blueprint/backfill/
       README.md                       says a backfill is in progress, at which pass, how to
-                                      resume; rewritten by init, pass and fold
+                                      resume; rewritten by init and fold
       progress.json                   {"version": 1, "passes": {"1": STATE}, "survey": {...},
                                        "domains": {name: {"purpose", "folders"}}}
       domains/<domain>.progress.json  one per domain, written only by that domain's session:
@@ -99,6 +99,8 @@ def load_progress():
     for name, plan in domains.items():
         if not isinstance(plan, dict) or not isinstance(plan.get("folders", []), list):
             raise Problem(f"{rel(PROGRESS)}: domain {name} needs \"folders\" as a list")
+    if not isinstance(progress.get("passes", {}), dict):
+        raise Problem(f"{rel(PROGRESS)}: \"passes\" isn't an object")
     return progress
 
 
@@ -112,12 +114,17 @@ def load_domain(name):
     data = read_json(path) if path.is_file() else {}
     data.setdefault("domain", name)
     passes = data.setdefault("passes", {})
+    if not isinstance(passes, dict):
+        raise Problem(f"{rel(path)}: \"passes\" isn't an object")
     for n in DOMAIN_PASSES:
         state = passes.setdefault(str(n), "pending")
         if state not in STATES:
             raise Problem(f"{rel(path)}: pass {n} is {state!r}, not one of {', '.join(STATES)}")
-    if not isinstance(data.setdefault("capabilities", {}), dict):
+    caps = data.setdefault("capabilities", {})
+    if not isinstance(caps, dict):
         raise Problem(f"{rel(path)}: \"capabilities\" isn't an object")
+    if bad := [c for c, rec in caps.items() if not isinstance(rec, dict)]:
+        raise Problem(f"{rel(path)}: capability {', '.join(bad)} isn't an object")
     data.setdefault("glue", [])
     data.setdefault("folded", False)
     return data
@@ -130,19 +137,24 @@ def known_domain(progress, name):
 
 
 def domain_of(progress, capability):
-    domain = capability.split("/")[0] if "/" in capability else None
-    if domain in progress["domains"]:
-        return domain
-    # A bare capability already in blueprint.json may be listed under any domain.
+    # The domain whose progress file lists the capability; a bare capability already in
+    # blueprint.json may be listed under any domain.
     for name in progress["domains"]:
         if capability in load_domain(name)["capabilities"]:
             return name
+    domain = capability.split("/")[0] if "/" in capability else None
+    if domain in progress["domains"]:
+        return domain
     raise Problem(f"{capability} belongs to none of the backfill's domains")
 
 
-def drafts_of(domain):
+def drafts_of(domain, capabilities=()):
+    """Drafts at drafts/<domain>/<name>.md, plus drafts/<cap>.md for the bare capabilities
+    the domain lists."""
     folder = DRAFTS / domain
-    return sorted(f"{domain}/{p.stem}" for p in folder.glob("*.md")) if folder.is_dir() else []
+    out = {f"{domain}/{p.stem}" for p in folder.glob("*.md")} if folder.is_dir() else set()
+    out.update(c for c in capabilities if "/" not in c and (DRAFTS / f"{c}.md").is_file())
+    return sorted(out)
 
 
 # ---- where things stand ----------------------------------------------------------------
@@ -169,7 +181,7 @@ def overview(progress):
             "covered": bool(dom.get("covered")),
             "folded": bool(dom["folded"]),
             "capabilities": sorted(dom["capabilities"]),
-            "drafts": drafts_of(name),
+            "drafts": drafts_of(name, dom["capabilities"]),
             "uncovered": len(uncovered_files(progress, name, dom, files)),
         })
     if pass1 != "done":
@@ -330,9 +342,12 @@ def cmd_pass(args):
     dom = load_domain(name)
     if int(n) >= 4 and state != "pending" and not dom["folded"]:
         raise Problem(f"{name} isn't folded yet: run `backfill.py fold {name}` before pass {n}")
+    prev = str(int(n) - 1)
+    if state == "done" and prev in dom["passes"] and dom["passes"][prev] != "done":
+        raise Problem(f"{name}: pass {prev} is {dom['passes'][prev]}, so pass {n} can't be done")
     dom["passes"][n] = state
+    # Only this domain's file: README.md is shared, so a domain session never rewrites it.
     write_json(domain_path(name), dom)
-    write_readme(progress)
     print(f"{name}: pass {n} {state}")
     return 0
 
@@ -345,17 +360,25 @@ def cmd_stamp(args):
         settings = drift.scoring(state)
     except drift.SettingError as e:
         raise Problem(f"bad setting: {e}")
+    specs = state.get("specs", {})
+    if owned := [n for n in args if isinstance(specs.get(n), dict) and specs[n].get("ref")]:
+        raise Problem(f"{', '.join(owned)} already specced in blueprint.json: stamp with "
+                      "`drift.py stamp` instead")
     by_domain = {}
     for name in args:
         by_domain.setdefault(domain_of(progress, name), []).append(name)
-    head = drift.head_commit()
-    dirty = drift.uncommitted() if head else set(files)
+    loaded = {}
     for domain, names in by_domain.items():
-        dom = load_domain(domain)
+        dom = loaded[domain] = load_domain(domain)
         caps = dom["capabilities"]
         if missing := [n for n in names if n not in caps or not caps[n].get("anchors")]:
             raise Problem(f"no anchors recorded for {', '.join(missing)} in "
                           f"{rel(domain_path(domain))}")
+    head = drift.head_commit()
+    dirty = drift.uncommitted() if head else set(files)
+    for domain, names in by_domain.items():
+        dom = loaded[domain]
+        caps = dom["capabilities"]
         closures = drift.stamp_closures(names, caps, files, settings)
         for name in names:
             paths = drift.matched(caps[name], files)
@@ -381,8 +404,12 @@ def fold_problems(name, dom, state, taken):
     """Why a domain can't fold yet ([] when it can), and the spec entries it would write."""
     if dom["folded"]:
         return ["already folded"], {}
-    if dom["passes"]["3"] != "done":
-        return [f"pass 3 is {dom['passes']['3']}, not done"], {}
+    for n in ("2", "3"):
+        if dom["passes"][n] != "done":
+            return [f"pass {n} is {dom['passes'][n]}, not done"], {}
+    if not dom.get("covered"):
+        return ["coverage isn't confirmed: set \"covered\" once `backfill.py uncovered` "
+                "is settled"], {}
     specs, domains = state.get("specs", {}), state.get("domains", {})
     problems, entries = [], {}
     if name not in domains and not dom.get("ref"):
@@ -398,11 +425,14 @@ def fold_problems(name, dom, state, taken):
         if current is None and not cap.startswith(name + "/"):
             problems.append(f"{cap} isn't named {name}/<capability>")
             continue
-        if missing := [k for k in ("ref", "anchors", "anchorsFiles") if not rec.get(k)]:
+        if missing := [k for k in ("ref", "anchors") if not rec.get(k)]:
             problems.append(f"{cap} has no {', '.join(missing)} yet")
             continue
-        if "syncedCommit" not in rec:
+        if "anchorsFiles" not in rec or "syncedCommit" not in rec:
             problems.append(f"{cap} isn't stamped: run `backfill.py stamp {cap}`")
+            continue
+        if not rec["anchorsFiles"]:
+            problems.append(f"{cap}'s anchors match no files: fix its anchors, then stamp again")
             continue
         if not (drift.ROOT / ".blueprint" / "baseline" / f"{cap}.md").is_file():
             problems.append(f"{cap} has no baseline at .blueprint/baseline/{cap}.md")
