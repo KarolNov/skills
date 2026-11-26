@@ -48,8 +48,10 @@ export async function recheckCode($: EngineInterface, map: Map): Promise<void> {
 
 async function runCode($: EngineInterface, map: Map): Promise<void> {
   await update($, code, (c): BlueprintUiCode => (c.status === 'ready' ? c : { status: 'checking' }))
-  // A backfill in progress is read with the code side, so its board line keeps up with every check.
-  const [next] = await Promise.all([codeStatus($, map), checkBackfill($, map.root).catch(() => undefined)])
+  // A backfill in progress is read with each code check, so its board line keeps up; not awaited,
+  // since backfill.py status walks the whole repo and the code result shouldn't wait on it.
+  void checkBackfill($, map.root).catch(() => undefined)
+  const next = await codeStatus($, map)
   await update($, code, () => next)
 }
 

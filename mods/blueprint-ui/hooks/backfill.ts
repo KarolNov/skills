@@ -28,9 +28,11 @@ export const inRoot = (dir: string, path: string) => `${dir.replace(/\/+$/, '')}
  * plugin Claude Code installed, by `installed_plugins.json` above this plugin's install folder.
  */
 export async function scriptFor($: EngineInterface, root: string): Promise<string | undefined> {
-  const known = scripts.get(root)
-  if (known) return known
   const exists = (p: string) => $.fs.exists(p).catch(() => false)
+  // A plugin update removes the old install folder: a path that went away is looked for again.
+  const known = scripts.get(root)
+  if (known && (await exists(known))) return known
+  scripts.delete(root)
   const found = async (): Promise<string | undefined> => {
     if (await exists(inRoot(root, SCRIPT))) return inRoot(root, SCRIPT)
     for (let dir: string | undefined = $.plugin.root; dir; dir = parentOf(dir)) {
@@ -255,6 +257,10 @@ export function decide(text: string, capability: string, name: string, decision:
     scenario = typed(decision.scenario)
     const m = SCENARIO.exec(scenario[0] ?? '')
     if (!m) return { error: 'Keep the first line as `- **Scenario: <name>**`.' }
+    // The steps stay inside the scenario: an unindented line would end it, or start another scenario or heading.
+    if (scenario.slice(1).some(l => l.trim() && !/^\s/.test(l))) {
+      return { error: 'Indent every line under the scenario line (`  - **WHEN** …`): no second scenario or heading.' }
+    }
     const renamed = m[1]!.trim()
     const taken = d.requirements.some(r => r.scenarios.some(s => s !== sc && s.name.toLowerCase() === renamed.toLowerCase()))
     if (taken) return { error: `${capability} already has a scenario named "${renamed}".` }
@@ -262,18 +268,20 @@ export function decide(text: string, capability: string, name: string, decision:
   scenario[0] = `${scenario[0]!.trimEnd()} <!-- ${decision.kind === 'amend' ? 'amended' : 'accepted'} -->`
   splice(sc, scenario)
   const statement = decision.kind === 'amend' && card.isFirstOfRequirement && decision.statement !== undefined ? typed(decision.statement) : unverified(slice(req.statement))
-  if (req.statement.end > req.statement.start || statement.some(l => l.trim())) splice(req.statement, statement)
+  // Text written where there was none gets a blank line before what follows it.
+  const into = (r: Range, next: string[]) => splice(r, r.end === r.start && next.some(l => l.trim()) ? [...next, ''] : next)
+  if (req.statement.end > req.statement.start || statement.some(l => l.trim())) into(req.statement, statement)
   if (card.purpose !== undefined && d.purpose) {
-    splice(d.purpose, decision.kind === 'amend' && decision.purpose !== undefined ? typed(decision.purpose) : unverified(slice(d.purpose)))
+    into(d.purpose, decision.kind === 'amend' && decision.purpose !== undefined ? typed(decision.purpose) : unverified(slice(d.purpose)))
   }
   return { text: lines.join('\n') }
 }
 
-/** The domain progress file with one more decision counted on the capability's `review`. */
+/** The domain progress file with one more decision counted on the capability's `review`; throws when the file doesn't list the capability. */
 export function counted(text: string, capability: string, kind: Decision['kind']): string {
   const json = JSON.parse(text) as { capabilities?: Record<string, { review?: Record<string, number> }> }
-  const caps = (json.capabilities ??= {})
-  const cap = (caps[capability] ??= {})
+  const cap = json.capabilities?.[capability]
+  if (!cap) throw new Error(`${capability} isn't one of the domain's capabilities`)
   const review = (cap.review = { accepted: 0, amended: 0, rejected: 0, ...cap.review })
   review[reviewKey[kind]] = (review[reviewKey[kind]] ?? 0) + 1
   return JSON.stringify(json, null, 2) + '\n'

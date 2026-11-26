@@ -79,7 +79,8 @@ async function cardsOf($: EngineInterface, root: string, d: BlueprintUiBackfillD
 
 /**
  * Saves one card's decision as pass 3 does: the draft first, then the count in the domain's progress
- * file, before the next card shows. Once the capability has no undecided scenario, Claude is asked
+ * file, re-read just before it is written; when the count can't be written, the draft goes back as it was.
+ * Once the capability has no undecided scenario, Claude is asked
  * to write its spec.
  */
 async function decideCard($: EngineInterface, root: string, d: BlueprintUiBackfillDomain, card: Card, decision: Decision): Promise<void> {
@@ -106,11 +107,25 @@ async function decideCard($: EngineInterface, root: string, d: BlueprintUiBackfi
     try {
       counted = countedIn(progress, card.capability, decision.kind)
     } catch (err) {
-      await $.ui.toast(`Not saved: ${domainPath(d.name)} isn't valid JSON (${String(err)}).`)
+      await $.ui.toast(`Not saved: ${domainPath(d.name)} can't take the count (${String(err)}).`)
       return
     }
-    await $.fs.write(draftFile, got.text)
-    await $.fs.write(progressFile, counted)
+    try {
+      await $.fs.write(draftFile, got.text)
+    } catch (err) {
+      await $.ui.toast(`Not saved: couldn't write ${draftPath(card.capability)} (${String(err)}).`)
+      return
+    }
+    try {
+      // Claude edits this file too (pass 3, step 3): count on what it holds now, not on the earlier read.
+      counted = countedIn(await $.fs.read(progressFile), card.capability, decision.kind)
+      await $.fs.write(progressFile, counted)
+    } catch (err) {
+      // The marks and the counts never disagree: the draft goes back as it was.
+      await $.fs.write(draftFile, text).catch(() => undefined)
+      await $.ui.toast(`Not saved: couldn't count it in ${domainPath(d.name)} (${String(err)}).`)
+      return
+    }
     amendDrafts.clear()
     await update($, view, v => ({ ...v, amend: null }))
     await update($, rev, n => n + 1)
@@ -477,7 +492,8 @@ export const register: Register = (on, options) => {
           ? `Blueprint pane opened on ${labelOf(toOpen)}.`
           : `Nothing named "${e.args.trim()}" in ${BLUEPRINT_JSON}; showing the list.`
       }
-      if (!toOpen) await update($, view, v => ({ ...v, page: null }))
+      // Asked for by name: the board or a page, not the Backfill view.
+      await update($, view, v => ({ ...v, backfill: null, amend: null, ...(toOpen ? {} : { page: null }) }))
     }
     await $.ui.open({ id: PANE, title: TITLE })
     if (toOpen && 'map' in loaded) void openPage($, toOpen, loaded.map, configured)
@@ -497,7 +513,7 @@ export const register: Register = (on, options) => {
       const groups = got.groups.map(g => (g.status === 'planned' && was?.groups.find(o => o.id === g.id)?.status === 'starting' ? { ...g, status: 'starting' as const } : g))
       return { ...all, [got.change]: { ...got, groups } }
     })
-    await update($, view, v => ({ ...v, page: null, split: got.change }))
+    await update($, view, v => ({ ...v, page: null, split: got.change, backfill: null, amend: null }))
     const { isPlaced } = await $.ui.open({ id: PANE, title: TITLE })
     const ready = got.groups.filter(g => isReady(got, g)).length
     const text = !isPlaced

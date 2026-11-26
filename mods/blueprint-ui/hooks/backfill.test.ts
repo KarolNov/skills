@@ -107,6 +107,19 @@ test('a decision on a card that is no longer next, or an amend that breaks the s
   expect(decide(DRAFT, 'auth/tokens', 'Expired token rejected', { kind: 'amend', scenario: '- **Scenario: Fresh token accepted**\n  - **THEN** x' })).toMatchObject({
     error: expect.stringContaining('already has a scenario named'),
   })
+  // Unindented steps, or a second scenario, would break the draft's structure.
+  expect(decide(DRAFT, 'auth/tokens', 'Expired token rejected', { kind: 'amend', scenario: '- **Scenario: Expired token rejected**\n- **THEN** x' })).toMatchObject({
+    error: expect.stringContaining('Indent every line'),
+  })
+  expect(decide(DRAFT, 'auth/tokens', 'Expired token rejected', { kind: 'amend', scenario: '- **Scenario: A**\n  - **THEN** x\n- **Scenario: B**' })).toMatchObject({
+    error: expect.stringContaining('Indent every line'),
+  })
+})
+
+test('a statement written where there was none keeps a blank line before the scenario', () => {
+  const bare = DRAFT.replace('Tokens SHALL expire one hour after they are issued.\n\n', '')
+  const text = apply(bare, 'Expired token rejected', { kind: 'amend', scenario: '- **Scenario: Expired token rejected**\n  - **THEN** 401', statement: 'Tokens SHALL expire.' })
+  expect(text).toContain('### Requirement: Token expiry\nTokens SHALL expire.\n\n- **Scenario: Expired token rejected** <!-- amended -->')
 })
 
 test('each decision counts on the capability in the domain progress file, in its own shape', () => {
@@ -115,6 +128,8 @@ test('each decision counts on the capability in the domain progress file, in its
   expect(JSON.parse(once).capabilities['auth/tokens']).toEqual({ purpose: 'x', anchors: [], review: { accepted: 0, amended: 0, rejected: 1 } })
   expect(reviewOf(counted(once, 'auth/tokens', 'amend'), 'auth/tokens')).toEqual({ accepted: 0, amended: 1, rejected: 1 })
   expect(once.endsWith('}\n')).toBe(true)
+  // A capability the file doesn't list isn't made up.
+  expect(() => counted(file, 'auth/billing', 'accept')).toThrow("isn't one of the domain's capabilities")
   expect(orderOf(file, ['auth/session', 'auth/z', 'auth/tokens', 'auth/a'])).toEqual(['auth/tokens', 'auth/session', 'auth/a', 'auth/z'])
   expect(orderOf(undefined, ['b', 'a'])).toEqual(['a', 'b'])
 })
