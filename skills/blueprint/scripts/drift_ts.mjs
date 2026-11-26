@@ -233,14 +233,30 @@ function symbolEdges(sym, fromFile) {
     if (!stmt) continue;
     const name = statementName(stmt);
     const key = `S:${place.rel}#${name}`;
+    // A node is its file and name: every statement of that name, whichever symbol led here.
     if (!byStmt.has(key)) {
-      byStmt.set(key, { kind: "symbol", key, file: place.file, rel: place.rel, name, stmts: [] });
+      byStmt.set(key, { kind: "symbol", key, file: place.file, rel: place.rel, name,
+                        stmts: namedStatements(sf, name) });
     }
-    const edge = byStmt.get(key);
-    if (!edge.stmts.includes(stmt)) edge.stmts.push(stmt);
   }
   return [...out, ...byStmt.values()];
 }
+
+// A file's top-level statements of one name (`const X` and `type X`), in source order.
+function namedStatements(sf, name) {
+  let byName = namedCache.get(sf);
+  if (!byName) {
+    byName = new Map();
+    for (const stmt of sf.statements) {
+      const n = statementName(stmt);
+      if (!byName.has(n)) byName.set(n, []);
+      byName.get(n).push(stmt);
+    }
+    namedCache.set(sf, byName);
+  }
+  return byName.get(name) ?? [];
+}
+const namedCache = new Map();
 
 // What one import or re-export declaration in `sf` depends on.
 function importEdges(stmt, sf) {
