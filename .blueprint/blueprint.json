@@ -100,9 +100,9 @@
         "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
         "skills/blueprint/references/status.md": "7d6ca146666d",
         "skills/blueprint/scripts/drift.py": "0e9deb7437be",
-        "skills/blueprint/scripts/drift_ts.mjs": "aab54a05a96e"
+        "skills/blueprint/scripts/drift_ts.mjs": "0023003532d0"
       },
-      "syncedCommit": "fab5c188087e0059630b56fc178baccbc85fa89c"
+      "syncedCommit": "d9164aa2b22eec1b1d70268196c79107c3de1270"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
@@ -123,10 +123,10 @@
       ],
       "specVersion": "d99b10e5e5f0da57",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "29c47cb911d3",
+        ".claude-plugin/marketplace.json": "780b08ca1dd7",
         "README.md": "d92bd76761c7"
       },
-      "syncedCommit": "e620f529494c322a4193e2d364af09187ab2ebb6"
+      "syncedCommit": "691ef2109e9920ef0d8e0e311d7222414feac6df"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -320,12 +320,15 @@
         "blueprint"
       ],
       "checkedFiles": {
-        "mods/blueprint-ui/.claude-plugin/plugin.json": "6361b79a3669",
+        "mods/blueprint-ui/.claude-plugin/plugin.json": "b73c6e0a6739",
+        "mods/blueprint-ui/hooks/backfill-view.test.tsx": "315cf30709fb",
+        "mods/blueprint-ui/hooks/backfill.test.ts": "99ca64532975",
+        "mods/blueprint-ui/hooks/backfill.ts": "1322f6935170",
         "mods/blueprint-ui/hooks/blocks.test.ts": "6ba8ee3e4045",
         "mods/blueprint-ui/hooks/blocks.ts": "9efd548adfa7",
         "mods/blueprint-ui/hooks/board.test.ts": "ff27882fc891",
-        "mods/blueprint-ui/hooks/board.ts": "236ef12e26f7",
-        "mods/blueprint-ui/hooks/checks.ts": "aa44061adcb9",
+        "mods/blueprint-ui/hooks/board.ts": "2cca8ea91e07",
+        "mods/blueprint-ui/hooks/checks.ts": "66e8d413e8c8",
         "mods/blueprint-ui/hooks/comment.test.tsx": "580523934513",
         "mods/blueprint-ui/hooks/follow.test.tsx": "77487ef47eda",
         "mods/blueprint-ui/hooks/hooks.json": "d842d789476d",
@@ -333,7 +336,7 @@
         "mods/blueprint-ui/hooks/pages.ts": "4a3b316177a2",
         "mods/blueprint-ui/hooks/read.test.tsx": "15759035f3fe",
         "mods/blueprint-ui/hooks/register.test.tsx": "5ea41ead50c4",
-        "mods/blueprint-ui/hooks/register.tsx": "bdd16764ae57",
+        "mods/blueprint-ui/hooks/register.tsx": "343f02c9287c",
         "mods/blueprint-ui/hooks/review.ts": "b7f14b2b9251",
         "mods/blueprint-ui/hooks/split.test.tsx": "7a0d8f19a96e",
         "mods/blueprint-ui/hooks/split.ts": "6047e7e6dcfc",
@@ -342,9 +345,17 @@
         "mods/blueprint-ui/hooks/tabs.tsx": "cd907ef19035",
         "mods/blueprint-ui/hooks/typing.ts": "c1af15887d88",
         "mods/blueprint-ui/tsconfig.json": "4087cf0ba92f",
-        "mods/blueprint-ui/types/index.d.ts": "5120823a1d59",
+        "mods/blueprint-ui/types/index.d.ts": "4bd11f473d57",
+        "skills/blueprint-backfill/SKILL.md": "4623b807d4fa",
+        "skills/blueprint-backfill/references/finish.md": "8d46ff313058",
+        "skills/blueprint-backfill/references/fold.md": "0f7eadfc44fe",
+        "skills/blueprint-backfill/references/pass-1.md": "6839f8c3c794",
+        "skills/blueprint-backfill/references/pass-2.md": "9760e06a699f",
+        "skills/blueprint-backfill/references/pass-3.md": "bf68bf7a7f09",
+        "skills/blueprint-backfill/references/pass-4.md": "3860471d302b",
+        "skills/blueprint-backfill/references/pass-5.md": "399eb1998f78",
         "skills/blueprint-drift/SKILL.md": "b2b9b6022e4c",
-        "skills/blueprint-setup/SKILL.md": "dd8aa74e6a59",
+        "skills/blueprint-setup/SKILL.md": "77660a2d4d0d",
         "skills/blueprint-setup/templates/blueprint-drift.yml": "296b8e93dcdd",
         "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
         "skills/blueprint-tidy/SKILL.md": "2d598beea99f",
@@ -365,13 +376,15 @@
         "skills/blueprint/references/tickets.md": "3ad33ee401b6",
         "skills/blueprint/references/upgrades.md": "4b4ebd5c8115",
         "skills/blueprint/references/visuals.md": "7450ec7d84b7",
+        "skills/blueprint/scripts/backfill.py": "4fbb2c3a9f58",
         "skills/blueprint/scripts/coverage.py": "2b06f6437a04",
         "skills/blueprint/scripts/drift.py": "0e9deb7437be",
-        "skills/blueprint/scripts/drift_ts.mjs": "aab54a05a96e",
+        "skills/blueprint/scripts/drift_ts.mjs": "0023003532d0",
         "skills/blueprint/scripts/graph.py": "bc356be2c258",
         "skills/blueprint/scripts/map_template.html": "57a4eceb7f58",
         "skills/blueprint/scripts/notion_normalize.py": "624e503e65c9",
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
+        "skills/blueprint/scripts/test_backfill.py": "47b61646304c",
         "skills/blueprint/scripts/test_graph.py": "285c8ca949c7",
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"

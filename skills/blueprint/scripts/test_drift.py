@@ -4,6 +4,7 @@
     python3 skills/blueprint/scripts/test_drift.py
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -1031,6 +1032,39 @@ class Transitive(unittest.TestCase):
         login = self.closure(r, "web/login")
         self.assertEqual(login["external"], ["zod"])
         self.assertTrue(login["files"]["packages/polyfills/src/fill.ts"]["whole"])
+
+    @NEEDS_TS
+    def test_value_and_type_of_one_name_hash_together(self):
+        # `const X` and `type X` are one node: its hash is both statements in source order,
+        # whichever symbol (the value, the type, a property inside the value) reached it first.
+        const = "export const Pad = { id: 'p', key: 'q' };"
+        typ = "export type Pad = { id: string; key: string };"
+        model = f"{const}\n{typ}\n"
+        uses = ("import type { Pad } from './pad';\n\n"
+                "export const describe = (p: Pad) => p.id;\n")
+        factory = "import { Pad } from './pad';\n\nexport const make = () => Pad;\n"
+        reader = "import { make } from './factory';\n\nexport const read = () => make().key;\n"
+        expected = hashlib.sha256(f"{const}\n{typ}".encode()).hexdigest()[:12]
+        orders = {
+            "value first": ("import { Pad } from './pad';\nimport { describe } from './uses';\n\n"
+                            "export const admin = () => describe(Pad) + Pad.key;\n"),
+            "type first": ("import { describe } from './uses';\nimport { Pad } from './pad';\n\n"
+                           "export const admin = () => Pad.key + describe(Pad);\n"),
+            "property only": ("import { Pad } from './pad';\n\n"
+                              "export const admin = () => Pad.key;\n"),
+            # `key` is declared inside `const Pad`: reached before the name itself is.
+            "property before name": ("import { read } from './reader';\n\n"
+                                     "export const admin = () => read();\n"),
+        }
+        for label, admin in orders.items():
+            with self.subTest(label):
+                r = self.workspace(files={"apps/web/src/pad.ts": model,
+                                          "apps/web/src/uses.ts": uses,
+                                          "apps/web/src/factory.ts": factory,
+                                          "apps/web/src/reader.ts": reader,
+                                          "apps/web/src/admin.ts": admin})
+                symbols = {(s["file"], s["symbol"]): s for s in self.closure(r, "web/admin")["symbols"]}
+                self.assertEqual(symbols[("apps/web/src/pad.ts", "Pad")]["hash"], expected)
 
     # @scenario blueprint/sync: Ignored file left out
     @NEEDS_TS
