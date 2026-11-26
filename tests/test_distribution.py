@@ -85,7 +85,7 @@ class Marketplace(unittest.TestCase):
         skills = PLUGINS["blueprint"]["skills"]
         self.assertEqual(sorted(Path(s).name for s in skills),
                          sorted(["blueprint-setup", "blueprint", "blueprint-drift", "blueprint-sync",
-                                 "blueprint-tidy"]))
+                                 "blueprint-tidy", "blueprint-backfill"]))
         for s in skills:
             # Each is available as /<name>: its frontmatter name matches the folder.
             self.assertEqual(frontmatter(ROOT / s / "SKILL.md").get("name"), Path(s).name, s)

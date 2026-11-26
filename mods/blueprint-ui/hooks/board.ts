@@ -1,8 +1,8 @@
-import type { BlueprintUiCode, BlueprintUiDriftRow, BlueprintUiSpecs } from '../types'
+import type { BlueprintUiBackfill, BlueprintUiCode, BlueprintUiDriftRow, BlueprintUiSpecs } from '../types'
 import type { Map, SpecEntry } from './pages'
 
 /** What a row's ▶ button runs: the command without its slash, and its arguments. */
-export type Step = { command: 'blueprint-drift' | 'blueprint-sync' | 'blueprint'; args: string; label: string }
+export type Step = { command: 'blueprint-drift' | 'blueprint-sync' | 'blueprint' | 'blueprint-backfill'; args: string; label: string }
 
 /** Which side moved, for the glyph's color: code is a warning, spec is a danger. */
 export type Side = 'code' | 'spec' | 'both' | 'none'
@@ -36,7 +36,11 @@ export type ChangeRow = {
   step?: Step
 }
 
+/** The Backfill line at the top of the board, while `.blueprint/backfill/` exists; `error` says why it couldn't be read. */
+export type BackfillLine = { line: string; error?: string }
+
 export type Board = {
+  backfill?: BackfillLine
   /** Set when the code side couldn't be checked: why, shown in its place. */
   codeError?: string
   isCodeChecked: boolean
@@ -81,7 +85,13 @@ function specSide(s: SpecEntry, specs: BlueprintUiSpecs): { moved: boolean } | {
  * moved too), code or imported code moved, or no spec → sync, no anchors → a note and no button.
  * Possibly affected stays quiet, marked with its score, and gets no button.
  */
-export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs, pendingOn: (page: string) => number): Board {
+export function boardOf(
+  map: Map,
+  code: BlueprintUiCode,
+  specs: BlueprintUiSpecs,
+  pendingOn: (page: string) => number,
+  backfill: BlueprintUiBackfill = { status: 'none' },
+): Board {
   const report = code.status === 'ready' ? new globalThis.Map(code.report.map(r => [r.capability, r])) : undefined
   const attention: CapRow[] = []
   const quiet: QuietRow[] = []
@@ -151,7 +161,22 @@ export function boardOf(map: Map, code: BlueprintUiCode, specs: BlueprintUiSpecs
     summary: summaryOf(attention.length, quiet.filter(q => !q.unknown).length, quiet.filter(q => q.unknown).length, changes, pending, code.status === 'ready'),
   }
   if (code.status === 'error') board.codeError = code.message
+  const line = backfillLineOf(backfill)
+  if (line) board.backfill = line
   return board
+}
+
+/** The board's Backfill line: backfill.py's own status line, or why it couldn't be read. */
+export function backfillLineOf(b: BlueprintUiBackfill): BackfillLine | undefined {
+  if (b.status === 'ready') return { line: b.report.line }
+  if (b.status === 'error') return { line: 'Backfill in progress', error: b.message }
+  return undefined
+}
+
+/** A `next` command from backfill.py (`/blueprint-backfill domain auth`) as a ▶ step; other commands get none. */
+export function backfillStep(command: string): Step | undefined {
+  const m = /^\/blueprint-backfill(?:\s+(.*))?$/.exec(command.trim())
+  return m ? { command: 'blueprint-backfill', args: (m[1] ?? '').trim(), label: '▶ run' } : undefined
 }
 
 /** `2 need attention · 7 in sync · 1 spec unknown · 1 building · 3 pending`, leaving out what is zero. */

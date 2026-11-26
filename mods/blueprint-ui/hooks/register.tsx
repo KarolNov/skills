@@ -1,9 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { BlueprintUiBlock, BlueprintUiDoc, BlueprintUiGroup, BlueprintUiItem, BlueprintUiPage, BlueprintUiSplit } from '../types'
+import type { BlueprintUiBackfillDomain, BlueprintUiBlock, BlueprintUiDoc, BlueprintUiGroup, BlueprintUiItem, BlueprintUiPage, BlueprintUiSplit } from '../types'
+import { BACKFILL_SPEC, BACKFILL_TOOL, NO_BACKFILL, cardOf, checkBackfill, counted as countedIn, countsOf, decide, decidedPrompt, domainPath, draftPath, inRoot, orderOf, parseDraft, reviewOf } from './backfill'
+import type { Card, Decision, Draft } from './backfill'
 import { blocksOf } from './blocks'
-import { ago, boardOf, columnsFor, rowsOf, syncAll } from './board'
+import { ago, backfillStep, boardOf, columnsFor, rowsOf, syncAll } from './board'
 import type { CapRow, ChangeRow, Side, Step } from './board'
 import { NO_CODE, NO_SPECS, NO_STEPS, checkCode, checkSpecs, isCheckingSpecs, recheckCode, recheckSpec, runStep, stepKey, wasStopped } from './checks'
 import { candidates, fetchPage, fetchSvgs } from './notion'
@@ -31,9 +33,114 @@ const queued = atom({ plugin: 'blueprint-ui', key: 'queued' } as const, NO_STEPS
 const working = atom({ plugin: 'blueprint-ui', key: 'working' } as const, false, { shape: 'working-1' })
 const NO_SPLITS: Record<string, BlueprintUiSplit> = {}
 const splits = atom({ plugin: 'blueprint-ui', key: 'splits' } as const, NO_SPLITS, { shape: 'splits-1' })
+// Written by backfill.ts with the code side.
+const backfill = atom({ plugin: 'blueprint-ui', key: 'backfill' } as const, NO_BACKFILL, { shape: 'backfill-1' })
 
 /** The split tool as the model calls it. */
 const SPLIT_CALL = `mcp__blueprint-ui__${SPLIT_TOOL}`
+/** The backfill tool as the model calls it. */
+const BACKFILL_CALL = `mcp__blueprint-ui__${BACKFILL_TOOL}`
+
+/** What each field of the card being amended holds, by its key. */
+const amendDrafts = new Map<string, string>()
+/** Cards whose decision is being saved: a second press waits for the first. */
+const deciding = new Set<string>()
+
+/** A domain's drafts awaiting review, in review order, and its first undecided card. */
+type DomainCards = {
+  domain: string
+  order: string[]
+  progress?: string
+  drafts: Record<string, Draft | undefined>
+  /** The capability whose card is next, and the card. */
+  card?: Card
+  /** Undecided scenarios by capability, and in the domain. */
+  leftIn: Record<string, number>
+  left: number
+}
+
+/** Reads a domain's progress file and drafts: what the Backfill view shows, read on each draw. */
+async function cardsOf($: EngineInterface, root: string, d: BlueprintUiBackfillDomain): Promise<DomainCards> {
+  const progress = await $.fs.read(inRoot(root, domainPath(d.name))).catch(() => undefined)
+  const order = orderOf(progress, d.drafts)
+  const drafts: Record<string, Draft | undefined> = {}
+  const leftIn: Record<string, number> = {}
+  let card: Card | undefined
+  for (const cap of order) {
+    const text = await $.fs.read(inRoot(root, draftPath(cap))).catch(() => undefined)
+    const draft = text === undefined ? undefined : parseDraft(text)
+    drafts[cap] = draft
+    leftIn[cap] = draft ? countsOf(draft).undecided : 0
+    if (!card && draft) card = cardOf(cap, draft)
+  }
+  const left = Object.values(leftIn).reduce((a, b) => a + b, 0)
+  return { domain: d.name, order, drafts, leftIn, left, ...(progress !== undefined ? { progress } : {}), ...(card ? { card } : {}) }
+}
+
+/**
+ * Saves one card's decision as pass 3 does: the draft first, then the count in the domain's progress
+ * file, re-read just before it is written; when the count can't be written, the draft goes back as it was.
+ * Once the capability has no undecided scenario, Claude is asked
+ * to write its spec.
+ */
+async function decideCard($: EngineInterface, root: string, d: BlueprintUiBackfillDomain, card: Card, decision: Decision): Promise<void> {
+  const key = `${card.capability}\n${card.name}`
+  if (deciding.has(key)) return
+  deciding.add(key)
+  try {
+    const draftFile = inRoot(root, draftPath(card.capability))
+    const progressFile = inRoot(root, domainPath(d.name))
+    let text: string
+    let progress: string
+    try {
+      ;[text, progress] = await Promise.all([$.fs.read(draftFile), $.fs.read(progressFile)])
+    } catch (err) {
+      await $.ui.toast(`Not saved: couldn't read ${draftPath(card.capability)} or ${domainPath(d.name)} (${String(err)}).`)
+      return
+    }
+    const got = decide(text, card.capability, card.name, decision)
+    if ('error' in got) {
+      await $.ui.toast(`Not saved: ${got.error}`)
+      return
+    }
+    let counted: string
+    try {
+      counted = countedIn(progress, card.capability, decision.kind)
+    } catch (err) {
+      await $.ui.toast(`Not saved: ${domainPath(d.name)} can't take the count (${String(err)}).`)
+      return
+    }
+    try {
+      await $.fs.write(draftFile, got.text)
+    } catch (err) {
+      await $.ui.toast(`Not saved: couldn't write ${draftPath(card.capability)} (${String(err)}).`)
+      return
+    }
+    try {
+      // Claude edits this file too (pass 3, step 3): count on what it holds now, not on the earlier read.
+      counted = countedIn(await $.fs.read(progressFile), card.capability, decision.kind)
+      await $.fs.write(progressFile, counted)
+    } catch (err) {
+      // The marks and the counts never disagree: the draft goes back as it was.
+      await $.fs.write(draftFile, text).catch(() => undefined)
+      await $.ui.toast(`Not saved: couldn't count it in ${domainPath(d.name)} (${String(err)}).`)
+      return
+    }
+    amendDrafts.clear()
+    await update($, view, v => ({ ...v, amend: null }))
+    await update($, rev, n => n + 1)
+    if (countsOf(parseDraft(got.text)).undecided) return
+    // The capability's last card: Claude writes its spec, while the person goes on to the next cards.
+    const rest = await cardsOf($, root, d)
+    try {
+      await $.prompt.submit({ text: decidedPrompt(d.name, card.capability, reviewOf(counted, card.capability), rest.left), asUser: true })
+    } catch {
+      await $.ui.toast(`Every card of ${card.capability} is decided: ask Claude to write its spec.`)
+    }
+  } finally {
+    deciding.delete(key)
+  }
+}
 
 /**
  * Starts groups from the plan: marks them starting and sends Claude the prompt, as the person's own
@@ -360,6 +467,7 @@ export const register: Register = (on, options) => {
       argumentHint: '[change or capability] [review|brief]',
     })
     await $.tool.register(SPLIT_SPEC)
+    await $.tool.register(BACKFILL_SPEC)
     return next(e)
   })
 
@@ -384,7 +492,8 @@ export const register: Register = (on, options) => {
           ? `Blueprint pane opened on ${labelOf(toOpen)}.`
           : `Nothing named "${e.args.trim()}" in ${BLUEPRINT_JSON}; showing the list.`
       }
-      if (!toOpen) await update($, view, v => ({ ...v, page: null }))
+      // Asked for by name: the board or a page, not the Backfill view.
+      await update($, view, v => ({ ...v, backfill: null, amend: null, ...(toOpen ? {} : { page: null }) }))
     }
     await $.ui.open({ id: PANE, title: TITLE })
     if (toOpen && 'map' in loaded) void openPage($, toOpen, loaded.map, configured)
@@ -404,7 +513,7 @@ export const register: Register = (on, options) => {
       const groups = got.groups.map(g => (g.status === 'planned' && was?.groups.find(o => o.id === g.id)?.status === 'starting' ? { ...g, status: 'starting' as const } : g))
       return { ...all, [got.change]: { ...got, groups } }
     })
-    await update($, view, v => ({ ...v, page: null, split: got.change }))
+    await update($, view, v => ({ ...v, page: null, split: got.change, backfill: null, amend: null }))
     const { isPlaced } = await $.ui.open({ id: PANE, title: TITLE })
     const ready = got.groups.filter(g => isReady(got, g)).length
     const text = !isPlaced
@@ -413,6 +522,30 @@ export const register: Register = (on, options) => {
         ? `Shown in the blueprint pane with ${ready} group${ready === 1 ? '' : 's'} ready to start: the user starts them from its ▶ buttons, or asks you to. Don't draw the tree in chat.`
         : "Shown in the blueprint pane as a proposal: don't draw the tree in chat; show the table and ask the user to approve or change it."
     // An MCP tool's result reaches the model as text or content blocks, never a bare object.
+    return { result: text, text }
+  })
+
+  // Pass 3 of /blueprint-backfill: the domain's scenario cards, shown in the Backfill view in place of the board.
+  on('tool.call', { tool: new RegExp(`^${BACKFILL_CALL}$`) }, async ($, e) => {
+    const input = e as unknown as Record<string, unknown>
+    const domain = typeof input.domain === 'string' ? input.domain.trim() : ''
+    const fail = (text: string) => ({ isError: true as const, result: text, text })
+    const loaded = await load($)
+    if (!('map' in loaded)) return fail(`No ${BLUEPRINT_JSON} here: ask the cards in chat instead.`)
+    await checkBackfill($, loaded.map.root)
+    const bf = await read($, backfill)
+    if (bf.status === 'error') return fail(`backfill status unavailable (${bf.message}): ask the cards in chat instead.`)
+    if (bf.status !== 'ready') return fail('No backfill in progress: .blueprint/backfill/progress.json not found.')
+    const d = bf.report.domains.find(x => x.name === domain)
+    if (!d) return fail(`Unknown domain "${domain}": the backfill's domains are ${bf.report.domains.map(x => x.name).join(', ') || 'none'}.`)
+    await update($, view, v => ({ ...v, page: null, split: null, backfill: { domain }, amend: null }))
+    const { isPlaced } = await $.ui.open({ id: PANE, title: TITLE })
+    const text = !isPlaced
+      ? 'No pane is showing: ask the cards in chat instead.'
+      : d.drafts.length
+        ? `Shown in the blueprint pane's Backfill view: ${domain}'s cards, from ${d.drafts.length} draft${d.drafts.length === 1 ? '' : 's'}. ` +
+          "The user decides them there: don't ask them in chat. End your turn now; a message comes each time a capability's last card is decided."
+        : `Shown, but ${domain} has no drafts awaiting review.`
     return { result: text, text }
   })
 
@@ -428,7 +561,7 @@ export const register: Register = (on, options) => {
       if (loaded && 'map' in loaded) void recheckCode($, loaded.map).catch(() => undefined)
       return result
     }
-    if (tool === SPLIT_CALL || !tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
+    if (tool === SPLIT_CALL || tool === BACKFILL_CALL || !tool.startsWith('mcp__') || 'deny' in result || result.isError || result.isReadOnly || READ_TOOL.test(tool)) return result
     try {
       await followWrite($, targetsOf(e), configured)
     } catch {
@@ -477,6 +610,205 @@ export const register: Register = (on, options) => {
     const v = await read($, view)
     const open = pages.find(p => p.id === v.page)
     const plan = !open && v.split ? (await read($, splits))[v.split] : undefined
+
+    // The Backfill view: one scenario card at a time from a domain's drafts, decided with Accept, Amend or Reject.
+    if (!open && !plan && v.backfill) {
+      await read($, rev) // A decision bumps it, so the next card is read from the saved draft.
+      const bf = await read($, backfill)
+      const isWorking = await read($, working)
+      const waiting = new Set(await read($, queued))
+      const root = loaded.map.root
+      const toBoard = () => update($, view, s => ({ ...s, backfill: null, amend: null }))
+      const nav = (choose: boolean) => (
+        <Box flexDirection="row" gap={2}>
+          <Button key="bf-back" plain label="← Board" onPress={toBoard} />
+          {choose ? <Button key="bf-domains" plain label="← Domains" onPress={() => update($, view, s => ({ ...s, backfill: { domain: null }, amend: null }))} /> : null}
+          <Button key="bf-refresh" plain label="↻" onPress={() => checkBackfill($, root)} />
+        </Box>
+      )
+      if (bf.status !== 'ready') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {nav(false)}
+            {bf.status === 'error' ? (
+              <Text color="error">Backfill status unavailable: {bf.message}</Text>
+            ) : (
+              <Text dimColor>No backfill in progress: there is no .blueprint/backfill/ here.</Text>
+            )}
+          </Box>
+        )
+      }
+      const report = bf.report
+      const reviewing = report.domains.filter(d => d.drafts.length)
+      const chosen =
+        report.domains.find(d => d.name === v.backfill!.domain) ?? (v.backfill.domain === null && reviewing.length === 1 ? reviewing[0] : undefined)
+
+      // No domain chosen: the domains with drafts to review, and backfill.py's next steps.
+      if (!chosen) {
+        const counts = await Promise.all(reviewing.map(d => cardsOf($, root, d)))
+        return (
+          <Box flexDirection="column" gap={1}>
+            {nav(false)}
+            <Text bold size="heading">{report.line}</Text>
+            {reviewing.length ? (
+              <Box flexDirection="column">
+                <Text bold>Scenario review</Text>
+                <Box key="bf-domain-list" {...LIST}>
+                  {reviewing.map((d, i) => (
+                    <Box key={`bf-row-${d.name}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+                      <Button key={`bf-domain-${d.name}`} plain label={d.name} onPress={() => update($, view, s => ({ ...s, backfill: { domain: d.name }, amend: null }))} />
+                      <Text dimColor>
+                        · {d.drafts.length} draft{d.drafts.length === 1 ? '' : 's'} · {counts[i]!.left} card{counts[i]!.left === 1 ? '' : 's'} left
+                      </Text>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            ) : (
+              <Text dimColor>No drafts await scenario review.</Text>
+            )}
+            {report.next.length ? (
+              <Box flexDirection="column">
+                <Text bold>Next</Text>
+                <Box key="bf-next-list" {...LIST}>
+                  {report.next.map((n, i) => {
+                    const step = backfillStep(n.command)
+                    return (
+                      <Box key={`bf-next-row-${i}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+                        <Text>{n.command}</Text>
+                        <Text dimColor>· {n.why}</Text>
+                        {step ? (
+                          waiting.has(stepKey(step)) ? (
+                            <Text key={`bf-next-${i}`} color="warning">◷ queued</Text>
+                          ) : (
+                            <Button key={`bf-next-${i}`} plain dimColor={isWorking || undefined} label={step.label} onPress={() => void runStep($, step)} />
+                          )
+                        ) : null}
+                      </Box>
+                    )
+                  })}
+                </Box>
+              </Box>
+            ) : null}
+          </Box>
+        )
+      }
+
+      const cards = await cardsOf($, root, chosen)
+      const card = cards.card
+      const head = (
+        <Box flexDirection="column">
+          <Text bold size="heading">Backfill · {chosen.name}</Text>
+          <Text dimColor>{report.line}</Text>
+        </Box>
+      )
+      if (!card) {
+        const waitingSpec = cards.order.filter(c => cards.drafts[c] && !cards.leftIn[c])
+        return (
+          <Box flexDirection="column" gap={1}>
+            {nav(reviewing.length > 1)}
+            {head}
+            <Text key="bf-none">No cards left in {chosen.name}: every scenario in its drafts is decided.</Text>
+            {waitingSpec.length ? (
+              <Text dimColor>
+                Waiting for Claude to write {waitingSpec.length === 1 ? 'the spec' : 'the specs'} of {waitingSpec.join(', ')}.
+              </Text>
+            ) : null}
+          </Box>
+        )
+      }
+
+      const cap = card.capability
+      const review = reviewOf(cards.progress, cap)
+      const draft = cards.drafts[cap]!
+      const total = review.rejected + countsOf(draft).decided + countsOf(draft).undecided
+      const index = review.rejected + countsOf(draft).decided + 1
+      const amending = v.amend?.capability === cap && v.amend.scenario === card.name
+      const fieldColumns = (e.props.bodyColumns ?? 60) - 4
+      const field = (key: string, value: string) => (
+        <Input
+          key={key}
+          value={value || undefined}
+          rows={rowsFor(value, fieldColumns, 1)}
+          submitLabel="save amendment"
+          onInput={(t: string) => void amendDrafts.set(key, t)}
+          onSubmit={(t: string) => (amendDrafts.set(key, t), void saveAmend())}
+        />
+      )
+      const saveAmend = async () => {
+        const scenario = amendDrafts.get('bf-amend-scenario') ?? card.scenario
+        const statement = card.isFirstOfRequirement ? (amendDrafts.get('bf-amend-statement') ?? card.statement) : undefined
+        const purpose = card.purpose !== undefined ? (amendDrafts.get('bf-amend-purpose') ?? card.purpose) : undefined
+        const same = (a: string | undefined, b: string | undefined) => (a ?? '').trim() === (b ?? '').trim()
+        if (same(scenario, card.scenario) && same(statement, card.isFirstOfRequirement ? card.statement : undefined) && same(purpose, card.purpose)) {
+          await $.ui.toast('Nothing changed: edit the text, or press Accept.')
+          return
+        }
+        await decideCard($, root, chosen, card, {
+          kind: 'amend',
+          scenario,
+          ...(statement !== undefined ? { statement } : {}),
+          ...(purpose !== undefined ? { purpose } : {}),
+        })
+      }
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {nav(reviewing.length > 1)}
+          {head}
+          <Box flexDirection="row" gap={1} flexWrap="wrap">
+            <Text bold>{cap}</Text>
+            <Text key="bf-card-of" dimColor>· card {index} of {total}</Text>
+            <Text key="bf-left" dimColor>· {cards.leftIn[cap]} left in {cap} · {cards.left} left in {chosen.name}</Text>
+          </Box>
+          <Box key={`bf-card-${cap}-${card.name}`} flexDirection="column" borderStyle="round" borderColor={amending ? 'suggestion' : undefined} paddingX={1} gap={1}>
+            {card.purpose !== undefined ? (
+              <Box flexDirection="column">
+                <Text dimColor>Purpose</Text>
+                {amending ? field('bf-amend-purpose', card.purpose) : <Markdown key="bf-purpose" text={card.purpose || '_(none)_'} />}
+              </Box>
+            ) : null}
+            <Box flexDirection="column">
+              <Text bold>Requirement: {card.requirement}</Text>
+              {amending && card.isFirstOfRequirement ? (
+                field('bf-amend-statement', card.statement)
+              ) : (
+                <Text key="bf-statement" dimColor={!card.isFirstOfRequirement || undefined}>{card.statement}</Text>
+              )}
+            </Box>
+            {amending ? field('bf-amend-scenario', card.scenario) : <Markdown key="bf-scenario" text={card.scenario} />}
+            {card.verify.map((q, i) => (
+              <Text key={`bf-verify-${i}`} color="warning">Verify: {q}</Text>
+            ))}
+            {amending ? (
+              <Box flexDirection="row" justifyContent="flex-end" gap={1}>
+                <Button key="bf-cancel" plain dimColor label="Cancel" onPress={() => (amendDrafts.clear(), update($, view, s => ({ ...s, amend: null })))} />
+                <Button key="bf-save" variant="primary" label="Save amendment" onPress={() => saveAmend()} />
+              </Box>
+            ) : (
+              <Box flexDirection="row" gap={1}>
+                <Button key="bf-accept" variant="primary" label="Accept" onPress={() => decideCard($, root, chosen, card, { kind: 'accept' })} />
+                <Button
+                  key="bf-amend"
+                  label="Amend"
+                  onPress={() => (amendDrafts.clear(), update($, view, s => ({ ...s, amend: { capability: cap, scenario: card.name } })))}
+                />
+                <Button key="bf-reject" label="Reject" onPress={() => decideCard($, root, chosen, card, { kind: 'reject' })} />
+              </Box>
+            )}
+          </Box>
+          <Text dimColor>
+            {amending
+              ? card.isFirstOfRequirement
+                ? "Edit the scenario, the requirement's statement or the Purpose shown, then save."
+                : "Edit the scenario, then save. The statement is editable on its requirement's first card."
+              : card.verify.length
+                ? 'Settle the question: Accept if the draft is right, Amend to change it.'
+                : 'Each decision is saved to the draft and the progress file before the next card.'}
+          </Text>
+        </Box>
+      )
+    }
 
     // A change's PR plan: the tree of branches apply proposed, with ▶ start on the groups ready now.
     if (plan) {
@@ -740,7 +1072,8 @@ export const register: Register = (on, options) => {
     const waiting = new Set(await read($, queued))
     const isWorking = await read($, working)
     const plans = await read($, splits)
-    const board = boardOf(loaded.map, c, sp, page => items.filter(i => i.page === page).length)
+    const bf = await read($, backfill)
+    const board = boardOf(loaded.map, c, sp, page => items.filter(i => i.page === page).length, bf)
     // A plan whose change has no row (renamed, removed, or never in blueprint.json) gets a row of its own,
     // so ← Board never strands it.
     const strayPlans = Object.keys(plans)
@@ -841,6 +1174,18 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column" gap={1}>
+        {/* A backfill in progress comes first: choosing its line opens the Backfill view. */}
+        {board.backfill ? (
+          board.backfill.error ? (
+            <Text key="backfill-line" color="error">
+              {board.backfill.line}: {board.backfill.error}
+            </Text>
+          ) : (
+            <Button key="backfill" plain onPress={() => update($, view, s => ({ ...s, backfill: { domain: null }, amend: null }))}>
+              <Text bold color="suggestion">{board.backfill.line}</Text>
+            </Button>
+          )
+        ) : null}
         <Box flexDirection="row" justifyContent="space-between" flexWrap="wrap" columnGap={2}>
           <Text bold>{c.status === 'checking' ? 'Checking code…' : c.status === 'none' ? 'Code not checked yet: press ↻.' : board.summary}</Text>
           <Box flexDirection="row" gap={2}>

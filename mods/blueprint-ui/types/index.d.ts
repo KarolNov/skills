@@ -39,6 +39,10 @@ export type BlueprintUiView = {
   page: string | null
   /** The change whose PR plan is showing, in place of the board. */
   split?: string | null
+  /** The Backfill view, in place of the board: on a domain's cards, or (`null`) choosing one. */
+  backfill?: { domain: string | null } | null
+  /** The card being amended: its capability and scenario. */
+  amend?: { capability: string; scenario: string } | null
   editor?: BlueprintUiEditor | null
   isDoneOpen?: boolean
   sections?: BlueprintUiSections
@@ -81,6 +85,36 @@ export type BlueprintUiSpecs = {
   /** A check running: how many specs are read of how many. */
   progress?: { done: number; total: number }
 }
+
+/** One domain in `backfill.py status --json`. */
+export type BlueprintUiBackfillDomain = {
+  name: string
+  purpose?: string
+  /** Passes 2 to 5 by number: `pending`, `in-progress` or `done`. */
+  passes: Record<string, string>
+  nextPass: number | null
+  folded: boolean
+  capabilities: string[]
+  /** Capabilities with a draft awaiting scenario review. */
+  drafts: string[]
+}
+
+/** `backfill.py status --json` while a backfill is in progress. */
+export type BlueprintUiBackfillReport = {
+  active: true
+  pass: number
+  passName: string
+  /** The board line: `Backfill · pass 3 of 5 · 2 of 4 domains reviewed`. */
+  line: string
+  domains: BlueprintUiBackfillDomain[]
+  next: { command: string; domain?: string; pass?: number; why: string }[]
+}
+
+/** The backfill as last checked, with the code side: none in progress, its status, or why it couldn't be read. */
+export type BlueprintUiBackfill =
+  | { status: 'none' }
+  | { status: 'ready'; report: BlueprintUiBackfillReport; checkedAt: string }
+  | { status: 'error'; message: string }
 
 /** One pending comment or suggestion, anchored by heading and quote (never an offset). */
 export type BlueprintUiItem = {
@@ -148,6 +182,8 @@ declare module 'claude-code' {
       working: Shaped<boolean>
       /** PR plans by change, as apply last sent them. */
       splits: Shaped<Record<string, BlueprintUiSplit>>
+      /** The backfill in progress, read with the code side. */
+      backfill: Shaped<BlueprintUiBackfill>
     }
   }
 }

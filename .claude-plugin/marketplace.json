@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "A collection of Claude Code skills and mods by Karol Novljaković.",
-    "version": "0.8.2"
+    "version": "0.9.0"
   },
   "plugins": [
     {
@@ -30,7 +30,7 @@
     },
     {
       "name": "blueprint",
-      "description": "Architect larger changes from a solution you already have: a short solution-first grilling, a spec change with diagrams and optional interactive playgrounds, stored in Notion, Obsidian, Linear, Jira, GitHub or a notes folder, two-way sync that keeps specs and code from drifting, a local capability map with search and drift, scenario coverage that traces each spec scenario to the tests tagged as claiming it, a ready-made GitHub Action that reports drift on every PR, and tidy, which groups capabilities into domains and migrates older setups.",
+      "description": "Architect larger changes from a solution you already have: a short solution-first grilling, a spec change with diagrams and optional interactive playgrounds, stored in Notion, Obsidian, Linear, Jira, GitHub or a notes folder, two-way sync that keeps specs and code from drifting, a local capability map with search and drift, scenario coverage that traces each spec scenario to the tests tagged as claiming it, a ready-made GitHub Action that reports drift on every PR, tidy, which groups capabilities into domains and migrates older setups, and backfill, which brings an existing repo fully under blueprint in passes across sessions: domains, capabilities with anchors, specs drafted from code and reviewed scenario by scenario, test tags and artifacts.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -38,7 +38,8 @@
         "./skills/blueprint",
         "./skills/blueprint-drift",
         "./skills/blueprint-sync",
-        "./skills/blueprint-tidy"
+        "./skills/blueprint-tidy",
+        "./skills/blueprint-backfill"
       ]
     },
     {

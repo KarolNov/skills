@@ -101,6 +101,7 @@ notes tool, builds it, and keeps the specs and the code honest in both direction
 | `/blueprint-drift [capability]` | **Intent drift**: the spec is right. Judges the code against it requirement by requirement, including spec edits people made outside the code, and fixes the code or turns the gap into a blueprint or tickets. |
 | `/blueprint-sync [capability]` | **Spec sync**: the code is right. Reads what the code changed since the spec last matched it and updates the spec, or writes a spec from the code for a capability that has none. |
 | `/blueprint-tidy [--dry-run]` | **Tidy**, on demand: migrates `.blueprint/` to the current format, groups capabilities into **domains** (each with an overview page that holds its specs like a folder), renames a name that is both a domain and a capability, and reports anchors that overlap through broad globs. Shows one move table and writes nothing until you approve it (a migration asks first on its own); renames keep each page and its history, so nothing reads as drift. |
+| `/blueprint-backfill [domain <name> \| fold \| finish]` | **Backfill**: brings an existing repo fully under blueprint in passes that can run in separate sessions: domains, every capability with its anchors, specs drafted from the code and reviewed scenario by scenario, then folded into `blueprint.json`, tests tagged with the scenarios they claim, and outside docs recorded as artifacts. Progress is kept in `.blueprint/backfill/`, so any session resumes where the last one stopped; the folder is deleted when the backfill finishes. `/blueprint-setup` suggests it for repos with more than 15 capabilities. |
 
 **Upgrading from 0.5.0:** 0.6.0 moves the blueprint format to version 2 (domains). Repos set up
 before it keep working; `/blueprint` says in one line that the repo is on format 1. Run
@@ -149,7 +150,9 @@ maps and shows the chosen page read-only. Press "+" beside a block to comment on
 wording, as on a GitHub diff line; comments batch up like a pending review, and "Submit review" hands
 the batch to `/blueprint review`, which shows one preview and writes on your yes. It reads Notion through
 your session's Notion connection (the server name is a setting, `claude.ai Notion` by default) and
-works the same in the terminal and the desktop app. Install it next to `blueprint`.
+works the same in the terminal and the desktop app. While a `/blueprint-backfill` is in progress, the board's
+first line shows its pass, and choosing it opens the Backfill view: one scenario card at a time, with
+Accept, Amend and Reject, each decision saved before the next card. Install it next to `blueprint`.
 
 Try it: `/blueprint-setup`, then *"/blueprint move session storage from cookies to Redis, keyed by
 user id, with a 30-day sliding expiry"*.
