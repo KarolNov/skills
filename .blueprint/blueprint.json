@@ -121,12 +121,12 @@
         ".claude-plugin/**",
         "README.md"
       ],
-      "specVersion": "fb311da69bc03e7e",
+      "specVersion": "d99b10e5e5f0da57",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "507a8a170709",
-        "README.md": "27c2074eb7fc"
+        ".claude-plugin/marketplace.json": "29c47cb911d3",
+        "README.md": "d92bd76761c7"
       },
-      "syncedCommit": "42dd40970573dabdc9d2c71d6ff86c79da68aa0b"
+      "syncedCommit": "e620f529494c322a4193e2d364af09187ab2ebb6"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
