@@ -100,9 +100,9 @@
         "skills/blueprint-sync/SKILL.md": "b8a3e82157e9",
         "skills/blueprint/references/status.md": "7d6ca146666d",
         "skills/blueprint/scripts/drift.py": "0e9deb7437be",
-        "skills/blueprint/scripts/drift_ts.mjs": "aab54a05a96e"
+        "skills/blueprint/scripts/drift_ts.mjs": "0023003532d0"
       },
-      "syncedCommit": "fab5c188087e0059630b56fc178baccbc85fa89c"
+      "syncedCommit": "d9164aa2b22eec1b1d70268196c79107c3de1270"
     },
     "blueprint/drift": {
       "ref": "https://app.notion.com/p/41c43cce21f2812da74ddeb8264d34a6",
@@ -121,12 +121,12 @@
         ".claude-plugin/**",
         "README.md"
       ],
-      "specVersion": "fb311da69bc03e7e",
+      "specVersion": "d99b10e5e5f0da57",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "507a8a170709",
-        "README.md": "27c2074eb7fc"
+        ".claude-plugin/marketplace.json": "780b08ca1dd7",
+        "README.md": "d92bd76761c7"
       },
-      "syncedCommit": "42dd40970573dabdc9d2c71d6ff86c79da68aa0b"
+      "syncedCommit": "d9164aa2b22eec1b1d70268196c79107c3de1270"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
