@@ -197,12 +197,12 @@
       "specVersion": "82f1cfc92ca5c6d5",
       "anchorsFiles": {
         "skills/blueprint/references/map.md": "a501178660d4",
-        "skills/blueprint/scripts/graph.py": "d75eb7c13941",
+        "skills/blueprint/scripts/graph.py": "bc356be2c258",
         "skills/blueprint/scripts/map_template.html": "57a4eceb7f58",
-        "skills/blueprint/scripts/test_graph.py": "26363826714e",
+        "skills/blueprint/scripts/test_graph.py": "285c8ca949c7",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       },
-      "syncedCommit": "4f91fb6ffeb2177e5fca00926698493cbc590cb7"
+      "syncedCommit": "e11a4ae3972701c981c45d5003be6bb7a8f4dbeb"
     },
     "blueprint/coverage": {
       "ref": "https://app.notion.com/p/42043cce21f2815795a4de5f5139807a",
