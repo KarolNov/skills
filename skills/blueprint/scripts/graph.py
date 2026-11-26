@@ -68,10 +68,17 @@ def build(state=None, files=None):
     except drift.SettingError as e:
         settings, scoring_error = drift.scoring({}), str(e)
     for name, spec in specs.items():
-        mine = memo[name] = drift.matched(spec, files)
+        memo[name] = drift.matched(spec, files)
+    # Follow stamped import closures exactly as `drift.py check` does, so imports-moved and
+    # possibly-affected capabilities show on the map too.
+    imports = drift.import_signals({n: memo[n] for n, s in specs.items()
+                                    if s.get("anchors") and s.get("ref") and "anchorsFiles" in s},
+                                   settings)
+    for name, spec in specs.items():
+        mine = memo[name]
         for f in mine:
             owners.setdefault(f, []).append(name)
-        row = drift.assess(spec, mine, settings, hashes)
+        row = drift.assess(spec, mine, settings, hashes, imports.get(name))
         baseline = drift.ROOT / ".blueprint" / "baseline" / f"{name}.md"
         has_baseline = baseline.is_file()
         purpose, reqs = parse_baseline(baseline.read_text(encoding="utf-8")) if has_baseline else ("", [])
