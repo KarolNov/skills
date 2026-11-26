@@ -110,3 +110,11 @@ When the user accepts a CI drift guard, setup SHALL copy the skill's `blueprint-
   - **GIVEN** the repo's `.blueprint/drift.py` predates artifacts
   - **WHEN** the workflow runs
   - **THEN** capability drift is reported as before and the artifacts section is skipped with a notice
+
+### Requirement: Points to backfill
+
+When the capability map would hold more than 15 capabilities, or the user wants every capability specced now, setup SHALL suggest `/blueprint-backfill` instead of seeding.
+
+- **Scenario: Backfill for a large repo**
+  - **WHEN** the survey finds more than 15 candidate capabilities
+  - **THEN** setup suggests `/blueprint-backfill` for mapping and speccing them

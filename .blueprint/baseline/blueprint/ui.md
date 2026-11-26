@@ -227,3 +227,20 @@ The pane SHALL offer the same pages and actions in the terminal and the desktop 
 - **Scenario: Desktop**
   - **WHEN** the pane is opened in the desktop app
   - **THEN** it offers the same pages, buttons and inputs as in the terminal
+
+### Requirement: Backfill on the board
+
+While `.blueprint/backfill/` exists, the status board SHALL show a Backfill line above its sections with the current pass and how many domains have finished it, and choosing it SHALL open the Backfill view.
+
+- **Scenario: Backfill in progress**
+  - **GIVEN** pass 3 is done for two of four domains
+  - **WHEN** the board is shown
+  - **THEN** its first line reads "Backfill · pass 3 of 5 · 2 of 4 domains reviewed"
+
+### Requirement: Backfill scenario review
+
+The Backfill view SHALL show one scenario card at a time from the drafts awaiting review, with the requirement's statement above it, any verify mark as a question, and Accept, Amend and Reject. Each decision SHALL be saved to the progress folder before the next card is shown, and the view SHALL say how many cards are left for the capability and the domain.
+
+- **Scenario: Reject a scenario**
+  - **WHEN** the user presses Reject on a card
+  - **THEN** the decision is saved, the count of cards left drops by one, and the next card is shown
