@@ -35,15 +35,15 @@ Verify: does a refresh extend the original token's expiry?
 
 - **Accept**: append ` <!-- accepted -->` to the scenario's line (`- **Scenario: <name>** <!-- accepted -->`) and delete the verify marks the card showed.
 - **Amend**: rewrite the text the user changed (scenario, and on its first card the statement or Purpose), append ` <!-- amended -->`, and delete the card's verify marks.
-- **Reject**: delete the scenario's lines. When it was its requirement's last scenario, delete the requirement block too.
+- **Reject**: delete the scenario's lines. When it was its requirement's last scenario, delete the requirement block too. Verify marks the card showed in the Purpose or statement stay, and the next card shows them again: a card is a requirement's (or the capability's) first while no scenario before it is decided, so the next undecided scenario carries the statement (and the Purpose) as editable, with their verify questions.
 
-Then add one to the capability's `review.accepted`, `review.amended` or `review.rejected` in the progress file. A resumed session finds the next card from the marks alone.
+Add one to the capability's `review.accepted`, `review.amended` or `review.rejected` in the progress file in the same step as the draft edit, and commit both together, so the counts and the marks never disagree. A resumed session finds the next card from the marks alone.
 
 ## 3. Write the spec
 
 When a capability has no undecided scenario left:
 
-1. Strip the decision marks from the draft. When every requirement was rejected, there is no spec to write: ask whether the capability is real (keep it and draft again) or not (remove it from the progress file, which leaves its files to pass 2's coverage check again).
+1. Strip the decision marks from the draft, and any verify mark still left (none should be: ask it now if one is). When every requirement was rejected, there is no spec to write: ask whether the capability is real (keep it and draft again) or not. For a new one that isn't real, remove it from the progress file and from the overview's Capabilities list, then run `backfill.py uncovered <domain>` and settle its files as pass 2's step 3 does (anchors on another capability, or glue) before going on; `covered` stays true only once `uncovered` prints nothing again. An `existing` one stays as it is in `blueprint.json` and the progress file: say it is `/blueprint-tidy`'s to remove, and leave it out of this pass.
 2. Create its page inside its domain (parent: the progress file's `ref`, or the domain's `ref` in `blueprint.json`) as the backend file says, and set the capability's `ref` in the progress file. The cards were the approval: no further preview.
 3. Do the spec bookkeeping of [status.md](../../blueprint/references/status.md), with two changes because `blueprint.json` waits for fold: save the normalized text to `.blueprint/baseline/<capability>.md` as usual; record `specVersion` (read after the last write) on the capability in the progress file; and stamp with `backfill.py stamp <capability>`, not `drift.py stamp`.
 4. Link it from the overview's Capabilities list: link its "no spec yet" line and drop the marker.
@@ -53,4 +53,4 @@ Report the page with its counts (accepted, amended, rejected), then show the nex
 
 ## Done when
 
-Every capability in the domain has a `ref`, `specVersion`, `anchorsFiles` and `syncedCommit` in the progress file and a baseline, no draft is left in `drafts/<domain>/`, `backfill.py pass <domain> 3 done` has run, and it is committed. Report the domain's pages (linked) and its review counts. The domain folds next: when this session is on the default branch, offer `/blueprint-backfill fold <domain>` now; otherwise fold runs once this branch merges.
+Every capability this pass took in scope (those without a `ref` when it started, less any `existing` one left out in step 3) has a `ref`, `specVersion`, `anchorsFiles` and `syncedCommit` in the progress file and a baseline (capabilities that already had a `ref` keep their stamps in `blueprint.json`), no draft of the domain's capabilities is left (`backfill.py status` lists none for it), `backfill.py pass <domain> 3 done` has run, and it is committed. Report the domain's pages (linked) and its review counts. The domain folds next: when this session is on the default branch, offer `/blueprint-backfill fold <domain>` now; otherwise fold runs once this branch merges.

@@ -6,7 +6,7 @@ Run `backfill.py pass <domain> 2 in-progress`. The domain's progress file is `.b
 
 ## 1. List what exists
 
-Every capability already in `blueprint.json` that belongs here (its name starts with `<domain>/`, or its anchors fall inside the domain's folders) goes into the progress file as found, unchanged:
+Every capability already in `blueprint.json` that belongs here goes into the progress file as found, unchanged. It belongs to exactly one domain: the one its name starts with (`<domain>/`); for a bare name, the domain whose folders hold most of its anchored files (a tie goes to the domain first in `progress.json`'s survey `order`). A capability whose anchors also reach other domains' folders is listed only in its own domain; the others' `uncovered` already counts its files as covered:
 
 ```json
 "<capability>": {"purpose": "<from its spec or the map>", "anchors": ["<as in blueprint.json>"],
