@@ -22,16 +22,19 @@
   max-width: 220px;
   max-height: 220px;
   border-radius: 24px;
-  transform-origin: 50% 50%;
+  /* VitePress's transform shifts the image back by half its size after rotate and scale apply, so
+     the box's top-left corner is where its visual centre ends up: pivot there. */
+  transform-origin: 0 0;
   rotate: x 10deg;
   box-shadow: 0 30px 60px -20px rgb(15 23 42 / 0.55);
-  animation: blueprint-lift 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
-  transition: rotate 0.5s ease, scale 0.5s ease;
+  /* backwards, not both: once lifted, the resting tilt above (and the pointer tilt) take over. */
+  animation: blueprint-lift 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s backwards;
+  transition: rotate 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), scale 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.VPHero .image-container:hover .image-src {
-  rotate: x 0deg;
-  scale: 1.03;
+/* Following the mouse (theme/index.ts sets rotate and scale): track it closely. */
+.VPHero .image-src.is-tilting {
+  transition: rotate 0.12s linear, scale 0.3s ease;
 }
 
 /* The table: a shadow under the sheet that tightens and fades as it is lifted. */
