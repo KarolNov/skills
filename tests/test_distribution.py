@@ -127,22 +127,26 @@ class Readme(unittest.TestCase):
 
 class ManualInstall(unittest.TestCase):
     # @scenario distribution: Copied skill
-    def test_copied_slack_nag_stands_alone(self):
+    def test_copied_blueprint_family_stands_alone(self):
+        family = sorted(d for d in (ROOT / "skills").iterdir() if (d / "SKILL.md").is_file())
         with tempfile.TemporaryDirectory() as home:
             skills = Path(home) / ".claude/skills"
             skills.mkdir(parents=True)
-            shutil.copytree(ROOT / "skills/slack-nag", skills / "slack-nag")
-            meta = frontmatter(skills / "slack-nag/SKILL.md")
-            self.assertEqual(meta.get("name"), "slack-nag")
-            self.assertTrue(meta.get("description"))
-            self.assertEqual(broken_links(skills / "slack-nag", skills / "slack-nag"), [])
+            for d in family:
+                shutil.copytree(d, skills / d.name)
+                meta = frontmatter(skills / d.name / "SKILL.md")
+                self.assertEqual(meta.get("name"), d.name)
+                self.assertTrue(meta.get("description"), d.name)
+            # Cross-links (../blueprint/references/...) resolve inside the copied family.
+            self.assertEqual(broken_links(skills, skills), [])
             # Nothing that only a plugin install provides.
-            for f in (skills / "slack-nag").rglob("*"):
-                if f.is_file():
-                    self.assertNotIn("CLAUDE_PLUGIN_ROOT", f.read_text(errors="replace"), f.name)
+            for f in skills.rglob("*"):
+                if f.is_file() and f.suffix in (".md", ".py", ".mjs", ".html", ".yml", ".json"):
+                    self.assertNotIn("CLAUDE_PLUGIN_ROOT", f.read_text(errors="replace"),
+                                     f.relative_to(skills))
 
     def test_readme_shows_the_copy(self):
-        self.assertIn("cp -r skills/skills/<skill-name> ~/.claude/skills/", README)
+        self.assertIn("cp -r skills/skills/blueprint* ~/.claude/skills/", README)
 
 
 class Mods(unittest.TestCase):

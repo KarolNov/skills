@@ -5,5 +5,4 @@
 node_modules/
 __pycache__/
 .claude/settings.local.json
-walkthrough-output/
 .blueprint/map.html

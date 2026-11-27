@@ -4,30 +4,10 @@
     "name": "Karol Novljaković"
   },
   "metadata": {
-    "description": "A collection of Claude Code skills and mods by Karol Novljaković.",
-    "version": "0.9.1"
+    "description": "Blueprint: architect larger changes against capability specs and keep specs and code in step. Claude Code skills and a review-pane mod by Karol Novljaković.",
+    "version": "0.10.0"
   },
   "plugins": [
-    {
-      "name": "walkthrough",
-      "description": "Record narrated design walkthroughs and step-by-step tutorials of a real web app: Playwright drives the UI, an animated pointer guides the eye, and Chatterbox, Kokoro or ElevenLabs narrates.",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/walkthrough-setup",
-        "./skills/design-walkthrough",
-        "./skills/tutorial-walkthrough"
-      ]
-    },
-    {
-      "name": "slack-nag",
-      "description": "Schedule friendly, backing-off \"nagging bot\" follow-ups in a Slack thread until someone answers; each nudge checks the thread first and stays quiet once answered.",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/slack-nag"
-      ]
-    },
     {
       "name": "blueprint",
       "description": "Architect larger changes from a solution you already have: a short solution-first grilling, a spec change with diagrams and optional interactive playgrounds, stored in Notion, Obsidian, Linear, Jira, GitHub or a notes folder, two-way sync that keeps specs and code from drifting, answers to \"how should X work?\" taken from the specs after checking they still match the code, a local capability map with search and drift, scenario coverage that traces each spec scenario to the tests tagged as claiming it, a ready-made GitHub Action that reports drift on every PR, tidy, which groups capabilities into domains and migrates older setups, and backfill, which brings an existing repo fully under blueprint in passes across sessions: domains, capabilities with anchors, specs drafted from code and reviewed scenario by scenario, test tags and artifacts.",
