@@ -339,8 +339,9 @@
     "docs-site": {
       "brief": "https://app.notion.com/p/42543cce21f281f59c91edb7c3c77fd5",
       "review": "https://app.notion.com/p/42543cce21f28115b450d2987c718470",
-      "status": "approved",
-      "baseCommit": "0edbb13e4691432fc8247aef72dba34f4b13117e"
+      "status": "building",
+      "baseCommit": "0edbb13e4691432fc8247aef72dba34f4b13117e",
+      "branch": "kn/blueprint-docs-site-acce7d"
     }
   },
   "artifacts": {
