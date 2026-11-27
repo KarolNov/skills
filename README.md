@@ -69,7 +69,8 @@ npm run docs:preview   # serves the built site
 ```
 
 Cloudflare Workers Builds deploys it from this repo. A merge to `main` publishes the site, and
-every pull request gets a preview link in a comment. The Worker's build settings:
+every other branch gets a preview at `<branch>.blueprint.karolnov.dev` (`kn/docs-polish` →
+`kn-docs-polish.blueprint.karolnov.dev`), linked from the pull request's Workers Builds check. The Worker's build settings:
 
 | Setting | Value |
 | ------- | ----- |

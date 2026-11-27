@@ -11,7 +11,9 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
-  "routes": [{ "pattern": "blueprint.karolnov.dev", "custom_domain": true }],
+  // previews_enabled also serves each branch's preview at <branch>.blueprint.karolnov.dev
+  // (Cloudflare adds the wildcard DNS record and certificate). It takes effect on a `wrangler deploy`.
+  "routes": [{ "pattern": "blueprint.karolnov.dev", "custom_domain": true, "previews_enabled": true }],
   // `wrangler preview` (pull request previews) refuses to run without this block. Empty is enough:
   // previews share the assets and compatibility settings above.
   "previews": {}
