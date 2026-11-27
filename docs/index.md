@@ -4,6 +4,9 @@ hero:
   name: Blueprint
   text: You bring the solution. Blueprint writes it down, builds it, and keeps it true.
   tagline: Claude Code skills for architecting larger changes against capability specs, and keeping specs and code from drifting apart.
+  image:
+    src: /hero.svg
+    alt: A blueprint sheet of linked capabilities
   actions:
     - theme: brand
       text: Get started

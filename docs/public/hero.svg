@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="A blueprint sheet: capabilities linked to each other, the way the capability map draws them">
+  <style>
+    .sheet { fill: #1d4ed8; }
+    .fine { stroke: #ffffff; stroke-opacity: .10; stroke-width: 1; }
+    .bold { stroke: #ffffff; stroke-opacity: .22; stroke-width: 1; }
+    .ink { stroke: #ffffff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .node { fill: #1e40af; stroke: #ffffff; stroke-width: 2; }
+    .txt { fill: #ffffff; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .dim { fill: #dbeafe; font: 500 10px ui-monospace, SFMono-Regular, Menlo, monospace; opacity: .85; }
+    .flow { stroke-dasharray: 6 8; animation: flow 2.4s linear infinite; }
+    .pulse { transform-origin: 300px 266px; animation: pulse 2.4s ease-in-out infinite; }
+    @keyframes flow { to { stroke-dashoffset: -28; } }
+    @keyframes pulse { 0%, 100% { opacity: .9; transform: scale(1); } 50% { opacity: 0; transform: scale(1.7); } }
+    @media (prefers-reduced-motion: reduce) { .flow, .pulse { animation: none; } }
+  </style>
+  <defs>
+    <pattern id="fine" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M20 0H0V20" fill="none" class="fine"/>
+    </pattern>
+    <pattern id="bold" width="100" height="100" patternUnits="userSpaceOnUse">
+      <rect width="100" height="100" fill="url(#fine)"/>
+      <path d="M100 0H0V100" fill="none" class="bold"/>
+    </pattern>
+    <marker id="tick" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M5 0V10" stroke="#dbeafe" stroke-width="1.5"/>
+    </marker>
+  </defs>
+
+  <rect class="sheet" x="8" y="8" width="384" height="384" rx="28"/>
+  <rect x="8" y="8" width="384" height="384" rx="28" fill="url(#bold)"/>
+  <rect x="24" y="24" width="352" height="352" rx="16" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5"/>
+
+  <!-- links between capabilities -->
+  <path class="ink flow" d="M132 112 C 190 112, 190 186, 232 186"/>
+  <path class="ink flow" d="M132 112 C 132 190, 112 220, 112 266"/>
+  <path class="ink flow" d="M286 206 C 286 236, 300 236, 300 246"/>
+  <path class="ink" stroke-opacity=".45" d="M150 280 H 252"/>
+
+  <!-- capabilities -->
+  <g>
+    <rect class="node" x="56" y="90" width="132" height="44" rx="10"/>
+    <text class="txt" x="122" y="117" text-anchor="middle">auth/session</text>
+  </g>
+  <g>
+    <rect class="node" x="216" y="164" width="140" height="44" rx="10"/>
+    <text class="txt" x="286" y="191" text-anchor="middle">billing/plans</text>
+  </g>
+  <g>
+    <rect class="node" x="44" y="258" width="112" height="44" rx="10"/>
+    <text class="txt" x="100" y="285" text-anchor="middle">docs</text>
+  </g>
+  <g>
+    <circle class="pulse" cx="300" cy="266" r="22" fill="none" stroke="#93c5fd" stroke-width="2"/>
+    <circle class="node" cx="300" cy="266" r="22"/>
+    <path class="ink" d="M290 266 l7 7 l13 -14"/>
+  </g>
+
+  <!-- dimension line and title block -->
+  <path d="M56 70 H188" stroke="#dbeafe" stroke-width="1" marker-start="url(#tick)" marker-end="url(#tick)"/>
+  <text class="dim" x="122" y="62" text-anchor="middle">SPEC ↔ CODE</text>
+  <g transform="translate(232 322)">
+    <rect width="128" height="38" rx="6" fill="none" stroke="#fff" stroke-opacity=".5"/>
+    <path d="M0 19 H128 M64 19 V38" stroke="#fff" stroke-opacity=".35"/>
+    <text class="dim" x="8" y="13">BLUEPRINT</text>
+    <text class="dim" x="8" y="32">REV 1</text>
+    <text class="dim" x="72" y="32">1 : 1</text>
+  </g>
+</svg>
