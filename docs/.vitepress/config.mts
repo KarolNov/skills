@@ -10,13 +10,17 @@ export default defineConfig({
   lastUpdated: false,
   // map.html is a static file in public/, not a page: links to it are fine.
   ignoreDeadLinks: [/^\/map\.html/],
-  head: [["meta", { name: "theme-color", content: "#3451b2" }]],
+  head: [
+    // The same mark as karolnov.dev's, lettered for blueprint.
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
+    ["meta", { name: "theme-color", content: "#8a1c2b" }],
+  ],
   themeConfig: {
     nav: [
       { text: "Get started", link: "/getting-started" },
       { text: "Modes", link: "/modes/propose" },
       { text: "Capability map", link: "/capability-map" },
-      { text: "GitHub", link: "https://github.com/KarolNov/skills" },
+      { text: "karolnov.dev", link: "https://karolnov.dev/projects/blueprint" },
     ],
     sidebar: [
       {
@@ -53,6 +57,9 @@ export default defineConfig({
     ],
     search: { provider: "local" },
     socialLinks: [{ icon: "github", link: "https://github.com/KarolNov/skills" }],
-    footer: { message: "MIT licensed", copyright: "Karol Novljaković" },
+    footer: {
+      message: 'MIT licensed · <a href="https://github.com/KarolNov/skills">Source on GitHub</a>',
+      copyright: 'Made by <a href="https://karolnov.dev">Karol Novljaković</a>',
+    },
   },
 });
