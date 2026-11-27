@@ -102,6 +102,8 @@ class Wrangler(unittest.TestCase):
         self.assertNotIn("main", conf)
         self.assertEqual(conf["assets"]["directory"], "docs/.vitepress/dist")
         self.assertEqual(conf["routes"], [{"pattern": "blueprint.karolnov.dev", "custom_domain": True}])
+        # Workers Builds runs `wrangler preview` on pull requests, and it needs a previews block.
+        self.assertIn("previews", conf)
 
 
 if __name__ == "__main__":

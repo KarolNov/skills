@@ -11,5 +11,8 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
-  "routes": [{ "pattern": "blueprint.karolnov.dev", "custom_domain": true }]
+  "routes": [{ "pattern": "blueprint.karolnov.dev", "custom_domain": true }],
+  // `wrangler preview` (pull request previews) refuses to run without this block. Empty is enough:
+  // previews share the assets and compatibility settings above.
+  "previews": {}
 }
