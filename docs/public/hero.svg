@@ -17,11 +17,12 @@
     .show { animation: show .4s ease-out var(--t) both; }
     .grid { animation: grid 1s ease-out var(--t) both; }
     .flow { stroke-dasharray: 6 8; animation: show .5s ease-out var(--t) both, flow 2.4s linear var(--t) infinite; }
-    .solid { animation: draw var(--d, .6s) cubic-bezier(.5, 0, .3, 1) var(--t) both, hide .5s ease-in 5s both; stroke-dasharray: 1; stroke-dashoffset: 1; }
+    .solid { animation: draw var(--d, .6s) cubic-bezier(.5, 0, .3, 1) var(--t) both, hide .5s ease-in 5s forwards; stroke-dasharray: 1; stroke-dashoffset: 1; }
     .pulse { transform-origin: 300px 280px; animation: pulse 2.4s ease-in-out 5s infinite both; }
     .pen { animation: pen 3.6s cubic-bezier(.45, 0, .3, 1) 1.2s both; }
 
-    @keyframes draw { to { stroke-dashoffset: 0; } }
+    /* Hidden until its own turn: a round cap on a not-yet-drawn line still paints a dot. */
+    @keyframes draw { from { opacity: 0; } 1% { opacity: 1; } to { opacity: 1; stroke-dashoffset: 0; } }
     @keyframes show { from { opacity: 0; } to { opacity: 1; } }
     @keyframes hide { to { opacity: 0; } }
     @keyframes grid { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
