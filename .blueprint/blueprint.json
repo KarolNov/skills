@@ -241,6 +241,12 @@
         "skills/blueprint/scripts/test_backfill.py": "47b61646304c"
       },
       "syncedCommit": "eea5d26614252358ad28cc37492dce42b3cd1c88"
+    },
+    "blueprint/ask": {
+      "ref": null,
+      "anchors": [
+        "skills/blueprint-ask/**"
+      ]
     }
   },
   "changes": {
@@ -309,6 +315,12 @@
       "baseCommit": "4f91fb6ffeb2177e5fca00926698493cbc590cb7",
       "branch": "kn/backfill-specs-specs",
       "pr": "https://github.com/KarolNov/skills/pull/76"
+    },
+    "answer-questions-from-specs": {
+      "brief": "https://app.notion.com/p/42543cce21f28134be60f3b5ec35a8f9",
+      "review": "https://app.notion.com/p/42543cce21f2811b94ebeeb25cbcebeb",
+      "status": "approved",
+      "baseCommit": "1e340e5f4c43e48840acbf093dcded287ec8a41b"
     }
   },
   "artifacts": {
