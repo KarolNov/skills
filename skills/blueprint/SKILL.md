@@ -19,7 +19,7 @@ Pick by the first word of the arguments, then read that mode's file and follow i
 | --- | --- | --- |
 | a description of a change, or nothing | Grill the solution and write the blueprint | [references/propose.md](references/propose.md) |
 | `apply [change] [group]` | Build a blueprint, split into stacked or parallel PRs when it is big, then fold it into the capability specs | [references/apply.md](references/apply.md) |
-| `map`, alone or with `--out PATH` / `--json` | Draw the repo's capabilities, domains, shared files and drift as one local page, and open it | [references/map.md](references/map.md) |
+| `map`, alone or with `--out PATH` / `--json` / `--no-drift` | Draw the repo's capabilities, domains, shared files and drift as one local page, and open it | [references/map.md](references/map.md) |
 | `coverage`, alone, with a capability name, or with `suggest` | Trace spec scenarios to the tests that claim them, report the gaps and orphan tags, and propose tags | [references/coverage.md](references/coverage.md) |
 | `review <file>.json …`, where that file exists | Apply a review submitted from the `blueprint-ui` pane to the page it was written on | [references/review.md](references/review.md) |
 
