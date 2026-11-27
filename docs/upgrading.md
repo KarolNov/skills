@@ -2,9 +2,15 @@
 
 ## Updating the plugin
 
+Refresh the marketplace, then update each plugin you installed from it:
+
+```bash
+claude plugin marketplace update karolnov-skills
+claude plugin update blueprint@karolnov-skills
+claude plugin update blueprint-ui@karolnov-skills
 ```
-/plugin marketplace update karolnov-skills
-```
+
+Restart Claude Code afterwards so the new versions load.
 
 If you installed the skills by copying them, pull the repo and copy them again. Copy the whole `blueprint*` family together, because the skills link to each other's references.
 

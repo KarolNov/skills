@@ -27,6 +27,8 @@ cp -r skills/skills/blueprint* .claude/skills/          # one project
 ```
 
 **Needs:** Python 3, git, and the connector for your backend (Notion, Linear, Atlassian) or `gh`.
+Rendering diagrams to images (Notion) needs Python Playwright with Chromium
+(`pip install playwright && playwright install chromium`).
 
 ## Skills
 

@@ -257,7 +257,9 @@
       "ref": null,
       "anchors": [
         "docs/**",
-        "wrangler.jsonc"
+        "wrangler.jsonc",
+        "package.json",
+        "tests/test_docs.py"
       ]
     }
   },
@@ -493,12 +495,12 @@
         "skills/blueprint/scripts/coverage.py": "2b06f6437a04",
         "skills/blueprint/scripts/drift.py": "0e9deb7437be",
         "skills/blueprint/scripts/drift_ts.mjs": "0023003532d0",
-        "skills/blueprint/scripts/graph.py": "92e57e989ff1",
+        "skills/blueprint/scripts/graph.py": "93e191ac8c6f",
         "skills/blueprint/scripts/map_template.html": "13f988c7079b",
         "skills/blueprint/scripts/notion_normalize.py": "624e503e65c9",
         "skills/blueprint/scripts/render_mermaid.py": "73d486f4c4d1",
         "skills/blueprint/scripts/test_backfill.py": "47b61646304c",
-        "skills/blueprint/scripts/test_graph.py": "b9b56bd2dac4",
+        "skills/blueprint/scripts/test_graph.py": "ab39e364416b",
         "skills/blueprint/scripts/text_diagram.py": "f8194ac0e6f7",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       }

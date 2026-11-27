@@ -391,6 +391,13 @@ class NoDrift(GraphTest):
         out = r.graph("--out", "m.html", "--no-drift")
         self.assertNotIn("stale", out.stdout)
 
+    def test_dangling_name_is_listed_but_not_stale(self):
+        state = self.state()
+        state["artifacts"]["help"]["capabilities"].append("billing/gone")
+        a = self.no_drift(self.repo(self.FILES, state))["artifacts"][0]
+        self.assertEqual((a["covers"], a["unknown"], a["stale"]),
+                         (["billing/invoices"], ["billing/gone"], False))
+
     def test_coverage_still_shown(self):
         files = dict(self.FILES, **{"tests/test_sync.py": "# @scenario blueprint/sync: Anchored file edited\n"})
         state = dict(self.state(), tests={"kinds": {"unit": ["tests/**"]}})

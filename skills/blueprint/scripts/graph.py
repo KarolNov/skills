@@ -148,7 +148,8 @@ def artifacts(state, files, hashes, memo, judge_drift=True):
     way `drift.py artifacts` judges it: files changed since its check, or a name that is gone.
 
     memo ({capability: files}) and hashes are the ones build() filled, so nothing is matched
-    or hashed twice. With judge_drift False none is stale and nothing is hashed.
+    or hashed twice. With judge_drift False none is stale and nothing is hashed; names that
+    are gone are still listed in `unknown`.
     """
     specs, domains = state.get("specs", {}), state.get("domains", {})
     out = []
@@ -157,11 +158,13 @@ def artifacts(state, files, hashes, memo, judge_drift=True):
         if judge_drift:
             covers, changed, unknown = drift.artifact_state(art, specs, domains, files, hashes, memo)
         else:
-            covers, changed, unknown = drift.resolve(art.get("capabilities", []), specs, domains), [], []
+            # Names that are gone still show on the artifact's card, just not as a stale mark.
+            covers, changed = drift.resolve(art.get("capabilities", []), specs, domains), []
+            unknown = drift.dangling(art, specs, domains)
         out.append({"id": aid, "type": kind, "value": value, "link": drift.open_link(kind, value),
                     "description": art.get("description", ""),
                     "capabilities": art.get("capabilities", []), "covers": covers,
-                    "stale": bool(changed or unknown), "changed": changed, "unknown": unknown})
+                    "stale": judge_drift and bool(changed or unknown), "changed": changed, "unknown": unknown})
     return out
 
 

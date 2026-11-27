@@ -7,7 +7,7 @@ title: Capability map
 
 # Capability map
 
-This repo runs blueprint on itself. Below is its own capability map, built from the same commit as this site. Click a capability for its requirements and the tests that claim them, or press <kbd>/</kbd> to search. [Map](/modes/map) explains everything on it.
+This repo runs blueprint on itself. Below is its own capability map, built from the same commit as this site. Click a capability for its requirements and the tests that claim them. To search the map, click it first, then press <kbd>/</kbd> (outside the map, <kbd>/</kbd> searches this site). [Map](/modes/map) explains everything on it.
 
 Drift is not shown on this map. It lives on the [blueprint project page](https://karolnov.dev/projects/blueprint).
 

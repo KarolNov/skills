@@ -57,10 +57,16 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22  # wrangler (docs site) needs 22.12+
+          node-version: 20
           cache: npm
-      - name: Install dependencies
-        run: npm ci
+      # Only typescript, at the version package-lock.json pins: the docs site's vitepress and
+      # wrangler (also in package.json) aren't needed here.
+      - name: Install typescript
+        run: |
+          version=$(node -p "require('./package-lock.json').packages['node_modules/typescript'].version")
+          npm install --prefix "$RUNNER_TEMP/ts" --no-save --no-audit --no-fund "typescript@$version"
+          mkdir -p node_modules
+          ln -s "$RUNNER_TEMP/ts/node_modules/typescript" node_modules/typescript
 
       - name: Check drift
         id: check
