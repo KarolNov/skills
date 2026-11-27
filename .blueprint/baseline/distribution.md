@@ -19,7 +19,7 @@ Skills that are used together SHALL ship as one plugin, so that one install gets
 
 - **Scenario: Blueprint family**
   - **WHEN** the blueprint plugin is installed
-  - **THEN** `blueprint-setup`, `blueprint`, `blueprint-drift`, `blueprint-sync`, `blueprint-tidy` and `blueprint-backfill` are all available
+  - **THEN** `blueprint-setup`, `blueprint`, `blueprint-ask`, `blueprint-drift`, `blueprint-sync`, `blueprint-tidy` and `blueprint-backfill` are all available
 
 ### Requirement: README documents every plugin
 

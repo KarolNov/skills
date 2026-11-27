@@ -121,12 +121,12 @@
         ".claude-plugin/**",
         "README.md"
       ],
-      "specVersion": "d99b10e5e5f0da57",
+      "specVersion": "9b2b3d29f24f105c",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "29c47cb911d3",
-        "README.md": "d92bd76761c7"
+        ".claude-plugin/marketplace.json": "68c9de56d129",
+        "README.md": "752b282ee4ef"
       },
-      "syncedCommit": "e620f529494c322a4193e2d364af09187ab2ebb6"
+      "syncedCommit": "f406e9f4d9ec9f103705bf44f6eb1b26e68d1f2d"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -243,10 +243,15 @@
       "syncedCommit": "eea5d26614252358ad28cc37492dce42b3cd1c88"
     },
     "blueprint/ask": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/42543cce21f281b6b8f7dc25300fd1b9",
       "anchors": [
         "skills/blueprint-ask/**"
-      ]
+      ],
+      "specVersion": "6bd597e670a4692b",
+      "anchorsFiles": {
+        "skills/blueprint-ask/SKILL.md": "1ff3bdd66ff5"
+      },
+      "syncedCommit": "f406e9f4d9ec9f103705bf44f6eb1b26e68d1f2d"
     }
   },
   "changes": {
@@ -319,9 +324,10 @@
     "answer-questions-from-specs": {
       "brief": "https://app.notion.com/p/42543cce21f28134be60f3b5ec35a8f9",
       "review": "https://app.notion.com/p/42543cce21f2811b94ebeeb25cbcebeb",
-      "status": "building",
+      "status": "applied",
       "baseCommit": "1e340e5f4c43e48840acbf093dcded287ec8a41b",
-      "branch": "kn/specs-source-of-truth-d0ce1d"
+      "branch": "kn/specs-source-of-truth-d0ce1d",
+      "pr": "https://github.com/KarolNov/skills/pull/79"
     }
   },
   "artifacts": {
