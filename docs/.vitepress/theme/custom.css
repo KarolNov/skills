@@ -1,4 +1,10 @@
-/* A soft blue glow behind the landing page's blueprint sheet (docs/public/hero.svg). */
+/*
+ * The landing page's blueprint sheet (docs/public/hero.svg). It starts lying flat on a table, is
+ * lifted up to face the reader, and then draws itself. A soft blue glow sits behind it.
+ *
+ * VitePress centres the image with `transform`, so this animates the separate `rotate`, `translate`
+ * and `scale` properties, which apply on top of it.
+ */
 :root {
   --vp-home-hero-image-background-image: linear-gradient(-45deg, #3b82f6 50%, #22d3ee 50%);
   --vp-home-hero-image-filter: blur(56px);
@@ -8,18 +14,60 @@
   :root { --vp-home-hero-image-filter: blur(72px); }
 }
 
+.VPHero .image-container {
+  perspective: 1100px;
+}
+
 .VPHero .image-src {
   max-width: 220px;
   max-height: 220px;
   border-radius: 24px;
-  /* rotate/scale, not transform: VitePress centres the image with transform. */
-  rotate: 3deg;
-  transition: rotate 0.4s ease, scale 0.4s ease;
+  transform-origin: 50% 50%;
+  rotate: x 10deg;
+  box-shadow: 0 30px 60px -20px rgb(15 23 42 / 0.55);
+  animation: blueprint-lift 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
+  transition: rotate 0.5s ease, scale 0.5s ease;
 }
 
 .VPHero .image-container:hover .image-src {
-  rotate: 0deg;
+  rotate: x 0deg;
   scale: 1.03;
+}
+
+/* The table: a shadow under the sheet that tightens and fades as it is lifted. */
+.VPHero .image-bg::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 90%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(15 23 42 / 0.45), transparent);
+  translate: -50% -10%;
+  animation: blueprint-table 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
+}
+
+@keyframes blueprint-lift {
+  from {
+    rotate: x 78deg;
+    translate: 0 70px;
+    scale: 0.92;
+    box-shadow: 0 4px 6px -2px rgb(15 23 42 / 0.6);
+  }
+  55% {
+    rotate: x -4deg;
+  }
+  to {
+    rotate: x 10deg;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+@keyframes blueprint-table {
+  from { opacity: 1; scale: 1.1 0.6; }
+  to { opacity: 0.35; scale: 0.7 1; }
 }
 
 @media (min-width: 640px) {
@@ -34,5 +82,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .VPHero .image-src { transition: none; }
+  .VPHero .image-src,
+  .VPHero .image-bg::after {
+    animation: none;
+    transition: none;
+  }
 }

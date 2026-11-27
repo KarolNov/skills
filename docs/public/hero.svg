@@ -1,17 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="A blueprint sheet: capabilities linked to each other, the way the capability map draws them">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="A blueprint sheet being drawn: capabilities linked to each other, the way the capability map draws them">
+  <!--
+    Drawn in order once the page has lifted the sheet off the table (docs/.vitepress/theme/custom.css):
+    frame and grid, then each capability and the link to the next, then the title block. After that
+    the links flow and the ✓ pulses. Every line is drawn with pathLength="1" and a dash offset 1 → 0.
+  -->
   <style>
     .sheet { fill: #1d4ed8; }
     .fine { stroke: #ffffff; stroke-opacity: .10; stroke-width: 1; }
     .bold { stroke: #ffffff; stroke-opacity: .22; stroke-width: 1; }
     .ink { stroke: #ffffff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .node { fill: #1e40af; stroke: #ffffff; stroke-width: 2; }
+    .fill { fill: #1e40af; }
     .txt { fill: #ffffff; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .dim { fill: #dbeafe; font: 500 10px ui-monospace, SFMono-Regular, Menlo, monospace; opacity: .85; }
-    .flow { stroke-dasharray: 6 8; animation: flow 2.4s linear infinite; }
-    .pulse { transform-origin: 300px 266px; animation: pulse 2.4s ease-in-out infinite; }
+    .dim { fill: #dbeafe; font: 500 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw var(--d, .6s) cubic-bezier(.5, 0, .3, 1) var(--t) both; }
+    .show { animation: show .4s ease-out var(--t) both; }
+    .grid { animation: grid 1s ease-out var(--t) both; }
+    .flow { stroke-dasharray: 6 8; animation: show .5s ease-out var(--t) both, flow 2.4s linear var(--t) infinite; }
+    .solid { animation: draw var(--d, .6s) cubic-bezier(.5, 0, .3, 1) var(--t) both, hide .5s ease-in 5s both; stroke-dasharray: 1; stroke-dashoffset: 1; }
+    .pulse { transform-origin: 300px 266px; animation: pulse 2.4s ease-in-out 5s infinite both; }
+    .pen { animation: pen 3.6s cubic-bezier(.45, 0, .3, 1) 1.2s both; }
+
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    @keyframes show { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes hide { to { opacity: 0; } }
+    @keyframes grid { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
     @keyframes flow { to { stroke-dashoffset: -28; } }
-    @keyframes pulse { 0%, 100% { opacity: .9; transform: scale(1); } 50% { opacity: 0; transform: scale(1.7); } }
-    @media (prefers-reduced-motion: reduce) { .flow, .pulse { animation: none; } }
+    @keyframes pulse { 0%, 100% { opacity: 0; transform: scale(1); } 10% { opacity: .9; } 60%, 99% { opacity: 0; transform: scale(1.7); } }
+    @keyframes pen {
+      0% { opacity: 0; transform: translate(56px, 90px); }
+      6% { opacity: 1; }
+      22% { transform: translate(188px, 112px); }
+      42% { transform: translate(356px, 186px); }
+      60% { transform: translate(112px, 300px); }
+      78% { transform: translate(300px, 266px); }
+      94% { opacity: 1; transform: translate(360px, 340px); }
+      100% { opacity: 0; transform: translate(380px, 360px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, .draw, .solid { animation: none !important; stroke-dashoffset: 0; }
+      .solid, .pen { opacity: 0; }
+    }
   </style>
   <defs>
     <pattern id="fine" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -26,43 +56,64 @@
     </marker>
   </defs>
 
+  <!-- the sheet -->
   <rect class="sheet" x="8" y="8" width="384" height="384" rx="28"/>
-  <rect x="8" y="8" width="384" height="384" rx="28" fill="url(#bold)"/>
-  <rect x="24" y="24" width="352" height="352" rx="16" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5"/>
+  <rect class="grid" style="--t:.9s" x="8" y="8" width="384" height="384" rx="28" fill="url(#bold)"/>
+  <rect class="draw" style="--t:.8s;--d:1.2s" pathLength="1" x="24" y="24" width="352" height="352" rx="16" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5"/>
 
-  <!-- links between capabilities -->
-  <path class="ink flow" d="M132 112 C 190 112, 190 186, 232 186"/>
-  <path class="ink flow" d="M132 112 C 132 190, 112 220, 112 266"/>
-  <path class="ink flow" d="M286 206 C 286 236, 300 236, 300 246"/>
-  <path class="ink" stroke-opacity=".45" d="M150 280 H 252"/>
-
-  <!-- capabilities -->
-  <g>
-    <rect class="node" x="56" y="90" width="132" height="44" rx="10"/>
-    <text class="txt" x="122" y="117" text-anchor="middle">auth/session</text>
-  </g>
-  <g>
-    <rect class="node" x="216" y="164" width="140" height="44" rx="10"/>
-    <text class="txt" x="286" y="191" text-anchor="middle">billing/plans</text>
-  </g>
-  <g>
-    <rect class="node" x="44" y="258" width="112" height="44" rx="10"/>
-    <text class="txt" x="100" y="285" text-anchor="middle">docs</text>
-  </g>
-  <g>
-    <circle class="pulse" cx="300" cy="266" r="22" fill="none" stroke="#93c5fd" stroke-width="2"/>
-    <circle class="node" cx="300" cy="266" r="22"/>
-    <path class="ink" d="M290 266 l7 7 l13 -14"/>
+  <!-- dimension line -->
+  <path class="draw" style="--t:1.5s;--d:.5s" pathLength="1" d="M56 70 H188" stroke="#dbeafe" stroke-width="1"/>
+  <g class="show" style="--t:1.9s">
+    <path d="M56 70 H56.1 M188 70 H188.1" stroke="none" marker-start="url(#tick)" marker-end="url(#tick)"/>
+    <text class="dim" x="122" y="62" text-anchor="middle">SPEC ↔ CODE</text>
   </g>
 
-  <!-- dimension line and title block -->
-  <path d="M56 70 H188" stroke="#dbeafe" stroke-width="1" marker-start="url(#tick)" marker-end="url(#tick)"/>
-  <text class="dim" x="122" y="62" text-anchor="middle">SPEC ↔ CODE</text>
+  <!-- auth/session -->
+  <rect class="fill show" style="--t:1.7s" x="56" y="90" width="132" height="44" rx="10"/>
+  <rect class="ink draw" style="--t:1.3s" pathLength="1" x="56" y="90" width="132" height="44" rx="10"/>
+  <text class="txt show" style="--t:1.8s" x="122" y="117" text-anchor="middle">auth/session</text>
+
+  <!-- links: drawn solid, then handed over to the flowing dashes -->
+  <path class="ink solid" style="--t:2.1s;--d:.5s" pathLength="1" d="M132 112 C 190 112, 190 186, 232 186"/>
+  <path class="ink flow" style="--t:5s" d="M132 112 C 190 112, 190 186, 232 186"/>
+
+  <!-- billing/plans -->
+  <rect class="fill show" style="--t:2.9s" x="216" y="164" width="140" height="44" rx="10"/>
+  <rect class="ink draw" style="--t:2.5s" pathLength="1" x="216" y="164" width="140" height="44" rx="10"/>
+  <text class="txt show" style="--t:3s" x="286" y="191" text-anchor="middle">billing/plans</text>
+
+  <path class="ink solid" style="--t:2.9s;--d:.6s" pathLength="1" d="M132 112 C 132 190, 112 220, 112 266"/>
+  <path class="ink flow" style="--t:5s" d="M132 112 C 132 190, 112 220, 112 266"/>
+
+  <!-- docs -->
+  <rect class="fill show" style="--t:3.7s" x="44" y="258" width="112" height="44" rx="10"/>
+  <rect class="ink draw" style="--t:3.3s" pathLength="1" x="44" y="258" width="112" height="44" rx="10"/>
+  <text class="txt show" style="--t:3.8s" x="100" y="285" text-anchor="middle">docs</text>
+
+  <path class="ink solid" style="--t:3.6s;--d:.4s" pathLength="1" d="M286 208 C 286 236, 300 236, 300 244"/>
+  <path class="ink flow" style="--t:5s" d="M286 208 C 286 236, 300 236, 300 244"/>
+  <path class="ink draw" style="--t:4.3s;--d:.5s" pathLength="1" stroke-opacity=".45" d="M156 280 H 278"/>
+
+  <!-- verified -->
+  <circle class="pulse" cx="300" cy="266" r="22" fill="none" stroke="#93c5fd" stroke-width="2"/>
+  <circle class="fill show" style="--t:4.2s" cx="300" cy="266" r="22"/>
+  <circle class="ink draw" style="--t:3.9s;--d:.5s" pathLength="1" cx="300" cy="266" r="22"/>
+  <path class="ink draw" style="--t:4.4s;--d:.35s" pathLength="1" d="M290 266 l7 7 l13 -14"/>
+
+  <!-- title block -->
   <g transform="translate(232 322)">
-    <rect width="128" height="38" rx="6" fill="none" stroke="#fff" stroke-opacity=".5"/>
-    <path d="M0 19 H128 M64 19 V38" stroke="#fff" stroke-opacity=".35"/>
-    <text class="dim" x="8" y="13">BLUEPRINT</text>
-    <text class="dim" x="8" y="32">REV 1</text>
-    <text class="dim" x="72" y="32">1 : 1</text>
+    <rect class="draw" style="--t:4.5s;--d:.6s" pathLength="1" width="128" height="38" rx="6" fill="none" stroke="#fff" stroke-opacity=".5"/>
+    <path class="draw" style="--t:4.8s;--d:.3s" pathLength="1" d="M0 19 H128 M64 19 V38" fill="none" stroke="#fff" stroke-opacity=".35"/>
+    <g class="show" style="--t:4.9s">
+      <text class="dim" x="8" y="13">BLUEPRINT</text>
+      <text class="dim" x="8" y="32">REV 1</text>
+      <text class="dim" x="72" y="32">1 : 1</text>
+    </g>
+  </g>
+
+  <!-- the pen tip that does the drawing -->
+  <g class="pen">
+    <circle r="9" fill="#93c5fd" opacity=".25"/>
+    <circle r="3.5" fill="#ffffff"/>
   </g>
 </svg>
