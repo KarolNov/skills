@@ -1,5 +1,7 @@
 import DefaultTheme from "vitepress/theme";
 import type { Theme } from "vitepress";
+import { h } from "vue";
+import HeroSheet from "./HeroSheet.vue";
 import "./custom.css";
 
 // How far the landing page's blueprint sheet tilts, in degrees per axis.
@@ -100,6 +102,7 @@ function tiltHeroSheet() {
 
 export default {
   extends: DefaultTheme,
+  Layout: () => h(DefaultTheme.Layout, null, { "home-hero-image": () => h(HeroSheet) }),
   enhanceApp() {
     if (typeof window !== "undefined") tiltHeroSheet();
   },

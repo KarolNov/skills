@@ -77,29 +77,10 @@
   .VPHero .image-src { max-width: 280px; max-height: 280px; }
 }
 
-/* On a phone the sheet sits right above the heading: a gentler lift, from half laid back. */
+/* On a phone the sheet sits right above the heading: no lift, it just draws itself. */
 @media (max-width: 639px) {
-  .VPHero .image-src {
-    animation-name: blueprint-lift-small;
-    animation-duration: 1.1s;
-  }
-}
-
-@keyframes blueprint-lift-small {
-  from {
-    rotate: x 40deg;
-    translate: 0 24px;
-    scale: 0.96;
-    box-shadow: 0 8px 14px -6px rgb(15 23 42 / 0.5);
-  }
-  60% {
-    rotate: x 6deg;
-  }
-  to {
-    rotate: x 10deg;
-    translate: 0 0;
-    scale: 1;
-  }
+  .VPHero .image-src { animation: none; }
+  .VPHero .image-bg::after { display: none; }
 }
 
 @media (min-width: 960px) {
