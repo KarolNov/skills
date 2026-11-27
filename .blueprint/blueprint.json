@@ -252,6 +252,13 @@
         "skills/blueprint-ask/SKILL.md": "1ff3bdd66ff5"
       },
       "syncedCommit": "f406e9f4d9ec9f103705bf44f6eb1b26e68d1f2d"
+    },
+    "docs": {
+      "ref": null,
+      "anchors": [
+        "docs/**",
+        "wrangler.jsonc"
+      ]
     }
   },
   "changes": {
@@ -328,6 +335,12 @@
       "baseCommit": "1e340e5f4c43e48840acbf093dcded287ec8a41b",
       "branch": "kn/specs-source-of-truth-d0ce1d",
       "pr": "https://github.com/KarolNov/skills/pull/79"
+    },
+    "docs-site": {
+      "brief": "https://app.notion.com/p/42543cce21f281f59c91edb7c3c77fd5",
+      "review": "https://app.notion.com/p/42543cce21f28115b450d2987c718470",
+      "status": "approved",
+      "baseCommit": "0edbb13e4691432fc8247aef72dba34f4b13117e"
     }
   },
   "artifacts": {
