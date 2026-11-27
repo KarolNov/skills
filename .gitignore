@@ -6,3 +6,8 @@ node_modules/
 __pycache__/
 .claude/settings.local.json
 .blueprint/map.html
+# Docs site: the map is regenerated on every build, never committed.
+docs/public/map.html
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+.wrangler/
