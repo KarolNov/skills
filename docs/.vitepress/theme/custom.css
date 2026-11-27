@@ -1,0 +1,99 @@
+/*
+ * The landing page's blueprint sheet (docs/public/hero.svg). It starts lying flat on a table, is
+ * lifted up to face the reader, and then draws itself. A soft blue glow sits behind it.
+ *
+ * VitePress centres the image with `transform`, so this animates the separate `rotate`, `translate`
+ * and `scale` properties, which apply on top of it.
+ */
+:root {
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #3b82f6 50%, #22d3ee 50%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+@media (min-width: 640px) {
+  :root { --vp-home-hero-image-filter: blur(72px); }
+}
+
+.VPHero .image-container {
+  perspective: 1100px;
+}
+
+.VPHero .image-src {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 24px;
+  /* VitePress's transform shifts the image back by half its size after rotate and scale apply, so
+     the box's top-left corner is where its visual centre ends up: pivot there. */
+  transform-origin: 0 0;
+  rotate: x 10deg;
+  box-shadow: 0 30px 60px -20px rgb(15 23 42 / 0.55);
+  /* backwards, not both: once lifted, the resting tilt above (and the pointer tilt) take over. */
+  animation: blueprint-lift 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s backwards;
+  transition: rotate 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), scale 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Following the mouse (theme/index.ts sets rotate and scale): track it closely. */
+.VPHero .image-src.is-tilting {
+  transition: rotate 0.12s linear, scale 0.3s ease;
+}
+
+/* The table: a shadow under the sheet that tightens and fades as it is lifted. */
+.VPHero .image-bg::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 90%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(15 23 42 / 0.45), transparent);
+  translate: -50% -10%;
+  animation: blueprint-table 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
+}
+
+@keyframes blueprint-lift {
+  from {
+    rotate: x 78deg;
+    translate: 0 70px;
+    scale: 0.92;
+    box-shadow: 0 4px 6px -2px rgb(15 23 42 / 0.6);
+  }
+  55% {
+    rotate: x -4deg;
+  }
+  to {
+    rotate: x 10deg;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+@keyframes blueprint-table {
+  from { opacity: 1; scale: 1.1 0.6; }
+  to { opacity: 0.35; scale: 0.7 1; }
+}
+
+@media (min-width: 640px) {
+  .VPHero .image-src { max-width: 280px; max-height: 280px; }
+}
+
+/* On a phone the sheet sits right above the heading: no lift, it just draws itself. */
+@media (max-width: 639px) {
+  .VPHero .image-src { animation: none; }
+  .VPHero .image-bg::after { display: none; }
+}
+
+@media (min-width: 960px) {
+  .VPHero .image-src {
+    max-width: 340px;
+    max-height: 340px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .VPHero .image-src,
+  .VPHero .image-bg::after {
+    animation: none;
+    transition: none;
+  }
+}

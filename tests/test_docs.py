@@ -101,7 +101,10 @@ class Wrangler(unittest.TestCase):
         conf = json.loads(re.sub(r"^\s*//.*$", "", text, flags=re.M))
         self.assertNotIn("main", conf)
         self.assertEqual(conf["assets"]["directory"], "docs/.vitepress/dist")
-        self.assertEqual(conf["routes"], [{"pattern": "blueprint.karolnov.dev", "custom_domain": True}])
+        self.assertEqual(conf["routes"], [{"pattern": "blueprint.karolnov.dev", "custom_domain": True,
+                                           "previews_enabled": True}])
+        # Workers Builds runs `wrangler preview` on pull requests, and it needs a previews block.
+        self.assertIn("previews", conf)
 
 
 if __name__ == "__main__":

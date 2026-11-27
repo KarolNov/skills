@@ -13,7 +13,7 @@ export default defineConfig({
   head: [
     // The same mark as karolnov.dev's, lettered for blueprint.
     ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
-    ["meta", { name: "theme-color", content: "#8a1c2b" }],
+    ["meta", { name: "theme-color", content: "#1d4ed8" }],
   ],
   themeConfig: {
     nav: [

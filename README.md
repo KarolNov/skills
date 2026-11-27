@@ -57,10 +57,30 @@ This repo runs blueprint on itself: see [`.blueprint/`](.blueprint/), its
 
 ## Docs site
 
-The site in [`docs/`](docs/) is built with VitePress and served by a Cloudflare Worker
-([`wrangler.jsonc`](wrangler.jsonc)) through Workers Builds: `main` publishes, every other branch
-gets a preview. `npm run docs:dev` runs it locally; `npm run docs:build` writes the map with
-`graph.py --no-drift` and builds the site.
+The site in [`docs/`](docs/) is built with VitePress and served at
+[blueprint.karolnov.dev](https://blueprint.karolnov.dev) by an assets-only Cloudflare Worker,
+`blueprint-docs` ([`wrangler.jsonc`](wrangler.jsonc)).
+
+```bash
+npm ci
+npm run docs:dev       # local dev server
+npm run docs:build     # writes the map with graph.py --no-drift, then builds the site
+npm run docs:preview   # serves the built site
+```
+
+Cloudflare Workers Builds deploys it from this repo. A merge to `main` publishes the site, and
+every other branch gets a preview at `<branch>.blueprint.karolnov.dev` (`kn/docs-polish` →
+`kn-docs-polish.blueprint.karolnov.dev`), linked from the pull request's Workers Builds check. The Worker's build settings:
+
+| Setting | Value |
+| ------- | ----- |
+| Build command | `npm ci && npm run docs:build` |
+| Deploy command | `npx wrangler deploy` |
+| Non-production branch deploy command | `npx wrangler preview` |
+| Root directory | `/` |
+
+The build needs no secrets and no git history, so it works from Cloudflare's shallow clone. Its
+capability map is drawn without drift. `npx wrangler deploy` after a build deploys by hand.
 
 ## Repository layout
 
