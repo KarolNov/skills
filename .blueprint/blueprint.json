@@ -341,7 +341,8 @@
       "review": "https://app.notion.com/p/42543cce21f28115b450d2987c718470",
       "status": "building",
       "baseCommit": "0edbb13e4691432fc8247aef72dba34f4b13117e",
-      "branch": "kn/blueprint-docs-site-acce7d"
+      "branch": "kn/blueprint-docs-site-acce7d",
+      "pr": "https://github.com/KarolNov/skills/pull/82"
     }
   },
   "artifacts": {
