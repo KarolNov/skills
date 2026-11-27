@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Write the capability map: one self-contained HTML page drawn from .blueprint/.
 
-    python3 graph.py [--out PATH] [--json]
+    python3 graph.py [--out PATH] [--json] [--no-drift]
 
 Reads blueprint.json, baseline/ and the repo's files (and, when blueprint.json has
 tests.kinds, the @scenario tags coverage.py finds in them); writes .blueprint/map.html
 (or PATH) with d3, the page script and the data inlined, so it opens offline, and prints
 the path and a one-line summary. The default path is kept out of git by .blueprint/.gitignore.
---json prints the extracted data instead of writing the page.
+--json prints the extracted data instead of writing the page. --no-drift draws the map without
+judging drift (no drift colors, stale marks or drift reasons; the legend says so) and reads no
+git history, so it works in a shallow clone, as a published map needs.
 
 Run from anywhere inside the repository. Anchor matching comes from the drift.py
 next to this script (the skill's copy), not the repo's .blueprint/drift.py.
@@ -52,8 +54,16 @@ def repo_name(root):
     return root.name
 
 
-def build(state=None, files=None):
-    """The map's data: domains, capability nodes, and links between capabilities sharing files."""
+# A node's drift fields when drift isn't judged (--no-drift): no status, nothing changed.
+NOT_JUDGED = {"status": None, "chance": 0, "confidence": None, "reasons": [], "changed": []}
+
+
+def build(state=None, files=None, judge_drift=True):
+    """The map's data: domains, capability nodes, and links between capabilities sharing files.
+
+    judge_drift=False (--no-drift) scores nothing and marks nothing stale: every capability is
+    drawn alike, and the data's `drift` is False so the page says drift is not shown.
+    """
     state = drift.load() if state is None else state
     files = drift.repo_files() if files is None else files
     specs, domains = state.get("specs", {}), state.get("domains", {})
@@ -73,12 +83,13 @@ def build(state=None, files=None):
     # possibly-affected capabilities show on the map too.
     imports = drift.import_signals({n: memo[n] for n, s in specs.items()
                                     if s.get("anchors") and s.get("ref") and "anchorsFiles" in s},
-                                   settings)
+                                   settings) if judge_drift else {}
     for name, spec in specs.items():
         mine = memo[name]
         for f in mine:
             owners.setdefault(f, []).append(name)
-        row = drift.assess(spec, mine, settings, hashes, imports.get(name))
+        row = (drift.assess(spec, mine, settings, hashes, imports.get(name)) if judge_drift
+               else NOT_JUDGED)
         baseline = drift.ROOT / ".blueprint" / "baseline" / f"{name}.md"
         has_baseline = baseline.is_file()
         purpose, reqs = parse_baseline(baseline.read_text(encoding="utf-8")) if has_baseline else ("", [])
@@ -88,17 +99,17 @@ def build(state=None, files=None):
             "status": row["status"],
             "chance": row["chance"],
             "confidence": row["confidence"],
-            "reasons": row["reasons"],
+            "reasons": list(row["reasons"]),
             "ref": spec.get("ref"),
             "hasBaseline": has_baseline,
             "purpose": purpose,
             "requirements": reqs,
             "files": mine,
-            "changed": row["changed"],
+            "changed": list(row["changed"]),
             "artifacts": [],
         })
 
-    arts = artifacts(state, files, hashes, memo)
+    arts = artifacts(state, files, hashes, memo, judge_drift)
     by_id = {n["id"]: n for n in nodes}
     for art in arts:
         for name in art["covers"]:
@@ -124,28 +135,36 @@ def build(state=None, files=None):
         "coverageError": cov_error,
         "tests": tests,
         # Set when drift.scoring holds a value check refuses: the map is scored at the defaults.
-        "scoringError": scoring_error,
+        "scoringError": scoring_error if judge_drift else None,
+        # False with --no-drift: nothing above was judged, and the page says drift is not shown.
+        "drift": judge_drift,
         # With no shared files there are no lines, so the page starts with files drawn as nodes.
         "filesDefault": not edges,
     }
 
 
-def artifacts(state, files, hashes, memo):
+def artifacts(state, files, hashes, memo, judge_drift=True):
     """Every artifact with the capabilities it covers now and whether it is stale, judged the
     way `drift.py artifacts` judges it: files changed since its check, or a name that is gone.
 
     memo ({capability: files}) and hashes are the ones build() filled, so nothing is matched
-    or hashed twice.
+    or hashed twice. With judge_drift False none is stale and nothing is hashed; names that
+    are gone are still listed in `unknown`.
     """
     specs, domains = state.get("specs", {}), state.get("domains", {})
     out = []
     for aid, art in state.get("artifacts", {}).items():
         kind, value = art.get("type"), art.get("value", "")
-        covers, changed, unknown = drift.artifact_state(art, specs, domains, files, hashes, memo)
+        if judge_drift:
+            covers, changed, unknown = drift.artifact_state(art, specs, domains, files, hashes, memo)
+        else:
+            # Names that are gone still show on the artifact's card, just not as a stale mark.
+            covers, changed = drift.resolve(art.get("capabilities", []), specs, domains), []
+            unknown = drift.dangling(art, specs, domains)
         out.append({"id": aid, "type": kind, "value": value, "link": drift.open_link(kind, value),
                     "description": art.get("description", ""),
                     "capabilities": art.get("capabilities", []), "covers": covers,
-                    "stale": bool(changed or unknown), "changed": changed, "unknown": unknown})
+                    "stale": judge_drift and bool(changed or unknown), "changed": changed, "unknown": unknown})
     return out
 
 
@@ -227,7 +246,7 @@ def main(argv):
         if i + 1 >= len(argv):
             sys.exit("--out needs a path")
         out = Path(argv[i + 1]).resolve()
-    data = build()
+    data = build(judge_drift="--no-drift" not in argv)
     if "--json" in argv:
         print(json.dumps(data, indent=1, ensure_ascii=False))
         return 0
@@ -259,6 +278,13 @@ def summary(data):
     maybe = sum(n["status"] == "possibly-affected" for n in data["nodes"])
     stale = sum(a["stale"] for a in data.get("artifacts", []))
     shared = "" if data["edges"] else "; no shared files, so files start as nodes"
+    if data.get("drift") is False:
+        moved_part = "drift skipped (--no-drift)"
+    else:
+        moved_part = (f"code-drifted: {', '.join(moved) or 'none'}"
+                      + (f"; {maybe} possibly affected" if maybe else "")
+                      + (f"; scored at the defaults: {data['scoringError']}" if data.get("scoringError") else "")
+                      + (f"; {stale} stale artifact{'' if stale == 1 else 's'}" if stale else ""))
     n, d = len(data["nodes"]), len(data["domains"])
     cov, scen = data.get("coverage"), ""
     if cov:
@@ -268,10 +294,7 @@ def summary(data):
     elif data.get("coverageError"):
         scen = f"; coverage not shown: {data['coverageError']}"
     return (f"{n} capabilit{'y' if n == 1 else 'ies'}, {d} domain{'' if d == 1 else 's'}; "
-            f"code-drifted: {', '.join(moved) or 'none'}"
-            + (f"; {maybe} possibly affected" if maybe else "")
-            + (f"; scored at the defaults: {data['scoringError']}" if data.get("scoringError") else "")
-            + (f"; {stale} stale artifact{'' if stale == 1 else 's'}" if stale else "") + scen + shared)
+            + moved_part + scen + shared)
 
 
 if __name__ == "__main__":

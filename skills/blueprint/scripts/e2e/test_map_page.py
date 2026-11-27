@@ -493,5 +493,56 @@ class Scored(MapPage):
         self.assertIn("0.5", panel)
 
 
+
+class NoDrift(MapPage):
+    """The studio with looper's code moved and a stale artifact, drawn with --no-drift."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._tmp = tempfile.TemporaryDirectory()
+        repo = studio(Path(cls._tmp.name) / "studio")
+        repo.artifact("looper-help", "webpage", "https://help.example.com/looper", "Looper help", "studio/looper")
+        repo.edit("src/looper/index.ts")
+        assert repo.moved() == ["studio/looper"] and repo.stale() == ["looper-help"]
+        cls.map = repo.root / "public.html"
+        subprocess.run([sys.executable, str(FAKEREPO.parent.parent / "graph.py"), "--no-drift",
+                        "--out", str(cls.map)], cwd=repo.root, capture_output=True, text=True,
+                       env=ENV, check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls._tmp.cleanup()
+
+    # @scenario blueprint/map: Drifted capability without drift
+    def test_moved_capability_is_drawn_normally_and_the_legend_says_so(self):
+        page = self.open(self.map)
+        caps = self.state(page)["caps"]
+        self.assertFalse({"drift", "maybe"} & set(caps["studio/looper"]["cls"].split()))
+        self.assertEqual(page.evaluate("document.querySelectorAll('g.cap.drift, g.cap.maybe').length"), 0)
+        page.click("#legend summary")
+        legend = page.inner_text("#legend")
+        self.assertIn("Drift is not shown on this map.", legend)
+        self.assertNotIn("code drifted", legend)
+        self.click_cap(page, "studio/looper")
+        panel = page.evaluate("document.getElementById('panel').textContent")
+        self.assertNotIn("Drift chance", panel)
+        self.assertNotIn("drifted", panel)
+        self.assertNotIn("/blueprint-sync", panel)
+        self.assertNotIn("null", panel)
+
+    # @scenario blueprint/map: Stale artifact without drift
+    def test_stale_artifact_is_drawn_without_a_stale_mark(self):
+        page = self.open(self.map)
+        self.assertEqual(page.evaluate("document.querySelectorAll('g.file.art').length"), 1)
+        self.assertEqual(page.evaluate("document.querySelectorAll('g.file.art.drift, .bubble.drift').length"), 0)
+        overview = page.evaluate("document.getElementById('panel').textContent")
+        self.assertNotIn("Stale artifacts", overview)
+        self.click_cap(page, "studio/looper")
+        panel = page.evaluate("document.getElementById('panel').textContent")
+        self.assertIn("looper-help", panel)
+        self.assertNotIn("stale", panel)
+
 if __name__ == "__main__":
     unittest.main()

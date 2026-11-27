@@ -2,12 +2,12 @@
 
 [Claude Code](https://claude.com/claude-code) skills for architecting larger changes: you bring
 the solution, blueprint grills it, writes it up as a spec change in your notes tool, builds it,
-and keeps the capability specs and the code honest in both directions. Plus `blueprint-ui`, a
-review pane that shows the specs beside the chat.
+and keeps the capability specs and the code honest in both directions.
+
+**Documentation: [blueprint.karolnov.dev](https://blueprint.karolnov.dev)**: getting started, every
+mode, the review pane, backends, upgrading, and this repo's own capability map.
 
 ## Install
-
-### As a plugin marketplace (recommended)
 
 In Claude Code:
 
@@ -17,10 +17,8 @@ In Claude Code:
 /plugin install blueprint-ui@karolnov-skills   # the review pane for blueprint
 ```
 
-### Manually
-
-Copy the whole blueprint family into your personal or project skills directory; the skills
-link to each other's references, so copy them together:
+Or copy the whole blueprint family by hand (the skills link to each other's references, so copy
+them together):
 
 ```bash
 git clone https://github.com/KarolNov/skills.git
@@ -28,81 +26,41 @@ cp -r skills/skills/blueprint* ~/.claude/skills/        # all projects
 cp -r skills/skills/blueprint* .claude/skills/          # one project
 ```
 
+**Needs:** Python 3, git, and the connector for your backend (Notion, Linear, Atlassian) or `gh`.
+Rendering diagrams to images (Notion) needs Python Playwright with Chromium
+(`pip install playwright && playwright install chromium`).
+
 ## Skills
 
 ### blueprint
 
-My preferred way to work on larger, architected changes, between [wayfinder](https://github.com/mattpocock/skills)
-and [OpenSpec](https://github.com/Fission-AI/OpenSpec). You bring the solution; it grills *that*
-solution (a few short rounds, no hunt for alternatives), writes it up as a spec change in your
-notes tool, builds it, and keeps the specs and the code honest in both directions.
-
 | Mode | What it does |
 | ---- | ------------ |
-| `/blueprint-setup` | Looks at where you already track projects and tickets, then picks where specs and blueprints live (as databases or folders next to the project), where tasks become tickets, and maps the repo's **capabilities** to code (anchors). Optionally seeds specs from the code or imports OpenSpec specs. |
-| `/blueprint <your solution>` | Plays the solution back, sketches it, grills it in at most three rounds of five short questions, and writes a **blueprint** as two linked documents side by side: a text **brief** for agents (decisions, spec delta, tasks; the source of truth) and a visual **review** for people. |
-| `/blueprint apply [change]` | Builds the blueprint task by task, verifies each requirement against the code, then folds the delta into the capability specs. |
-| `/blueprint map` | Writes `.blueprint/map.html` and opens it: one local page (d3 inlined, works offline) with capabilities as nodes, domains as outlines, lines between capabilities that share files, code-drifted ones in red, a details panel with each capability's requirements and scenarios, and search across names, requirements and file paths. Kept out of git by `.blueprint/.gitignore` and regenerated on demand. |
-| `/blueprint coverage [capability \| suggest]` | **Scenario coverage**: a test claims a spec scenario with a comment tag above it, `@scenario <capability>: <scenario name>`, in any language's line comment. Reports per capability which scenarios tests claim, by kind (unit, e2e, … from globs in `blueprint.json`, proposed on first run), the scenarios no test claims, and tags that point at nothing; `suggest` proposes tags for existing tests as a diff. Static: nothing is run, so a scenario is "claimed", never "passing". `--strict` gates CI on orphan tags. The map shows the same per scenario. |
-| `/blueprint-ask <question>` | **Ask**: answers how a feature should work, or how it works, from the capability specs, after checking each one still agrees with the code. Cites the requirement and links the spec; where they disagree, says "the spec says X, the code does Y" and points to drift or sync. Starts on its own when you ask such a question (in the terminal, or through an agent such as Claude in Slack), and never writes anything. |
-| `/blueprint-drift [capability]` | **Intent drift**: the spec is right. Judges the code against it requirement by requirement, including spec edits people made outside the code, and fixes the code or turns the gap into a blueprint or tickets. |
-| `/blueprint-sync [capability]` | **Spec sync**: the code is right. Reads what the code changed since the spec last matched it and updates the spec, or writes a spec from the code for a capability that has none. |
-| `/blueprint-tidy [--dry-run]` | **Tidy**, on demand: migrates `.blueprint/` to the current format, groups capabilities into **domains** (each with an overview page that holds its specs like a folder), renames a name that is both a domain and a capability, and reports anchors that overlap through broad globs. Shows one move table and writes nothing until you approve it (a migration asks first on its own); renames keep each page and its history, so nothing reads as drift. |
-| `/blueprint-backfill [domain <name> \| fold \| finish]` | **Backfill**: brings an existing repo fully under blueprint in passes that can run in separate sessions: domains, every capability with its anchors, specs drafted from the code and reviewed scenario by scenario, then folded into `blueprint.json`, tests tagged with the scenarios they claim, and outside docs recorded as artifacts. Progress is kept in `.blueprint/backfill/`, so any session resumes where the last one stopped; the folder is deleted when the backfill finishes. `/blueprint-setup` suggests it for repos with more than 15 capabilities. |
+| [`/blueprint-setup`](https://blueprint.karolnov.dev/modes/setup) | Once per repo: picks where specs, blueprints and tickets live, maps capabilities to code, writes `.blueprint/`. |
+| [`/blueprint <your solution>`](https://blueprint.karolnov.dev/modes/propose) | Grills your solution in a few short rounds and writes a blueprint: a brief for agents and a visual review for people. |
+| [`/blueprint apply [change]`](https://blueprint.karolnov.dev/modes/apply) | Builds it task by task (split into PRs when big), verifies it, and folds the delta into the specs. |
+| [`/blueprint map`](https://blueprint.karolnov.dev/modes/map) | One local page of capabilities, domains, shared files, drift and coverage, with search. |
+| [`/blueprint coverage`](https://blueprint.karolnov.dev/modes/coverage) | Traces spec scenarios to the tests tagged as claiming them; reports gaps and orphan tags. |
+| [`/blueprint-ask <question>`](https://blueprint.karolnov.dev/modes/ask) | Answers how a feature should work from the specs, after checking they still match the code. Read only. |
+| [`/blueprint-drift [capability]`](https://blueprint.karolnov.dev/modes/drift) | The spec is right: fixes the code that strayed from it. |
+| [`/blueprint-sync [capability]`](https://blueprint.karolnov.dev/modes/sync) | The code is right: updates the spec to match it. |
+| [`/blueprint-tidy`](https://blueprint.karolnov.dev/modes/tidy) | Groups capabilities into domains and migrates older setups. |
+| [`/blueprint-backfill`](https://blueprint.karolnov.dev/modes/backfill) | Brings an existing repo fully under blueprint in passes across sessions. |
 
-**Upgrading from 0.5.0:** 0.6.0 moves the blueprint format to version 2 (domains). Repos set up
-before it keep working; `/blueprint` says in one line that the repo is on format 1. Run
-`/blueprint-tidy` once per repo to migrate: it adds `version` and `domains` to `blueprint.json`,
-refreshes `.blueprint/drift.py`, and updates the backend's structure (in Notion a `Kind` property and
-sub-items on Specs; in Obsidian, specs move from `domain__capability.md` into domain folders). It then
-offers to group the capabilities, which you can decline. What each format version changed is in
-[`upgrades.md`](skills/blueprint/references/upgrades.md).
+**Review pane (`blueprint-ui`):** a mod that shows reviews, briefs and specs beside the chat
+(`/blueprint-ui`), and batches comments into one review for `/blueprint review`. Install it next to
+`blueprint`. [More](https://blueprint.karolnov.dev/review-pane).
 
-**Visuals:** live only in the review, so specs and briefs stay plain text for agents and diffs. Every review opens with a picture: a before → after Mermaid
-diagram with the change colored in, plus a sequence, state or data diagram when the change has
-that shape. For behavior over time (retries, ordering, offline, caching), it offers a
-**playground**: a small interactive model with scenario buttons, knobs like latency or an
-offline toggle, and a before/after switch that runs the same scenario through the old and the new design.
-In Notion the diagrams go in as rendered images (Mermaid source in a toggle underneath) and the playground runs inside the review as an embedded HTML block.
-Examples: this repo runs blueprint on itself (see [`.blueprint/`](.blueprint/) and its [specs and blueprints in Notion](https://app.notion.com/p/41c43cce21f2819ba9e9e27bc322d312)), and so does [jambo](https://github.com/KarolNov/jambo).
+This repo runs blueprint on itself: see [`.blueprint/`](.blueprint/), its
+[specs and blueprints in Notion](https://app.notion.com/p/41c43cce21f2819ba9e9e27bc322d312) and its
+[capability map](https://blueprint.karolnov.dev/capability-map).
 
-**Docs and tickets can live apart:** for example specs and blueprints in Notion, under the project's own page, and tasks as GitHub issues in the repo. Ticket trackers: GitHub issues, Linear, Jira, a Notion tasks database (the team's own, or a new one beside the specs), or none.
+## Docs site
 
-**Backends:** Notion (default), Obsidian, a Markdown folder outside the repo, Linear, Jira +
-Confluence, or GitHub (wiki for specs, issues for blueprints).
-
-**What lives in the repo:** only `.blueprint/`: a map of capabilities to pages and code globs, the
-spec text as of the last sync (the merge base), and `drift.py`, which tells from git alone which
-capabilities' code moved since their spec was synced. `python3 .blueprint/drift.py check` can run
-as a pre-push hook or in CI. For CI, `/blueprint-setup` copies a ready-made GitHub Action,
-[`blueprint-drift.yml`](skills/blueprint-setup/templates/blueprint-drift.yml), into `.github/workflows/`: when a pull request
-drifts it comments listing the drifted capabilities and their changed files (one comment, updated on every push,
-marked back in sync once fixed) and adds a warning annotation per drifted capability; a clean PR gets neither. It passes unless you set `BLUEPRINT_DRIFT_FAIL: "true"`. It is a starting
-point the repo owns; ask setup to tailor it (a `drifted` label, a reviewer). Both the map and CI see
-code-side drift only; `/blueprint-sync` reports specs edited in the backend.
-
-**Dogfooding:** this repo runs blueprint on itself. [`.blueprint/`](.blueprint) maps six
-`blueprint/*` capabilities (propose, apply, backends, setup, sync, drift) to the skill files that
-define them, with each spec's last-synced text in [`.blueprint/baseline/`](.blueprint/baseline). Changes
-to blueprint, starting with a review pane that shows specs inside Claude Code, are planned as
-blueprints against those specs. The specs themselves live in a private Notion workspace. Its tests
-(`skills/blueprint/scripts/test_*.py` as integration, the review pane's `*.test.ts(x)` as unit) carry
-`@scenario` tags, so `/blueprint coverage` and the map show which scenarios they claim.
-
-**Needs:** Python 3, git, and the connector for your backend (Notion, Linear, Atlassian) or `gh`. Rendering diagrams to images (Notion) needs Python Playwright with Chromium (`pip install playwright && playwright install chromium`).
-
-**Review pane (`blueprint-ui`):** a mod that opens a pane beside the chat with `/blueprint-ui`
-(or `/blueprint-ui <change or capability>`). It lists the reviews, briefs and specs `.blueprint/blueprint.json`
-maps and shows the chosen page read-only. Press "+" beside a block to comment on it or suggest new
-wording, as on a GitHub diff line; comments batch up like a pending review, and "Submit review" hands
-the batch to `/blueprint review`, which shows one preview and writes on your yes. It reads Notion through
-your session's Notion connection (the server name is a setting, `claude.ai Notion` by default) and
-works the same in the terminal and the desktop app. While a `/blueprint-backfill` is in progress, the board's
-first line shows its pass, and choosing it opens the Backfill view: one scenario card at a time, with
-Accept, Amend and Reject, each decision saved before the next card. Install it next to `blueprint`.
-
-Try it: `/blueprint-setup`, then *"/blueprint move session storage from cookies to Redis, keyed by
-user id, with a 30-day sliding expiry"*.
+The site in [`docs/`](docs/) is built with VitePress and served by a Cloudflare Worker
+([`wrangler.jsonc`](wrangler.jsonc)) through Workers Builds: `main` publishes, every other branch
+gets a preview. `npm run docs:dev` runs it locally; `npm run docs:build` writes the map with
+`graph.py --no-drift` and builds the site.
 
 ## Repository layout
 
@@ -111,6 +69,7 @@ user id, with a 30-day sliding expiry"*.
 skills/<skill-name>/SKILL.md      # one folder per skill
 mods/<mod-name>/                  # one folder per mod (its own plugin manifest and hooks module)
 template/SKILL.md                 # starting point for a new blueprint skill
+docs/                             # the docs site (VitePress), served at blueprint.karolnov.dev
 ```
 
 ## Adding a skill
@@ -119,7 +78,8 @@ template/SKILL.md                 # starting point for a new blueprint skill
 2. Fill in the `name` and `description` frontmatter in `SKILL.md`; `name` must match the folder name.
 3. Add `"./skills/blueprint-<name>"` to the blueprint plugin's `skills` array in
    `.claude-plugin/marketplace.json`.
-4. Add its mode to the table in the README.
+4. Add its mode to the table in the README, and a page for it under `docs/modes/` (linked from
+   the sidebar in `docs/.vitepress/config.mts`).
 
 ## Adding a mod
 

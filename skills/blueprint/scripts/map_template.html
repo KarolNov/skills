@@ -98,6 +98,8 @@ a.link:hover { text-decoration: underline; }
 .legend[open] summary .hint { display: none; }
 .legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
 .legend p { margin: 6px 0 2px; }
+/* --no-drift: nothing was judged, so the drift rows go and the note says drift is not shown. */
+.legend.no-drift .drift-row { display: none; }
 .sw { flex: none; display: inline-block; width: 22px; height: 12px; border-radius: 3px; }
 .sw.cap { background: var(--node); border: 1.5px solid var(--node-line); }
 .sw.drift { background: var(--drift-bg); border: 2px solid var(--drift); }
@@ -194,17 +196,17 @@ svg:active { cursor: grabbing; }
       </div></details>
     <button id="fit">Fit</button></header>
   <div id="graph">
-    <details class="legend" id="legend"><summary>Legend <span class="hint">· code-side drift only</span></summary>
+    <details class="legend" id="legend"><summary>Legend <span class="hint" id="drift-hint">· code-side drift only</span></summary>
       <div class="row"><span class="sw cap"></span>capability</div>
-      <div class="row"><span class="sw drift"></span>code drifted: anchored files, or code they import, changed since its last sync</div>
-      <div class="row"><span class="sw maybe"></span>possibly affected: imported code changed, with a drift chance below the threshold</div>
+      <div class="row drift-row"><span class="sw drift"></span>code drifted: anchored files, or code they import, changed since its last sync</div>
+      <div class="row drift-row"><span class="sw maybe"></span>possibly affected: imported code changed, with a drift chance below the threshold</div>
       <div class="row"><span class="sw dom"></span>domain</div>
       <div class="row"><span class="sw line"></span>shares files; the label says how many, and lines between domains run bundled</div>
       <div class="row files"><span class="sw file"></span>anchored file: a capability's own files sit under it, shared ones between the capabilities, tied by thin lines</div>
-      <div class="row arts"><span class="sw art"></span>artifact: a resource outside the repo describing the capabilities it is tied to; red when stale (its code changed since it was checked)</div>
+      <div class="row arts"><span class="sw art"></span>artifact: a resource outside the repo describing the capabilities it is tied to<span class="drift-row">; red when stale (its code changed since it was checked)</span></div>
       <div class="row tests"><span class="sw test"></span><span>test file: claims scenarios of the capabilities it is tied to, through <code>@scenario</code> tags</span></div>
       <div class="row groups"><span class="sw bubble"></span>a group of files (of artifacts, dashed; of tests, dotted), with its count: zoom in or click it to see each</div>
-      <p>Only code-side drift is shown. A spec edited since its last sync is not: <code>/blueprint-sync</code> reports that.</p>
+      <p id="drift-note">Only code-side drift is shown. A spec edited since its last sync is not: <code>/blueprint-sync</code> reports that.</p>
       <p id="cov-note">Test coverage isn't shown: <code>blueprint.json</code> has no <code>tests.kinds</code>. <code>/blueprint coverage</code> sets it up.</p>
       <p>Hover or select a capability to bring its lines forward · scroll to zoom · drag the background to pan · drag a capability to pin it · double-click to free it.</p>
     </details>
@@ -1059,7 +1061,7 @@ const Page = {
       return `<details class="req${hit ? " match" : ""}"${hit ? " open" : ""}><summary>${inline(r.title)}${cov}</summary><div class="body">${md(r.body, r.scenarios)}</div></details>`;
     }).join("");
     return `<h2>${esc(n.id)}</h2>
-      <span class="pill ${cls}">${label}</span>${n.domain ? `<a class="pill link" data-id="dom:${esc(n.domain)}">${esc(n.domain)}</a>` : ""}${n.coverage && n.coverage.total ? `<span class="pill${n.coverage.claimed === n.coverage.total ? " ok" : ""}">${n.coverage.claimed} of ${plural(n.coverage.total, "scenario", "scenarios")} claimed</span>` : ""}
+      ${n.status ? `<span class="pill ${cls}">${label}</span>` : ""}${n.domain ? `<a class="pill link" data-id="dom:${esc(n.domain)}">${esc(n.domain)}</a>` : ""}${n.coverage && n.coverage.total ? `<span class="pill${n.coverage.claimed === n.coverage.total ? " ok" : ""}">${n.coverage.claimed} of ${plural(n.coverage.total, "scenario", "scenarios")} claimed</span>` : ""}
       ${/^https?:\/\//i.test(n.ref || "") ? `<a class="link" href="${esc(n.ref)}" target="_blank" rel="noopener">open spec ↗</a>`
         : n.ref ? `<p class="muted">Spec: <code>${esc(n.ref)}</code></p>` : ""}
       ${n.hasBaseline ? `<p>${inline(n.purpose)}</p>` : `<p class="muted">No spec yet: there is no baseline for this capability, so its purpose and requirements are unknown here.</p>`}
@@ -1162,6 +1164,12 @@ window.addEventListener("DOMContentLoaded", () => {
   const files = document.getElementById("files"), arts = document.getElementById("artifacts"), tests = document.getElementById("tests");
   const legend = document.getElementById("legend"), nodes = document.getElementById("nodes");
   document.getElementById("repo").textContent = DATA.repo;
+  // Built with --no-drift: say so in the legend instead of explaining which drift is shown.
+  if (DATA.drift === false) {
+    legend.classList.add("no-drift");
+    document.getElementById("drift-hint").textContent = "· drift is not shown";
+    document.getElementById("drift-note").textContent = "Drift is not shown on this map.";
+  }
   files.checked = !!DATA.filesDefault;
   arts.checked = (DATA.artifacts || []).some((a) => a.covers.length);
   arts.disabled = !arts.checked;  // nothing to draw

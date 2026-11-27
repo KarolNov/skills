@@ -120,6 +120,18 @@ class Readme(unittest.TestCase):
             for s in p["skills"]:
                 self.assertRegex(heads[name], rf"/{re.escape(Path(s).name)}\b", f"{name}: {s}")
 
+    # @scenario distribution: Docs linked
+    def test_docs_site_is_linked_near_the_top(self):
+        install = README.index("## Install")
+        self.assertIn("](https://blueprint.karolnov.dev)", README[:install])
+        # Each mode in the table links to its page on the site.
+        heads = sections(README)
+        for s in PLUGINS["blueprint"]["skills"]:
+            name = Path(s).name
+            if name != "blueprint":
+                self.assertIn(f"https://blueprint.karolnov.dev/modes/{name.removeprefix('blueprint-')}",
+                              heads["blueprint"], name)
+
     def test_adding_a_skill_steps_are_there(self):
         self.assertIn("## Adding a skill", README)
         self.assertIn("## Adding a mod", README)

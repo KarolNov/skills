@@ -1,8 +1,16 @@
 {
   "name": "skills",
   "private": true,
-  "description": "Dev dependencies only: typescript lets blueprint's drift_ts.mjs follow TS/JS imports by symbol.",
+  "description": "Dev dependencies only: typescript lets blueprint's drift_ts.mjs follow TS/JS imports by symbol; vitepress and wrangler build and deploy the docs site (docs/).",
+  "scripts": {
+    "docs:map": "python3 skills/blueprint/scripts/graph.py --no-drift --out docs/public/map.html",
+    "docs:dev": "npm run docs:map && vitepress dev docs",
+    "docs:build": "npm run docs:map && vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitepress": "1.6.4",
+    "wrangler": "4.161.0"
   }
 }

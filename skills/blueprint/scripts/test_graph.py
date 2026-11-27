@@ -346,6 +346,85 @@ class Artifacts(GraphTest):
         self.assertEqual((d["artifacts"], d["nodes"][0]["artifacts"]), ([], []))
 
 
+class NoDrift(GraphTest):
+    """--no-drift: the map for a public site, where drift isn't judged (nor git history read)."""
+    FILES = {"sync/a.py": "one", "billing/invoices.py": "inv"}
+
+    def state(self):
+        hashes = {"billing/invoices.py": hashlib.sha256(b"inv").hexdigest()[:12]}
+        return {"domains": {"blueprint": {}, "billing": {}},
+                "specs": {"blueprint/sync": stamped({"sync/a.py": "one"}, "sync/**"),
+                          "billing/invoices": spec("billing/invoices.py")},
+                "artifacts": {"help": {"type": "webpage", "value": "https://help.example.com/x",
+                                       "description": "Help", "capabilities": ["billing/invoices"],
+                                       "checkedFiles": hashes}}}
+
+    def no_drift(self, r):
+        out = r.graph("--json", "--no-drift")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout)
+
+    # @scenario blueprint/map: Drifted capability without drift
+    def test_drifted_capability_is_drawn_like_any_other(self):
+        r = self.repo(self.FILES, self.state())
+        r.write("sync/a.py", "edited")
+        self.assertEqual({n["id"]: n["status"] for n in r.data()["nodes"]}["blueprint/sync"], "code-moved")
+        d = self.no_drift(r)
+        n = {x["id"]: x for x in d["nodes"]}["blueprint/sync"]
+        self.assertFalse(d["drift"])
+        self.assertEqual((n["status"], n["chance"], n["confidence"], n["reasons"], n["changed"]),
+                         (None, 0, None, [], []))
+        self.assertEqual(n["files"], ["sync/a.py"])
+        out = r.graph("--out", "m.html", "--no-drift")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("drift skipped (--no-drift)", out.stdout)
+        self.assertNotIn("code-drifted", out.stdout)
+
+    # @scenario blueprint/map: Stale artifact without drift
+    def test_stale_artifact_is_listed_without_a_stale_mark(self):
+        r = self.repo(self.FILES, self.state())
+        r.write("billing/invoices.py", "edited")
+        self.assertTrue(r.data()["artifacts"][0]["stale"])
+        a = self.no_drift(r)["artifacts"][0]
+        self.assertEqual((a["id"], a["covers"], a["stale"], a["changed"]),
+                         ("help", ["billing/invoices"], False, []))
+        out = r.graph("--out", "m.html", "--no-drift")
+        self.assertNotIn("stale", out.stdout)
+
+    def test_dangling_name_is_listed_but_not_stale(self):
+        state = self.state()
+        state["artifacts"]["help"]["capabilities"].append("billing/gone")
+        a = self.no_drift(self.repo(self.FILES, state))["artifacts"][0]
+        self.assertEqual((a["covers"], a["unknown"], a["stale"]),
+                         (["billing/invoices"], ["billing/gone"], False))
+
+    def test_coverage_still_shown(self):
+        files = dict(self.FILES, **{"tests/test_sync.py": "# @scenario blueprint/sync: Anchored file edited\n"})
+        state = dict(self.state(), tests={"kinds": {"unit": ["tests/**"]}})
+        r = self.repo(dict(files, **{".blueprint/baseline/blueprint/sync.md": SYNC_MD}), state)
+        d = self.no_drift(r)
+        self.assertEqual(d["coverage"]["summary"]["claimed"], 1)
+
+    def test_needs_no_history(self):
+        """A shallow clone (one commit, no parents) still draws: nothing reads past HEAD."""
+        r = self.repo(self.FILES, self.state())
+        r.write("sync/a.py", "edited")
+        r.git("add", "-A")
+        r.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "two")
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / "c"
+            subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{r.root}", str(clone)],
+                           check=True, capture_output=True, env=ENV)
+            out = r.graph("--out", str(clone / "m.html"), "--no-drift", cwd=clone)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertTrue((clone / "m.html").is_file())
+
+    def test_page_says_drift_is_not_shown(self):
+        template = (GRAPH.parent / "map_template.html").read_text()
+        self.assertIn("Drift is not shown on this map.", template)
+        self.assertRegex(template, r"\.legend\.no-drift \.drift-row \{ display: none; \}")
+
+
 class Coverage(GraphTest):
     KINDS = {"kinds": {"e2e": ["e2e/**"], "unit": ["**/test_*.py"]}}
     FILES = {
