@@ -247,6 +247,13 @@
       "anchors": [
         "skills/blueprint-ask/**"
       ]
+    },
+    "docs": {
+      "ref": null,
+      "anchors": [
+        "docs/**",
+        "wrangler.jsonc"
+      ]
     }
   },
   "changes": {
@@ -321,6 +328,12 @@
       "review": "https://app.notion.com/p/42543cce21f2811b94ebeeb25cbcebeb",
       "status": "approved",
       "baseCommit": "1e340e5f4c43e48840acbf093dcded287ec8a41b"
+    },
+    "docs-site": {
+      "brief": "https://app.notion.com/p/42543cce21f281f59c91edb7c3c77fd5",
+      "review": "https://app.notion.com/p/42543cce21f28115b450d2987c718470",
+      "status": "approved",
+      "baseCommit": "1c415c184b4394bd5d7cfc4767c64a8acae16dee"
     }
   },
   "artifacts": {
