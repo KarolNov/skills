@@ -319,8 +319,9 @@
     "answer-questions-from-specs": {
       "brief": "https://app.notion.com/p/42543cce21f28134be60f3b5ec35a8f9",
       "review": "https://app.notion.com/p/42543cce21f2811b94ebeeb25cbcebeb",
-      "status": "approved",
-      "baseCommit": "1e340e5f4c43e48840acbf093dcded287ec8a41b"
+      "status": "building",
+      "baseCommit": "1e340e5f4c43e48840acbf093dcded287ec8a41b",
+      "branch": "kn/specs-source-of-truth-d0ce1d"
     }
   },
   "artifacts": {

@@ -84,7 +84,7 @@ class Marketplace(unittest.TestCase):
     def test_blueprint_plugin_ships_the_whole_family(self):
         skills = PLUGINS["blueprint"]["skills"]
         self.assertEqual(sorted(Path(s).name for s in skills),
-                         sorted(["blueprint-setup", "blueprint", "blueprint-drift", "blueprint-sync",
+                         sorted(["blueprint-setup", "blueprint", "blueprint-ask", "blueprint-drift", "blueprint-sync",
                                  "blueprint-tidy", "blueprint-backfill"]))
         for s in skills:
             # Each is available as /<name>: its frontmatter name matches the folder.
@@ -94,6 +94,15 @@ class Marketplace(unittest.TestCase):
             for s in skills:
                 shutil.copytree(ROOT / s, Path(tmp) / Path(s).name)
             self.assertEqual(broken_links(Path(tmp), Path(tmp)), [])
+
+    # @scenario blueprint/ask: Plain question
+    def test_blueprint_ask_starts_on_a_question(self):
+        # The model can start it (a plain question or a Slack agent never types the command),
+        # and its description names the questions it answers.
+        fm = frontmatter(ROOT / "skills/blueprint-ask/SKILL.md")
+        self.assertNotIn("disable-model-invocation", fm)
+        self.assertIn("how should X work?", fm["description"])
+        self.assertIn("Not for requests to change behavior", fm["description"])
 
 
 class Readme(unittest.TestCase):
