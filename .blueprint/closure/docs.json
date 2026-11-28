@@ -1,0 +1,13 @@
+{
+  "mode": "symbol",
+  "files": {},
+  "symbols": [],
+  "external": [
+    "vitepress",
+    "vue"
+  ],
+  "locked": {
+    "vitepress": "1.6.4",
+    "vue": "3.5.46"
+  }
+}

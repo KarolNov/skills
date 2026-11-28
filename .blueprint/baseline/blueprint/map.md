@@ -119,3 +119,16 @@ When `tests.kinds` is set, the details panel of a capability SHALL say how many 
   - **GIVEN** `blueprint.json` has no `tests.kinds`
   - **WHEN** the map is written
   - **THEN** it draws with no coverage and the legend points to `/blueprint coverage`
+
+### Requirement: Map without drift
+
+With `--no-drift`, `/blueprint map` SHALL draw the map without judging drift: no capability or artifact is drawn in the drift color or marked stale, panels show no drift chance, confidence or reasons, and the legend SHALL say that drift is not shown on this map. Everything else on the page, coverage included, SHALL work as without the flag.
+
+- **Scenario: Drifted capability without drift**
+  - **GIVEN** one of `blueprint/sync`'s anchored files changed since its stamp
+  - **WHEN** the map is written with `--no-drift`
+  - **THEN** `blueprint/sync` is drawn in the normal color, its panel has no drift section, and the legend says drift is not shown
+- **Scenario: Stale artifact without drift**
+  - **GIVEN** a stale `webpage` artifact covering `billing/invoices`
+  - **WHEN** the map is written with `--no-drift`
+  - **THEN** the artifact is drawn and listed without a stale mark

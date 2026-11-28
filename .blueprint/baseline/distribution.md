@@ -23,19 +23,22 @@ Skills that are used together SHALL ship as one plugin, so that one install gets
 
 ### Requirement: README documents every plugin
 
-The README SHALL give the install commands for every plugin, a section per plugin describing what its skills do and what they need, and steps for adding a new skill.
+The README SHALL give the install commands for every plugin, a short section per plugin naming each of its skills or modes in one line with what it needs, a link to the docs site for the full documentation, and steps for adding a new skill.
 
 - **Scenario: New plugin added**
   - **WHEN** a plugin is added to the marketplace
   - **THEN** the README gains its install line and its section
+- **Scenario: Docs linked**
+  - **WHEN** a reader opens the README
+  - **THEN** it links to [https://blueprint.karolnov.dev](https://blueprint.karolnov.dev) near the top
 
 ### Requirement: Manual install
 
-Each skill SHALL also work when its folder is copied into a personal or project skills directory, without the marketplace.
+Each plugin's skills SHALL also work when their folders are copied together into a personal or project skills directory, without the marketplace.
 
 - **Scenario: Copied skill**
-  - **WHEN** the user copies `skills/slack-nag` to `~/.claude/skills/`
-  - **THEN** `/slack-nag` is available
+  - **WHEN** the user copies `skills/blueprint*` to `~/.claude/skills/`
+  - **THEN** `/blueprint` and the other blueprint skills are available
 
 ### Requirement: Mods ship beside skills
 

@@ -121,12 +121,12 @@
         ".claude-plugin/**",
         "README.md"
       ],
-      "specVersion": "9b2b3d29f24f105c",
+      "specVersion": "830c109d4f13547a",
       "anchorsFiles": {
-        ".claude-plugin/marketplace.json": "2e0fd5c4b6b1",
-        "README.md": "752b282ee4ef"
+        ".claude-plugin/marketplace.json": "3fa9a25b0ed7",
+        "README.md": "0ee96855c689"
       },
-      "syncedCommit": "2cd8e1c478e045c0a927ca067eb10927e1aa74ed"
+      "syncedCommit": "fb0985921375b3324efca4bc83cc6c98042a4f49"
     },
     "blueprint/ui": {
       "ref": "https://app.notion.com/p/41c43cce21f28110a842d273ad44f951",
@@ -197,15 +197,15 @@
         "skills/blueprint/scripts/vendor/**",
         "skills/blueprint/references/map.md"
       ],
-      "specVersion": "82f1cfc92ca5c6d5",
+      "specVersion": "5fe7d551dabc6af6",
       "anchorsFiles": {
-        "skills/blueprint/references/map.md": "a501178660d4",
-        "skills/blueprint/scripts/graph.py": "bc356be2c258",
-        "skills/blueprint/scripts/map_template.html": "57a4eceb7f58",
-        "skills/blueprint/scripts/test_graph.py": "285c8ca949c7",
+        "skills/blueprint/references/map.md": "f9b4be47fc3a",
+        "skills/blueprint/scripts/graph.py": "93e191ac8c6f",
+        "skills/blueprint/scripts/map_template.html": "13f988c7079b",
+        "skills/blueprint/scripts/test_graph.py": "ab39e364416b",
         "skills/blueprint/scripts/vendor/d3.v7.9.0.min.js": "9c9d1d8ebe03"
       },
-      "syncedCommit": "e11a4ae3972701c981c45d5003be6bb7a8f4dbeb"
+      "syncedCommit": "fb0985921375b3324efca4bc83cc6c98042a4f49"
     },
     "blueprint/coverage": {
       "ref": "https://app.notion.com/p/42043cce21f2815795a4de5f5139807a",
@@ -254,13 +254,42 @@
       "syncedCommit": "f406e9f4d9ec9f103705bf44f6eb1b26e68d1f2d"
     },
     "docs": {
-      "ref": null,
+      "ref": "https://app.notion.com/p/42643cce21f28173ae6ee0549c607ee8",
       "anchors": [
         "docs/**",
         "wrangler.jsonc",
         "package.json",
         "tests/test_docs.py"
-      ]
+      ],
+      "anchorsFiles": {
+        "docs/.vitepress/config.mts": "6454f8738d4e",
+        "docs/.vitepress/theme/HeroSheet.vue": "c5534713cdbc",
+        "docs/.vitepress/theme/custom.css": "71635b668438",
+        "docs/.vitepress/theme/index.ts": "56705b8bc703",
+        "docs/backends.md": "a9cbd3dcb65f",
+        "docs/capability-map.md": "87de9357e7f2",
+        "docs/getting-started.md": "4df3ef23dd9e",
+        "docs/index.md": "321b78d51a66",
+        "docs/modes/apply.md": "0e29d643b366",
+        "docs/modes/ask.md": "a6011d721594",
+        "docs/modes/backfill.md": "32055169c1cf",
+        "docs/modes/coverage.md": "685ef915f47d",
+        "docs/modes/drift.md": "e8b041a61912",
+        "docs/modes/map.md": "836fe2e73555",
+        "docs/modes/propose.md": "5b6ba90314fe",
+        "docs/modes/setup.md": "698506c6a514",
+        "docs/modes/sync.md": "10256284d072",
+        "docs/modes/tidy.md": "06deaf652c2a",
+        "docs/public/favicon.svg": "2bc0c2b71b59",
+        "docs/public/hero.svg": "9d348be2c67e",
+        "docs/review-pane.md": "83acc02d0d93",
+        "docs/upgrading.md": "704df2cb0f33",
+        "package.json": "adbaba2ef0d9",
+        "tests/test_docs.py": "00509cec8d21",
+        "wrangler.jsonc": "db9f2909186d"
+      },
+      "syncedCommit": "fb0985921375b3324efca4bc83cc6c98042a4f49",
+      "specVersion": "df87cca2eb39d6b0"
     }
   },
   "changes": {
@@ -341,7 +370,7 @@
     "docs-site": {
       "brief": "https://app.notion.com/p/42543cce21f281f59c91edb7c3c77fd5",
       "review": "https://app.notion.com/p/42543cce21f28115b450d2987c718470",
-      "status": "building",
+      "status": "applied",
       "baseCommit": "0edbb13e4691432fc8247aef72dba34f4b13117e",
       "branch": "kn/blueprint-docs-site-acce7d",
       "pr": "https://github.com/KarolNov/skills/pull/82"
